@@ -1,0 +1,26 @@
+{
+  "title": "卡片",
+  "description": "浏览与管理你的卡片",
+  "errorState": {
+    "title": "加载失败",
+    "description": "请检查网络或稍后重试",
+    "retry": "重试"
+  },
+  "detail": {
+    "title": "卡片详情",
+    "back": "返回",
+    "titleLabel": "标题",
+    "categoryLabel": "分类",
+    "transcriptionLabel": "转写",
+    "titlePlaceholder": "输入标题",
+    "categoryPlaceholder": "分类名称",
+    "transcriptionPlaceholder": "输入转写内容",
+    "save": "保存",
+    "reload": "重新加载",
+    "loadingFailed": "加载失败",
+    "retry": "重试",
+    "saveFailed": "保存失败",
+    "saved": "已保存"
+  }
+}
+

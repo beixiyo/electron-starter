@@ -1,0 +1,81 @@
+{
+  "title": "一起录",
+  "audio": "音频",
+  "video": "视频",
+  "saveModal": {
+    "title": "保存录屏",
+    "nameLabel": "录屏名称",
+    "namePlaceholder": "请输入录屏名称",
+    "description": "录屏将保存到本地 IndexedDB，您可以随时查看和下载"
+  },
+  "messages": {
+    "micRequired": "请先开启麦克风录制",
+    "audioNotReady": "音频录制组件尚未准备就绪",
+    "startAudioFailed": "启动音频录制失败，请检查麦克风权限",
+    "pauseFailed": "暂停失败，请稍后重试",
+    "resumeFailed": "恢复失败，请稍后重试",
+    "stopFailed": "停止失败，请稍后重试",
+    "cancelAudioFailed": "取消音频录制失败，请稍后重试",
+    "cancelScreenFailed": "取消录屏失败，请稍后重试",
+    "saveFailed": "保存失败，请重试",
+    "audioError": "音频录制出错，请检查麦克风权限",
+    "recordNotFound": "未找到对应录音，请刷新后重试",
+    "loadListFailed": "加载录屏列表失败",
+    "loadFailedRetry": "加载失败，请重试"
+  },
+  "options": {
+    "recordType": "录制类型",
+    "audioOnly": "仅音频",
+    "audioVideo": "音视频",
+    "timeslice": "分片时长(ms)",
+    "timeslicePlaceholder": "不分片留空",
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "继续",
+    "save": "保存",
+    "cancel": "取消",
+    "systemAudio": "系统音频",
+    "microphone": "麦克风"
+  },
+  "recordList": {
+    "loading": "加载中...",
+    "noRecords": "暂无保存的录屏",
+    "noRecordsDesc": "停止录制后可以保存录屏到本地",
+    "savedRecords": "已保存的录屏"
+  },
+  "recordItem": {
+    "downloadFailed": "下载失败",
+    "deleteConfirmTitle": "确定要删除吗？",
+    "deleteConfirmContent": "确定要删除 \"{{name}}\" 吗？",
+    "view": "查看",
+    "download": "下载",
+    "delete": "删除",
+    "audio": "音频",
+    "video": "视频",
+    "systemAudio": "系统音频",
+    "microphone": "麦克风"
+  },
+  "recordDetail": {
+    "loadFailed": "加载录屏详情失败",
+    "loadFailedRetry": "加载失败，请重试",
+    "downloadFailed": "下载失败，请重试",
+    "title": "录屏详情",
+    "download": "下载",
+    "close": "关闭",
+    "loading": "加载中...",
+    "type": "类型：",
+    "fileSize": "文件大小：",
+    "createTime": "创建时间：",
+    "mimeType": "MIME 类型：",
+    "audioConfig": "音频配置：",
+    "noAudio": "无音频"
+  },
+  "preview": {
+    "audioModeDesc": "实时波形反映当前录音幅度，停止后可回放文件",
+    "videoModeDesc": "当前为仅音频模式，无视频预览",
+    "downloadAudio": "下载音频",
+    "downloadVideo": "下载视频",
+    "recordingDesc": "录制中将展示实时预览，停止后展示最终回放"
+  }
+}
+

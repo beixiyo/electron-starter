@@ -1,0 +1,11 @@
+{
+  "title": "Features",
+  "menu": {
+    "recorder": "Recording",
+    "cards": "Notes",
+    "editor": "Editor",
+    "speak": "Ask XXX",
+    "listen": "Listen Together"
+  }
+}
+

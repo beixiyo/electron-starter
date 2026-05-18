@@ -1,0 +1,41 @@
+{
+  "name": "comps",
+  "version": "0.0.1",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/comps/src/index.d.ts",
+  "exports": {
+    "./index.css": "./dist/index.css",
+    ".": {
+      "require": {
+        "types": "./dist/comps/src/index.d.ts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/comps/src/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "lint": "eslint ./src --fix --quiet"
+  },
+  "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.12",
+    "config": "workspace:*",
+    "date-fns": "^4.1.0",
+    "hooks": "workspace:*",
+    "i18n": "workspace:*",
+    "motion": "^12.27.0",
+    "styles": "workspace:*",
+    "utils": "workspace:*"
+  },
+  "devDependencies": {}
+}

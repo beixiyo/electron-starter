@@ -1,0 +1,26 @@
+{
+  "title": "Cards",
+  "description": "Browse and manage your cards",
+  "errorState": {
+    "title": "Loading failed",
+    "description": "Please check your network or try again later",
+    "retry": "Retry"
+  },
+  "detail": {
+    "title": "Card Details",
+    "back": "Back",
+    "titleLabel": "Title",
+    "categoryLabel": "Category",
+    "transcriptionLabel": "Transcription",
+    "titlePlaceholder": "Enter title",
+    "categoryPlaceholder": "Category name",
+    "transcriptionPlaceholder": "Enter transcription content",
+    "save": "Save",
+    "reload": "Reload",
+    "loadingFailed": "Loading failed",
+    "retry": "Retry",
+    "saveFailed": "Save failed",
+    "saved": "Saved"
+  }
+}
+

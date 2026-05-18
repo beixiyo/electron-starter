@@ -1,0 +1,81 @@
+{
+  "title": "Record Together",
+  "audio": "Audio",
+  "video": "Video",
+  "saveModal": {
+    "title": "Save Recording",
+    "nameLabel": "Recording Name",
+    "namePlaceholder": "Please enter recording name",
+    "description": "Recordings will be saved to local IndexedDB, you can view and download them at any time"
+  },
+  "messages": {
+    "micRequired": "Please enable microphone recording first",
+    "audioNotReady": "Audio recording component is not ready yet",
+    "startAudioFailed": "Failed to start audio recording, please check microphone permissions",
+    "pauseFailed": "Pause failed, please try again later",
+    "resumeFailed": "Resume failed, please try again later",
+    "stopFailed": "Stop failed, please try again later",
+    "cancelAudioFailed": "Failed to cancel audio recording, please try again later",
+    "cancelScreenFailed": "Failed to cancel screen recording, please try again later",
+    "saveFailed": "Save failed, please try again",
+    "audioError": "Audio recording error, please check microphone permissions",
+    "recordNotFound": "Recording not found, please refresh and try again",
+    "loadListFailed": "Failed to load recording list",
+    "loadFailedRetry": "Loading failed, please retry"
+  },
+  "options": {
+    "recordType": "Recording Type",
+    "audioOnly": "Audio Only",
+    "audioVideo": "Audio & Video",
+    "timeslice": "Timeslice (ms)",
+    "timeslicePlaceholder": "Leave empty for no slicing",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "save": "Save",
+    "cancel": "Cancel",
+    "systemAudio": "System Audio",
+    "microphone": "Microphone"
+  },
+  "recordList": {
+    "loading": "Loading...",
+    "noRecords": "No saved recordings",
+    "noRecordsDesc": "You can save recordings to local storage after stopping",
+    "savedRecords": "Saved Recordings"
+  },
+  "recordItem": {
+    "downloadFailed": "Download failed",
+    "deleteConfirmTitle": "Are you sure to delete?",
+    "deleteConfirmContent": "Are you sure to delete \"{{name}}\"?",
+    "view": "View",
+    "download": "Download",
+    "delete": "Delete",
+    "audio": "Audio",
+    "video": "Video",
+    "systemAudio": "System Audio",
+    "microphone": "Microphone"
+  },
+  "recordDetail": {
+    "loadFailed": "Failed to load recording details",
+    "loadFailedRetry": "Loading failed, please retry",
+    "downloadFailed": "Download failed, please retry",
+    "title": "Recording Details",
+    "download": "Download",
+    "close": "Close",
+    "loading": "Loading...",
+    "type": "Type: ",
+    "fileSize": "File Size: ",
+    "createTime": "Created Time: ",
+    "mimeType": "MIME Type: ",
+    "audioConfig": "Audio Config: ",
+    "noAudio": "No Audio"
+  },
+  "preview": {
+    "audioModeDesc": "Real-time waveform reflects current recording amplitude",
+    "videoModeDesc": "Currently in audio-only mode, no video preview",
+    "downloadAudio": "Download Audio",
+    "downloadVideo": "Download Video",
+    "recordingDesc": "Real-time preview during recording"
+  }
+}
+

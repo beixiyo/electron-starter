@@ -1,0 +1,16 @@
+{
+  "title": "Login to XXX",
+  "subtitle": "Choose a way to continue",
+  "appleLogin": "Apple Login",
+  "googleLogin": "Google Login",
+  "emailLogin": "Email Login",
+  "agreement": "By logging in, you agree to our",
+  "termsOfService": "Terms of Service",
+  "privacyPolicy": "Privacy Policy",
+  "and": "and",
+  "messages": {
+    "loginSuccess": "Login successful",
+    "loginFailed": "Login failed"
+  }
+}
+

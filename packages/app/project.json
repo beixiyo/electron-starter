@@ -1,0 +1,23 @@
+{
+  "name": "app",
+  "targets": {
+    "build": {
+      "outputs": [
+        "{projectRoot}/out",
+        "{projectRoot}/dist"
+      ]
+    },
+    "build:win": {
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "build:mac": {
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "build:linux": {
+      "outputs": ["{projectRoot}/dist"]
+    },
+    "build:unpack": {
+      "outputs": ["{projectRoot}/dist"]
+    }
+  }
+}

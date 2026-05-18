@@ -1,0 +1,29 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "./renderer",
+    "./preload/**/*.d.ts",
+    "./shared",
+    "./ipc",
+    "../http-api/src/index.ts",
+    "../hooks/src/index.ts",
+    "../comps/src/index.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": ["vite/client", "vite-plugin-svgr/client"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./renderer/*"],
+      "@shared": ["./shared/index.ts"],
+      "@shared/*": ["./shared/*"],
+      "@ipc": ["./ipc/index.ts"],
+      "@ipc/*": ["./ipc/*"],
+      "http-api": ["../http-api/src/index.ts"],
+      "hooks": ["../hooks/src/index.ts"],
+      "comps": ["../comps/src/index.ts"]
+    }
+  }
+}

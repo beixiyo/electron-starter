@@ -1,0 +1,104 @@
+{
+  "recordingTitle": "一起录 · 桌面工作台",
+  "recorderState": {
+    "idle": {
+      "label": "空闲",
+      "description": "准备就绪，点击开始录制"
+    },
+    "recording": {
+      "label": "录制中",
+      "description": "正在录制当前选中的屏幕 / 窗口"
+    },
+    "paused": {
+      "label": "已暂停",
+      "description": "录制已暂停，可继续或结束"
+    },
+    "stopped": {
+      "label": "已停止",
+      "description": "录制完成，可预览并导出"
+    },
+    "error": {
+      "label": "异常",
+      "description": "发生异常，请检查权限或设备"
+    }
+  },
+  "primaryActions": {
+    "pause": "暂停录制",
+    "resume": "继续录制",
+    "start": "开始录制",
+    "stop": "保存",
+    "cancel": "取消录制",
+    "clear": "清除预览",
+    "download": "下载文件"
+  },
+  "audioSettings": {
+    "title": "音频 / 录制模式",
+    "systemAudio": {
+      "label": "系统音频",
+      "description": "捕获屏幕播放的声音"
+    },
+    "microphone": {
+      "label": "麦克风",
+      "description": "叠加外部麦克风输入"
+    },
+    "audioOnly": {
+      "label": "仅音频模式",
+      "description": "跳过视频画面，仅输出音轨"
+    }
+  },
+  "sourceSelection": {
+    "title": "选择录制窗口",
+    "refresh": "刷新",
+    "noSources": "暂无可录制的窗口或屏幕",
+    "loadingSources": "正在获取可用窗口，请稍候…",
+    "cannotSwitch": "录制中无法切换窗口",
+    "noPreview": "无预览",
+    "noDisplayId": "未检测到显示器 ID",
+    "supportsSystemAudio": "支持系统音频",
+    "microphoneAudioOnly": "仅麦克风音频",
+    "pleaseSelectSource": "请先选择需要录制的屏幕或窗口",
+    "confirm": "确认并开始录制",
+    "cancel": "取消"
+  },
+  "preview": {
+    "title": "录制预览",
+    "type": "类型：",
+    "size": "大小：",
+    "noRecording": "暂无录制文件，开始录制即可查看实时预览",
+    "realtimePreview": "实时预览",
+    "noAudioFile": "暂无录制文件，完成录制后可播放音频",
+    "liveAudioPreview": {
+      "title": "实时音频预览",
+      "description": "录制中暂不回放，结束后自动生成音轨",
+      "live": "Live"
+    }
+  },
+  "error": {
+    "noMediaCapture": "当前环境未注入 mediaCapture，无法录制",
+    "noSelectedSource": "请先选择需要录制的屏幕或窗口",
+    "recordingPermission": "录制权限被拒绝",
+    "recordingError": "录制过程中发生异常"
+  },
+  "saveModal": {
+    "title": "保存录制文件",
+    "nameLabel": "文件名称",
+    "namePlaceholder": "请输入文件名称",
+    "description": "录制文件将保存到本地存储中",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "downloadModal": {
+    "title": "选择下载格式",
+    "formatLabel": "文件格式",
+    "description": "选择要下载的文件格式（实际内容为录制时的原始格式）",
+    "download": "下载",
+    "cancel": "取消",
+    "formats": {
+      "webm": "WebM",
+      "mp4": "MP4",
+      "mp3": "MP3",
+      "wav": "WAV",
+      "ogg": "OGG"
+    }
+  }
+}

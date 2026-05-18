@@ -1,0 +1,26 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "electron.vite.config.*",
+    "vite.config.web.ts",
+    "./main",
+    "./preload",
+    "./shared",
+    "./ipc"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "types": [
+      "electron-vite/node"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@shared": ["./shared/index.ts"],
+      "@shared/*": ["./shared/*"],
+      "@ipc": ["./ipc/index.ts"],
+      "@ipc/*": ["./ipc/*"],
+      "@main": ["./main/index.ts"],
+      "@main/*": ["./main/*"]
+    }
+  }
+}

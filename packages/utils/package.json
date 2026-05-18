@@ -1,0 +1,43 @@
+{
+  "name": "utils",
+  "version": "0.0.1",
+  "private": false,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      },
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./tool": {
+      "require": {
+        "types": "./dist/tool.d.ts",
+        "default": "./dist/tool.cjs"
+      },
+      "import": {
+        "types": "./dist/tool.d.ts",
+        "default": "./dist/tool.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "lint": "eslint ./src --fix --quiet"
+  },
+  "dependencies": {
+    "xss": "^1.0.15",
+    "marked": "^15.0.7",
+    "config": "workspace:*"
+  }
+}

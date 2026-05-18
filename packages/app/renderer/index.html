@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Demo</title>
+  <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="
+      default-src 'self';
+      script-src
+        'self'
+        'unsafe-inline'
+        https://appleid.cdn-apple.com
+        http://localhost:*;
+      worker-src 'self' blob:;
+      style-src 'self' 'unsafe-inline';
+      font-src 'self' data: http://localhost:* https: blob:;
+      img-src 'self'
+        data:
+        http://localhost:*
+        https://images.unsplash.com;
+      media-src
+        'self'
+        blob: data:;
+      connect-src 'self'
+        http://192.168.5.21:8080
+        http://192.168.5.195:8080
+        http://localhost:*
+        ws://localhost:*;
+    " />
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="./main.tsx"></script>
+</body>
+
+</html>

@@ -1,0 +1,73 @@
+{
+  "name": "electron-starter",
+  "type": "module",
+  "packageManager": "pnpm@10.24.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild",
+      "uiohook-napi",
+      "@parcel/watcher",
+      "msw"
+    ]
+  },
+  "scripts": {
+    "dev": "nx run app:dev",
+    "build": "nx run-many -t build",
+    "build:utils": "pnpm -F utils build",
+    "build:comps": "pnpm -F comps build",
+    "build:hooks": "pnpm -F hooks build",
+    "build:web": "pnpm -F app build",
+    "---lint---": "---",
+    "lint": "nx run-many -t lint",
+    "lint:utils": "pnpm -F utils lint",
+    "lint:hooks": "pnpm -F hooks lint",
+    "lint:web": "pnpm -F web lint",
+    "publish:playground": "node scripts/publish.cjs playground"
+  },
+  "dependencies": {
+    "@jl-org/deploy": "^1.0.9",
+    "@jl-org/http": "^1.2.4",
+    "@jl-org/react-router": "^0.0.8",
+    "@jl-org/tool": "^3.4.6",
+    "@tanstack/react-query": "^5.59.20",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "i18next": "^25.5.3",
+    "i18next-browser-languagedetector": "^8.2.0",
+    "localforage": "^1.10.0",
+    "lucide-react": "^0.514.0",
+    "marked": "^15.0.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-i18next": "^16.0.0",
+    "tailwind-merge": "^2.5.4",
+    "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^5.4.1",
+    "@eslint-react/eslint-plugin": "^1.38.4",
+    "@jl-org/eslint-plugins": "^1.0.0",
+    "@jl-org/js-to-style": "^1.0.1",
+    "@jl-org/ts-tool": "^0.0.8",
+    "@jl-org/vite-auto-route": "^2.0.1",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/node": "^24.6.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "code-inspector-plugin": "^1.5.1",
+    "eslint": "^9.37.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.23",
+    "nx": "^22.3.1 ",
+    "sass": "^1.77.8",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~5.9.3",
+    "unplugin-auto-import": "^20.2.0",
+    "vite": "^8.0.12",
+    "vite-plugin-dts": "^5.0.0",
+    "vite-plugin-env-parse": "^1.0.15",
+    "vite-plugin-svgr": "^5.2.0"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An Electron application with React and TypeScript",
+  "main": "./out/main/index.cjs",
+  "author": "example.com",
+  "homepage": "https://electron-vite.org",
+  "scripts": {
+    "lint": "eslint --fix .",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev",
+    "dev:web": "vite --config vite.config.web.ts",
+    "build": "electron-vite build",
+    "postinstall": "electron-builder install-app-deps",
+    "build:win": "node ./scripts/build-for.mjs --platform=win",
+    "build:mac": "node ./scripts/build-for.mjs --platform=mac",
+    "build:linux": "node ./scripts/build-for.mjs --platform=linux",
+    "build:unpack": "node ./scripts/build-for.mjs --platform=dir",
+    "build:fn-listener": "bash scripts/build-fn-listener.sh"
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@jl-org/auth": "^1.0.1",
+    "@jl-org/tool": "^3.3.8",
+    "@nut-tree-fork/nut-js": "4.2.6",
+    "comps": "workspace:*",
+    "config": "workspace:*",
+    "electron-updater": "^6.3.9",
+    "hooks": "workspace:*",
+    "http-api": "workspace:*",
+    "motion": "12.27.0",
+    "pako": "^2.1.0",
+    "selection-hook": "^1.0.13",
+    "styles": "workspace:*",
+    "uiohook-napi": "^1.5.4",
+    "utils": "workspace:*",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^38.1.2",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "6.0.0-beta.1",
+    "vite": "^8.0.12"
+  }
+}

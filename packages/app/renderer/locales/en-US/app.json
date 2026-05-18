@@ -1,0 +1,104 @@
+{
+  "recordingTitle": "Record Together · Desktop Console",
+  "recorderState": {
+    "idle": {
+      "label": "Idle",
+      "description": "Ready, click to start recording"
+    },
+    "recording": {
+      "label": "Recording",
+      "description": "Recording the selected screen / window"
+    },
+    "paused": {
+      "label": "Paused",
+      "description": "Recording paused, you can continue or end"
+    },
+    "stopped": {
+      "label": "Stopped",
+      "description": "Recording completed, you can preview and export"
+    },
+    "error": {
+      "label": "Error",
+      "description": "An error occurred, please check permissions or devices"
+    }
+  },
+  "primaryActions": {
+    "pause": "Pause Recording",
+    "resume": "Resume Recording",
+    "start": "Start Recording",
+    "stop": "Save",
+    "cancel": "Cancel",
+    "clear": "Clear Preview",
+    "download": "Download"
+  },
+  "audioSettings": {
+    "title": "Audio / Recording Mode",
+    "systemAudio": {
+      "label": "System Audio",
+      "description": "Capture screen playback sounds"
+    },
+    "microphone": {
+      "label": "Microphone",
+      "description": "Overlay external microphone input"
+    },
+    "audioOnly": {
+      "label": "Audio Only Mode",
+      "description": "Skip video frames, output audio track only"
+    }
+  },
+  "sourceSelection": {
+    "title": "Select Recording Window",
+    "refresh": "Refresh",
+    "noSources": "No windows or screens available for recording",
+    "loadingSources": "Getting available windows, please wait...",
+    "cannotSwitch": "Cannot switch windows during recording",
+    "noPreview": "No Preview",
+    "noDisplayId": "Display ID not detected",
+    "supportsSystemAudio": "System Audio Supported",
+    "microphoneAudioOnly": "Microphone Audio Only",
+    "pleaseSelectSource": "Please select a screen or window to record",
+    "confirm": "Confirm and Start Recording",
+    "cancel": "Cancel"
+  },
+  "preview": {
+    "title": "Recording Preview",
+    "type": "Type:",
+    "size": "Size:",
+    "noRecording": "No recording file yet, start recording to view real-time preview",
+    "realtimePreview": "Real-time Preview",
+    "noAudioFile": "No recording file yet, you can play audio after completing recording",
+    "liveAudioPreview": {
+      "title": "Real-time Audio Preview",
+      "description": "Playback is not available during recording, audio track will be generated automatically after completion",
+      "live": "Live"
+    }
+  },
+  "error": {
+    "noMediaCapture": "The current environment does not have mediaCapture injected, recording is not possible",
+    "noSelectedSource": "Please select a screen or window to record",
+    "recordingPermission": "Recording permission denied",
+    "recordingError": "An error occurred during recording"
+  },
+  "saveModal": {
+    "title": "Save Recording",
+    "nameLabel": "File Name",
+    "namePlaceholder": "Please enter file name",
+    "description": "The recording file will be saved to local storage",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "downloadModal": {
+    "title": "Select Download Format",
+    "formatLabel": "File Format",
+    "description": "Select the file format to download (actual content is the original format from recording)",
+    "download": "Download",
+    "cancel": "Cancel",
+    "formats": {
+      "webm": "WebM",
+      "mp4": "MP4",
+      "mp3": "MP3",
+      "wav": "WAV",
+      "ogg": "OGG"
+    }
+  }
+}
