@@ -2,7 +2,6 @@ import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shar
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerAllIpcHandlers } from '@ipc/register'
 import {
-  APP_BUNDLE_ID,
   APP_PROTOCOL,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUT_TEST_CHANNEL,
