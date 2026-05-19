@@ -2,6 +2,7 @@ import type { WindowConfig, WindowMetadata } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { isObj } from '@jl-org/tool'
 import { WINDOW_CONFIGS, WindowType } from '@shared'
+import { screen } from 'electron'
 import { createBrowserWindow } from './window-factory'
 
 class WindowManager {
@@ -155,6 +156,29 @@ class WindowManager {
 
   getMainWindow(): BrowserWindow | undefined {
     return this.get(WindowType.MAIN)
+  }
+
+  /**
+   * 调整窗口尺寸，水平居中、底边锚定（向上扩展）。
+   * animate 仅在 macOS 有原生过渡效果。
+   */
+  resizeTo(type: WindowType, width: number, height: number, animate = false): boolean {
+    const win = this.windows.get(type)
+    if (!win || win.isDestroyed())
+      return false
+
+    const current = win.getBounds()
+    const display = screen.getDisplayNearestPoint({
+      x: current.x + current.width / 2,
+      y: current.y + current.height / 2,
+    })
+    const workArea = display.workArea
+
+    const x = Math.round(workArea.x + (workArea.width - width) / 2)
+    const y = current.y + current.height - height
+
+    win.setBounds({ x, y, width, height }, animate)
+    return true
   }
 }
 

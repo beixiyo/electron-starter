@@ -42,6 +42,8 @@ export enum WindowType {
   SELECTION = 'selection',
   /** 快捷键测试窗口 */
   SHORTCUT_TEST = 'shortcut-test',
+  /** 焦点检测演示窗口 */
+  FOCUS_DEMO = 'focus-demo',
 }
 
 /**

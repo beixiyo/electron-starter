@@ -81,6 +81,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           shortcutTest: resolve(__dirname, './renderer/shortcut-test.html'),
           selection: resolve(__dirname, './renderer/selection.html'),
           screenshot: resolve(__dirname, './renderer/screenshot.html'),
+          focusDemo: resolve(__dirname, './renderer/focus-demo.html'),
         },
       },
     },

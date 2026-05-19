@@ -21,5 +21,6 @@ export const windowApi = createIpcClient<WindowHandlers>({
     'release',
     'isHolding',
     'getState',
+    'resizeTo',
   ],
 })

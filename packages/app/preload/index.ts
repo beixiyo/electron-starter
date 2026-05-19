@@ -1,5 +1,6 @@
 import { electronAPI } from '@electron-toolkit/preload'
 import { fnApi } from '@ipc/listeners/fn/api'
+import { focusDemoApi } from '@ipc/listeners/focus-demo/api'
 import { holdApi } from '@ipc/listeners/hold/api'
 import { oauthApi } from '@ipc/listeners/oauth/api'
 import { screenshotApi } from '@ipc/listeners/screenshot/api'
@@ -13,6 +14,7 @@ import { contextBridge } from 'electron'
 export const ipc = {
   media: mediaApi,
   window: windowApi,
+  focusDemo: focusDemoApi,
   hold: holdApi,
   voiceIme: voiceImeApi,
   selection: selectionApi,

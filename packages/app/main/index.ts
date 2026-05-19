@@ -1,8 +1,9 @@
-import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
+import type { FocusDemoPayload, VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerAllIpcHandlers } from '@ipc/register'
 import {
   APP_PROTOCOL,
+  FOCUS_DEMO_CHANNEL,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUT_TEST_CHANNEL,
   SHORTCUTS,
@@ -102,6 +103,17 @@ function setupVoiceImeHoldShortcut(): void {
 }
 
 // ─────────────────────────────────────────────
+// Focus Demo 面板
+// ─────────────────────────────────────────────
+
+function sendFocusDemoUpdate(payload: FocusDemoPayload): void {
+  const win = windowManager.get(WindowType.FOCUS_DEMO)
+  if (win && !win.isDestroyed()) {
+    win.webContents.send(FOCUS_DEMO_CHANNEL.UPDATE, payload)
+  }
+}
+
+// ─────────────────────────────────────────────
 // Shortcut Test 面板
 // ─────────────────────────────────────────────
 
@@ -158,6 +170,9 @@ function createMainWindow(): void {
   windowManager.create(WindowType.SELECTION)
   windowManager.create(WindowType.SHORTCUT_TEST)
 
+  const focusDemoWin = windowManager.create(WindowType.FOCUS_DEMO)
+  focusDemoWin?.once('ready-to-show', () => focusDemoWin.showInactive())
+
   if (process.platform === 'darwin') {
     startFnKeyListener()
     setupFnKeyIpc(mainWindow)
@@ -209,9 +224,12 @@ function setupFnKeyShortcuts(): void {
     },
 
     doublePress: {
-      windowType: WindowType.SHORTCUT_TEST,
       onTrigger: () => {
         console.log('[fn:double] ✅ 双击触发')
+        if (!windowManager.exists(WindowType.SHORTCUT_TEST)) {
+          windowManager.create(WindowType.SHORTCUT_TEST)
+        }
+        windowManager.show(WindowType.SHORTCUT_TEST)
         sendShortcutTestTrigger('doublePress', 'Double Press Triggered')
       },
     },
@@ -221,34 +239,41 @@ function setupFnKeyShortcuts(): void {
         key: 'Space',
         onTrigger: () => {
           console.log('[fn:combo] ✅ Fn+Space 触发')
-          const shown = windowManager.toggle(WindowType.SHORTCUT_TEST)
-          if (shown) {
-            sendShortcutTestTrigger('combo', 'Combo: Space')
+          if (!windowManager.exists(WindowType.SHORTCUT_TEST)) {
+            windowManager.create(WindowType.SHORTCUT_TEST)
           }
+          windowManager.show(WindowType.SHORTCUT_TEST)
+          sendShortcutTestTrigger('combo', 'Fn + Space')
         },
       },
     ],
   })
 }
 
-/**
- * 每 3s 检测一次全局文本焦点，检测到时打印日志
- *
- * 集成模式（ASR 识别后调用）：
- *   if (result.pid === process.pid && result.focused)  → 自己 app 有文本焦点 → IPC 通知 renderer 粘贴
- *   if (result.pid === process.pid && !result.focused) → 自己 app 无文本焦点 → 展示结果 UI
- *   else if (result.focused)                           → 外部 app 文本焦点   → pasteText()
- *   else                                               → 无文本焦点          → 展示结果 UI
- */
 function startFocusCheckPolling(): void {
+  let prevKey = ''
+
   setInterval(async () => {
     const result = await checkFocusedTextInput()
+    const isSelf = result.pid === process.pid
 
-    if (result.pid === process.pid) {
+    const key = `${result.focused}-${result.bundleId ?? ''}-${result.role ?? ''}-${result.pid}`
+    if (key !== prevKey) {
+      prevKey = key
+      sendFocusDemoUpdate({
+        focused: result.focused,
+        role: result.role,
+        app: result.app,
+        bundleId: result.bundleId,
+        isSelf,
+      })
+    }
+
+    if (isSelf) {
       console.log(`[focus-check] 🏠 self  focused=${result.focused}  role=${result.role}`)
     }
     else if (result.focused) {
       console.log(`[focus-check] ✅ focused  role=${result.role}  app=${result.app}  bundleId=${result.bundleId}`)
     }
-  }, 3000)
+  }, 1500)
 }

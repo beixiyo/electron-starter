@@ -1,8 +1,23 @@
 import type { ShortcutTestPayload } from '@shared'
 import { WindowType } from '@shared'
+import { SHADOW_INSET } from '@shared/window-config/constants'
+import { CloseBtn } from 'comps'
 import { useTheme } from 'hooks'
+import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useState } from 'react'
 import { cn } from 'utils'
+
+const TRIGGER_COLOR: Record<ShortcutTestPayload['triggerType'], string> = {
+  hold: 'text-emerald-400',
+  doublePress: 'text-sky-400',
+  combo: 'text-amber-400',
+}
+
+const TRIGGER_DOT: Record<ShortcutTestPayload['triggerType'], string> = {
+  hold: 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.7)]',
+  doublePress: 'bg-sky-400 shadow-[0_0_8px_rgba(14,165,233,0.7)]',
+  combo: 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.7)]',
+}
 
 export const ShortcutTestApp = memo(() => {
   useTheme()
@@ -15,55 +30,73 @@ export const ShortcutTestApp = memo(() => {
   }, [])
 
   const handleClose = () => {
+    setTrigger(null)
     $ipc.window.hide(WindowType.SHORTCUT_TEST)
   }
 
-  const triggerColor = trigger
-    ? {
-        hold: 'text-emerald-400',
-        doublePress: 'text-sky-400',
-        combo: 'text-amber-400',
-      }[trigger.triggerType]
-    : ''
-
   return (
     <div
-      className={ cn(
-        'relative flex items-center justify-center w-screen h-screen',
-        'bg-background text-text backdrop-blur-2xl rounded-2xl',
-        'border border-border shadow-2xl',
-      ) }
+      className="w-screen h-screen"
+      style={ { padding: SHADOW_INSET } }
     >
-      <button
-        type="button"
-        onClick={ handleClose }
+      {/* 实际可见的自绘容器，relative 作为 CloseBtn absolute 定位基准 */}
+      <div
         className={ cn(
-          'absolute top-3 right-3 w-7 h-7 rounded-full',
-          'flex items-center justify-center text-sm',
-          'text-text3 hover:text-text hover:bg-background3',
-          'transition-colors cursor-pointer',
+          'relative w-full h-full',
+          'bg-background rounded-2xl',
+          'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+          '[-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]',
         ) }
       >
-        ✕
-      </button>
+        {/* 内容居中层 */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <AnimatePresence mode="wait">
+            { trigger
+              ? (
+                  <motion.div
+                    key={ `${trigger.triggerType}-${trigger.label}` }
+                    className="flex flex-col items-center gap-3"
+                    initial={ { opacity: 0, scale: 0.82, y: 6 } }
+                    animate={ { opacity: 1, scale: 1, y: 0 } }
+                    exit={ { opacity: 0, scale: 0.9, y: -4 } }
+                    transition={ { type: 'spring', stiffness: 400, damping: 35 } }
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className={ cn('w-2 h-2 rounded-full flex-shrink-0', TRIGGER_DOT[trigger.triggerType]) } />
+                      <span className={ cn('text-xl font-semibold tracking-wide', TRIGGER_COLOR[trigger.triggerType]) }>
+                        { trigger.label }
+                      </span>
+                    </div>
 
-      { trigger
-        ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className={ cn('text-2xl font-semibold tracking-wide', triggerColor) }>
-                { trigger.label }
-              </div>
+                    <span className="text-[10px] text-muted-foreground/50 uppercase tracking-widest">
+                      { trigger.triggerType }
+                    </span>
+                  </motion.div>
+                )
+              : (
+                  <motion.div
+                    key="idle"
+                    className="flex items-center gap-2"
+                    initial={ { opacity: 0 } }
+                    animate={ { opacity: 1 } }
+                    exit={ { opacity: 0 } }
+                    transition={ { duration: 0.2 } }
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                    <span className="text-xs text-muted-foreground/40 tracking-wide">等待快捷键…</span>
+                  </motion.div>
+                ) }
+          </AnimatePresence>
+        </div>
 
-              <div className="text-xs text-text3 uppercase tracking-widest">
-                { trigger.triggerType }
-              </div>
-            </div>
-          )
-        : (
-            <div className="text-sm text-text3">
-              Waiting for shortcut...
-            </div>
-          ) }
+        <CloseBtn
+          mode="absolute"
+          corner="top-right"
+          size="md"
+          className="top-4 right-4"
+          onClick={ handleClose }
+        />
+      </div>
     </div>
   )
 })

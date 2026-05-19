@@ -79,4 +79,9 @@ export const windowHandlers = {
     const state = holdStateManager.getSerializableHoldState(type)
     return { state }
   },
+
+  resizeTo: async (_event: unknown, type: WindowType, width: number, height: number, animate?: boolean) => {
+    const success = windowManager.resizeTo(type, width, height, animate)
+    return { success }
+  },
 }
