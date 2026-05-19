@@ -2,6 +2,9 @@ import type { Privileges } from 'electron'
 
 export const APP_PROTOCOL = 'xxx'
 
+/** macOS Bundle ID，与 electron-builder.yml 的 appId 及 setAppUserModelId 保持一致 */
+export const APP_BUNDLE_ID = 'com.xxx'
+
 export const APP_PROTOCOL_PRIVILEGES: Privileges = {
   standard: true,
   secure: true,

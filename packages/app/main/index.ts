@@ -2,6 +2,7 @@ import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shar
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { registerAllIpcHandlers } from '@ipc/register'
 import {
+  APP_BUNDLE_ID,
   APP_PROTOCOL,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUT_TEST_CHANNEL,
@@ -13,6 +14,7 @@ import { app, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
+import { checkFocusedTextInput } from './focus-check'
 import { mediaSessionStore } from './media/session-store'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { initScreenshot, registerScreenshotShortcut } from './screenshot'
@@ -33,6 +35,10 @@ initDeeplink(() => {
   initSelectionHook()
   initScreenshot()
   registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
+
+  if (process.platform === 'darwin') {
+    startFocusCheckPolling()
+  }
 })
 
 app.on('window-all-closed', () => {
@@ -153,8 +159,10 @@ function createMainWindow(): void {
   windowManager.create(WindowType.SELECTION)
   windowManager.create(WindowType.SHORTCUT_TEST)
 
-  startFnKeyListener()
-  setupFnKeyIpc(mainWindow)
+  if (process.platform === 'darwin') {
+    startFnKeyListener()
+    setupFnKeyIpc(mainWindow)
+  }
 
   setupOAuthInterceptor(mainWindow)
 
@@ -186,6 +194,9 @@ function createMainWindow(): void {
 // ─────────────────────────────────────────────
 
 function setupFnKeyShortcuts(): void {
+  if (process.platform !== 'darwin')
+    return
+
   addFnKeyListener(event =>
     console.log(`[fn:raw] ${event === 'down'
       ? '⬇ DOWN'
@@ -219,4 +230,26 @@ function setupFnKeyShortcuts(): void {
       },
     ],
   })
+}
+
+/**
+ * 每 3s 检测一次全局文本焦点，检测到时打印日志
+ *
+ * 集成模式（ASR 识别后调用）：
+ *   if (result.pid === process.pid && result.focused)  → 自己 app 有文本焦点 → IPC 通知 renderer 粘贴
+ *   if (result.pid === process.pid && !result.focused) → 自己 app 无文本焦点 → 展示结果 UI
+ *   else if (result.focused)                           → 外部 app 文本焦点   → pasteText()
+ *   else                                               → 无文本焦点          → 展示结果 UI
+ */
+function startFocusCheckPolling(): void {
+  setInterval(async () => {
+    const result = await checkFocusedTextInput()
+
+    if (result.pid === process.pid) {
+      console.log(`[focus-check] 🏠 self  focused=${result.focused}  role=${result.role}`)
+    }
+    else if (result.focused) {
+      console.log(`[focus-check] ✅ focused  role=${result.role}  app=${result.app}  bundleId=${result.bundleId}`)
+    }
+  }, 3000)
 }

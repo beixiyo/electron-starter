@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.xxx
 productName: electron-app
 electronVersion: 38.1.2
 directories:
@@ -27,9 +27,12 @@ mac:
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
     - NSInputMonitoringUsageDescription: 需要输入监控权限以监听全局键盘事件（如 fn/Globe 键）。
+    - NSAccessibilityUsageDescription: 需要辅助功能权限以检测全局文本输入焦点。
   extraResources:
     - from: resources/fn-listener
       to: fn-listener
+    - from: resources/focus-check
+      to: focus-check
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}

@@ -21,11 +21,13 @@ app.on('will-quit', () => {
   /** 清理双击快捷键状态 */
   resetDoublePressShortcutStates()
 
-  /** 清理 fn 键快捷键状态 */
-  resetFnShortcutStates()
+  if (process.platform === 'darwin') {
+    /** 清理 fn 键快捷键状态 */
+    resetFnShortcutStates()
 
-  /** 停止 fn-listener Swift 子进程 */
-  stopFnKeyListener()
+    /** 停止 fn-listener Swift 子进程 */
+    stopFnKeyListener()
+  }
 
   /** 取消注册所有全局快捷键 */
   unregisterAllGlobalShortcuts()

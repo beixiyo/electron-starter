@@ -27,6 +27,7 @@ dist-ssr
 
 # compiled binaries
 packages/app/resources/fn-listener
+packages/app/resources/focus-check
 
 # build
 *.tsbuildinfo

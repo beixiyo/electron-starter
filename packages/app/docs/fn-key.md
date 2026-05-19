@@ -3,10 +3,10 @@
 ## 原理
 
 macOS Apple Silicon 上的 fn/Globe 键走独立的 HID 接口（usage page `0x00FF`, usage `0x0003`），
-不经过 CGEventTap 或标准键盘接口。通过 IOHIDManager 监听，以 Swift 子进程实现。
+不经过 CGEventTap 或标准键盘接口。通过 IOHIDManager 监听，以 Swift 子进程实现
 
 Swift 二进制同时监听键盘 HID 事件（page `0x07`），在 HID 层直接检测 Fn+Key 组合，
-输出 `FN_COMBO_<key>` 事件。这避免了 IOHIDManager 与 uIOhook 的跨事件源时序问题。
+输出 `FN_COMBO_<key>` 事件。这避免了 IOHIDManager 与 uIOhook 的跨事件源时序问题
 
 ## 首次配置（开发者）
 
@@ -20,8 +20,8 @@ pnpm build:fn-listener
 
 ## 权限
 
-macOS 会弹出「输入监控」权限请求，授权一次即可。
-Karabiner-Elements 兼容：Globe 键走独立接口，不受 Karabiner 影响。
+macOS 会弹出「输入监控」权限请求，授权一次即可
+Karabiner-Elements 兼容：Globe 键走独立接口，不受 Karabiner 影响
 
 ## 架构
 
@@ -48,7 +48,7 @@ Swift 子进程 (IOHIDManager)
 
 ### macOS Fn+Key 时序处理
 
-macOS 按下 Fn+其他键时，IOHIDManager 会先发送合成 FN_UP，随后才有键盘 keydown。
+macOS 按下 Fn+ 其他键时，IOHIDManager 会先发送合成 FN_UP，随后才有键盘 keydown
 Swift 二进制内部用 50ms 缓冲吞掉合成 FN_UP：
 
 1. FN_DOWN → 立即输出
@@ -68,7 +68,7 @@ Swift 二进制内部用 50ms 缓冲吞掉合成 FN_UP：
 | 特殊 | `Space` `Enter` `Escape` `Tab` `Backspace` `Delete` `CapsLock` |
 | 标点 | `Minus` `Equal` `Comma` `Period` `Slash` `Backslash` `Quote` `Semicolon` `Grave` `LeftBracket` `RightBracket` |
 
-扩展：在 `fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 HID usage → 键名映射即可。
+扩展：在 `fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 HID usage → 键名映射即可
 
 ## 快捷键集成
 
@@ -117,5 +117,5 @@ window.$ipc.fn.onUp(() => console.log('fn released'))
 |------|------|
 | macOS Apple Silicon | ✅ |
 | macOS Intel | ✅（universal binary） |
-| Windows / Linux | 自动跳过（`process.platform !== 'darwin'`） |
+| Windows / Linux | ❌ 不支持，调用会抛出错误 |
 | Karabiner-Elements | ✅ 兼容 |

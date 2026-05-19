@@ -4,7 +4,7 @@
  * 负责启动 Swift 子进程（IOHIDManager），解析 stdout 输出（FN_DOWN / FN_UP），
  * 并通过事件监听器机制向上层暴露原始的 down/up 事件。
  *
- * 仅在 macOS（process.platform === 'darwin'）上生效，其他平台静默忽略。
+ * 仅支持 macOS，其他平台调用任意公开函数将抛出错误。
  */
 
 import type { ChildProcess } from 'node:child_process'
@@ -47,12 +47,12 @@ function emitCombo(key: string): void {
 
 /**
  * 启动 fn-listener Swift 子进程。
- * - 非 macOS 平台：静默跳过
  * - 已运行时：静默跳过（幂等）
+ * @throws 非 macOS 平台调用时抛出
  */
 export function startFnKeyListener(): void {
   if (process.platform !== 'darwin')
-    return
+    throw new Error('[fn-listener] macOS only')
   if (child !== null)
     return
 
@@ -92,8 +92,11 @@ export function startFnKeyListener(): void {
 
 /**
  * 停止 fn-listener Swift 子进程
+ * @throws 非 macOS 平台调用时抛出
  */
 export function stopFnKeyListener(): void {
+  if (process.platform !== 'darwin')
+    throw new Error('[fn-listener] macOS only')
   if (child === null)
     return
   child.kill()
@@ -104,8 +107,11 @@ export function stopFnKeyListener(): void {
  * 注册 fn 键事件监听器
  * @param listener 回调函数，接收 'down' | 'up' 事件类型
  * @returns 取消订阅函数
+ * @throws 非 macOS 平台调用时抛出
  */
 export function addFnKeyListener(listener: FnKeyListener): () => void {
+  if (process.platform !== 'darwin')
+    throw new Error('[fn-listener] macOS only')
   listeners.add(listener)
   return () => removeFnKeyListener(listener)
 }
@@ -113,8 +119,11 @@ export function addFnKeyListener(listener: FnKeyListener): () => void {
 /**
  * 移除 fn 键事件监听器
  * @param listener 之前注册的回调函数
+ * @throws 非 macOS 平台调用时抛出
  */
 export function removeFnKeyListener(listener: FnKeyListener): void {
+  if (process.platform !== 'darwin')
+    throw new Error('[fn-listener] macOS only')
   listeners.delete(listener)
 }
 
@@ -122,8 +131,11 @@ export function removeFnKeyListener(listener: FnKeyListener): void {
  * 注册 Fn+Key combo 事件监听器
  * Swift 二进制在 HID 层检测 Fn+Key 组合后输出 FN_COMBO_<key>，
  * 此处解析后以 key 名（如 'Space'）回调。
+ * @throws 非 macOS 平台调用时抛出
  */
 export function addFnComboListener(listener: FnComboListener): () => void {
+  if (process.platform !== 'darwin')
+    throw new Error('[fn-listener] macOS only')
   comboListeners.add(listener)
   return () => comboListeners.delete(listener)
 }
