@@ -53,7 +53,6 @@ func checkFocusedTextInput() -> FocusResult {
     kAXTextFieldRole,   // AXTextField
     kAXTextAreaRole,    // AXTextArea
     kAXComboBoxRole,    // AXComboBox
-    "AXWebArea",        // 浏览器编辑区
   ]
 
   let isText = textRoles.contains(role)
