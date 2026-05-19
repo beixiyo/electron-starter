@@ -15,6 +15,7 @@ import { initDeeplink } from './deeplink'
 import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
 import { mediaSessionStore } from './media/session-store'
 import { setupOAuthInterceptor } from './oauth-interceptor'
+import { initScreenshot, registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import { registerHoldGlobalShortcut } from './shortcuts'
 import { pasteText } from './utils'
@@ -30,6 +31,8 @@ initDeeplink(() => {
   createMainWindow()
   setupFnKeyShortcuts()
   initSelectionHook()
+  initScreenshot()
+  registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
 })
 
 app.on('window-all-closed', () => {

@@ -10,6 +10,11 @@ export const SHORTCUTS: Shortcuts = {
     accelerator: 'CommandOrControl+E',
     windowType: WindowType.VOICE_IME,
   },
+  /** 截图快捷键 */
+  SCREENSHOT: {
+    accelerator: 'CommandOrControl+Shift+A',
+    windowType: WindowType.MAIN,
+  },
 } as const
 
 /**

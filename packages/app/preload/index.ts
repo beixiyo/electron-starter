@@ -2,6 +2,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { fnApi } from '@ipc/listeners/fn/api'
 import { holdApi } from '@ipc/listeners/hold/api'
 import { oauthApi } from '@ipc/listeners/oauth/api'
+import { screenshotApi } from '@ipc/listeners/screenshot/api'
 import { selectionApi } from '@ipc/listeners/selection/api'
 import { shortcutTestApi } from '@ipc/listeners/shortcut-test/api'
 import { voiceImeApi } from '@ipc/listeners/voice-ime/api'
@@ -18,6 +19,7 @@ export const ipc = {
   shortcutTest: shortcutTestApi,
   oauth: oauthApi,
   fn: fnApi,
+  screenshot: screenshotApi,
 }
 
 if (process.contextIsolated) {

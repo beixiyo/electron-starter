@@ -80,6 +80,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           voiceIme: resolve(__dirname, './renderer/voice-ime.html'),
           shortcutTest: resolve(__dirname, './renderer/shortcut-test.html'),
           selection: resolve(__dirname, './renderer/selection.html'),
+          screenshot: resolve(__dirname, './renderer/screenshot.html'),
         },
       },
     },
