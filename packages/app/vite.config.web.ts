@@ -77,6 +77,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       rollupOptions: {
         input: {
           index: resolve(__dirname, './renderer/index.html'),
+          splash: resolve(__dirname, './renderer/splash.html'),
           voiceIme: resolve(__dirname, './renderer/voice-ime.html'),
           shortcutTest: resolve(__dirname, './renderer/shortcut-test.html'),
           selection: resolve(__dirname, './renderer/selection.html'),

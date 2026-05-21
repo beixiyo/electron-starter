@@ -1,0 +1,103 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .card {
+      position: absolute;
+      inset: 16px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.18),
+        0 0 0 0.5px rgba(0, 0, 0, 0.06);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      animation: fadeIn 0.2s ease forwards;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.94); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /*
+      球宽 S=60px，球2 left=S/2=30px，translate=S=60px
+      球2 最右端 = 30 + 60(translate) + 60(width) = 150px
+      容器宽 = 150px，这样视觉内容完整居中
+    */
+    .ball-wrap {
+      position: relative;
+      width: 150px;
+      height: 60px;
+    }
+
+    .ball-wrap span {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      left: 0;
+      top: 0;
+      background-color: #5989ff;
+      border-radius: 50%;
+      animation: swing 2s infinite;
+    }
+
+    .ball-wrap span:nth-of-type(2) {
+      left: 30px;
+      background-color: rgba(24, 71, 224, 0.15);
+      border: 1px solid rgba(89, 137, 255, 0.3);
+      backdrop-filter: blur(10px);
+      animation-delay: -1s;
+    }
+
+    .ball-wrap span::before {
+      position: absolute;
+      content: '';
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: -10px;
+      width: 32px;
+      height: 5px;
+      border-radius: 50%;
+      background: radial-gradient(rgba(0, 0, 0, 0.15), transparent);
+    }
+
+    @keyframes swing {
+      0%, 100% { transform: translateX(0); }
+      50%       { transform: translateX(60px); }
+    }
+
+    .title {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #999;
+      letter-spacing: 0.4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="ball-wrap">
+      <span></span>
+      <span></span>
+    </div>
+    <div class="title">Demo</div>
+  </div>
+</body>
+</html>

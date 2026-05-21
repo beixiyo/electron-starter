@@ -55,7 +55,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     hasShadow: true,
     htmlPath: 'index.html',
     autoHideMenuBar: true,
-    show: true,
+    show: false,
     openDevTools: true,
   },
 

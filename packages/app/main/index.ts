@@ -1,8 +1,9 @@
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { join } from 'node:path'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { registerAllIpcHandlers } from '@ipc/register'
 import { focusDemoService } from '@ipc/services/focus-demo/service'
 import { shortcutTestService } from '@ipc/services/shortcut-test/service'
-import { registerAllIpcHandlers } from '@ipc/register'
 import {
   APP_PROTOCOL,
   HOLD_SHORT_ERROR_MESSAGE,
@@ -10,7 +11,7 @@ import {
   VOICE_IME_RENDERER_CHANNEL,
   WindowType,
 } from '@shared'
-import { app, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
@@ -22,7 +23,7 @@ import { initSelectionHook } from './selection'
 import { registerHoldGlobalShortcut } from './shortcuts'
 import { initTray } from './tray'
 import { pasteText } from './utils'
-import { windowManager } from './window-manager'
+import { createWindowsSequentially, windowManager } from './window-manager'
 
 initDeeplink(() => {
   setupAppIdentity()
@@ -143,21 +144,41 @@ function setupAppActivation(): void {
   })
 }
 
+function createSplashWindow(): BrowserWindow {
+  const splash = new BrowserWindow({
+    width: 280,
+    height: 180,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    center: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+    splash.loadURL(`${process.env.ELECTRON_RENDERER_URL}/splash.html`)
+  }
+  else {
+    splash.loadFile(join(app.getAppPath(), 'out', 'renderer', 'splash.html'))
+  }
+
+  return splash
+}
+
 function createMainWindow(): void {
+  const splash = createSplashWindow()
+
   const mainWindow = windowManager.create(WindowType.MAIN, {
     ...(process.platform === 'linux'
       ? { icon }
       : {}),
   })!
-  windowManager.create(WindowType.VOICE_IME)
-  windowManager.create(WindowType.SELECTION)
-  windowManager.create(WindowType.SHORTCUT_TEST)
-
-  const focusDemoWin = windowManager.create(WindowType.FOCUS_DEMO)
-  focusDemoWin?.once('ready-to-show', () => focusDemoWin.showInactive())
-
-  windowManager.create(WindowType.MENUBAR)
-  initTray()
 
   if (process.platform === 'darwin') {
     startFnKeyListener()
@@ -166,19 +187,25 @@ function createMainWindow(): void {
 
   setupOAuthInterceptor(mainWindow)
 
-  mainWindow.on('ready-to-show', () => {
+  mainWindow.once('ready-to-show', () => {
+    splash.destroy()
     mainWindow.show()
+
+    /** 主窗口显示后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
+    // SELECTION / SHORTCUT_TEST 按需懒创建，不在此列
+    createWindowsSequentially([
+      { type: WindowType.VOICE_IME },
+      { type: WindowType.MENUBAR, onLoaded: () => initTray() },
+      { type: WindowType.FOCUS_DEMO, onLoaded: win => win.showInactive() },
+    ])
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     try {
       const url = new URL(details.url)
-
-      const isOAuthDomain = url.hostname === 'appleid.apple.com'
-      if (isOAuthDomain) {
+      if (url.hostname === 'appleid.apple.com') {
         return { action: 'allow' }
       }
-
       shell.openExternal(details.url)
       return { action: 'deny' }
     }
