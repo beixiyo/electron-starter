@@ -20,6 +20,7 @@ import { setupOAuthInterceptor } from './oauth-interceptor'
 import { initScreenshot, registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import { registerHoldGlobalShortcut } from './shortcuts'
+import { initTray } from './tray'
 import { pasteText } from './utils'
 import { windowManager } from './window-manager'
 
@@ -172,6 +173,9 @@ function createMainWindow(): void {
 
   const focusDemoWin = windowManager.create(WindowType.FOCUS_DEMO)
   focusDemoWin?.once('ready-to-show', () => focusDemoWin.showInactive())
+
+  windowManager.create(WindowType.MENUBAR)
+  initTray()
 
   if (process.platform === 'darwin') {
     startFnKeyListener()

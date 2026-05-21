@@ -146,4 +146,22 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     show: false,
     openDevTools: false,
   },
+
+  [WindowType.MENUBAR]: {
+    width: 280,
+    height: 160,
+    position: 'center',
+    title: 'MenuBar',
+    frame: false,
+    transparent: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    focusable: true,
+    hasShadow: true,
+    htmlPath: 'menubar.html',
+    show: false,
+    openDevTools: false,
+  },
 }

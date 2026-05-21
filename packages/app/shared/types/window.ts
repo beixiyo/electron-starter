@@ -44,6 +44,8 @@ export enum WindowType {
   SHORTCUT_TEST = 'shortcut-test',
   /** 焦点检测演示窗口 */
   FOCUS_DEMO = 'focus-demo',
+  /** MenuBar 托盘面板窗口 */
+  MENUBAR = 'menubar',
 }
 
 /**
