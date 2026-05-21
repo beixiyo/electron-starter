@@ -1,4 +1,4 @@
-import type { FocusDemoPayload } from '@shared'
+import type { FocusDemoPayload } from '@ipc/services/focus-demo/contract'
 import { WindowType } from '@shared'
 import { FOCUS_DEMO_CONTENT_SIZE, FOCUS_DEMO_WINDOW_SIZE, SHADOW_INSET } from '@shared/window-config/constants'
 import { CloseBtn } from 'comps'

@@ -1,4 +1,4 @@
-import type { ShortcutTestPayload } from '@shared'
+import type { ShortcutTestPayload } from '@ipc/services/shortcut-test/contract'
 import { WindowType } from '@shared'
 import { SHADOW_INSET } from '@shared/window-config/constants'
 import { CloseBtn } from 'comps'
@@ -24,7 +24,7 @@ export const ShortcutTestApp = memo(() => {
   const [trigger, setTrigger] = useState<ShortcutTestPayload | null>(null)
 
   useEffect(() => {
-    return $ipc.shortcutTest.onTrigger((payload) => {
+    return $ipc.shortcutTest.on('trigger', (payload) => {
       setTrigger(payload)
     })
   }, [])

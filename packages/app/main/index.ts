@@ -1,11 +1,11 @@
-import type { FocusDemoPayload, VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
+import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { focusDemoService } from '@ipc/services/focus-demo/service'
+import { shortcutTestService } from '@ipc/services/shortcut-test/service'
 import { registerAllIpcHandlers } from '@ipc/register'
 import {
   APP_PROTOCOL,
-  FOCUS_DEMO_CHANNEL,
   HOLD_SHORT_ERROR_MESSAGE,
-  SHORTCUT_TEST_CHANNEL,
   SHORTCUTS,
   VOICE_IME_RENDERER_CHANNEL,
   WindowType,
@@ -104,26 +104,8 @@ function setupVoiceImeHoldShortcut(): void {
 }
 
 // ─────────────────────────────────────────────
-// Focus Demo 面板
+// Focus Demo / Shortcut Test — 通过 contract service 发送事件
 // ─────────────────────────────────────────────
-
-function sendFocusDemoUpdate(payload: FocusDemoPayload): void {
-  const win = windowManager.get(WindowType.FOCUS_DEMO)
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(FOCUS_DEMO_CHANNEL.UPDATE, payload)
-  }
-}
-
-// ─────────────────────────────────────────────
-// Shortcut Test 面板
-// ─────────────────────────────────────────────
-
-function sendShortcutTestTrigger(triggerType: 'hold' | 'doublePress' | 'combo', label: string): void {
-  const win = windowManager.get(WindowType.SHORTCUT_TEST)
-  if (!win || win.isDestroyed())
-    return
-  win.webContents.send(SHORTCUT_TEST_CHANNEL.TRIGGER, { triggerType, label })
-}
 
 // ─────────────────────────────────────────────
 /** 窗口生命周期 */
@@ -234,7 +216,7 @@ function setupFnKeyShortcuts(): void {
           windowManager.create(WindowType.SHORTCUT_TEST)
         }
         windowManager.show(WindowType.SHORTCUT_TEST)
-        sendShortcutTestTrigger('doublePress', 'Double Press Triggered')
+        shortcutTestService.emit('trigger', { triggerType: 'doublePress', label: 'Double Press Triggered' }, windowManager.get(WindowType.SHORTCUT_TEST)!)
       },
     },
 
@@ -247,7 +229,7 @@ function setupFnKeyShortcuts(): void {
             windowManager.create(WindowType.SHORTCUT_TEST)
           }
           windowManager.show(WindowType.SHORTCUT_TEST)
-          sendShortcutTestTrigger('combo', 'Fn + Space')
+          shortcutTestService.emit('trigger', { triggerType: 'combo', label: 'Fn + Space' }, windowManager.get(WindowType.SHORTCUT_TEST)!)
         },
       },
     ],
@@ -264,13 +246,13 @@ function startFocusCheckPolling(): void {
     const key = `${result.focused}-${result.bundleId ?? ''}-${result.role ?? ''}-${result.pid}`
     if (key !== prevKey) {
       prevKey = key
-      sendFocusDemoUpdate({
+      focusDemoService.emit('update', {
         focused: result.focused,
         role: result.role,
         app: result.app,
         bundleId: result.bundleId,
         isSelf,
-      })
+      }, windowManager.get(WindowType.FOCUS_DEMO)!)
     }
 
     if (isSelf) {

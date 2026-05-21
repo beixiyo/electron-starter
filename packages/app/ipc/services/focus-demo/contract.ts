@@ -1,3 +1,5 @@
+import type { IpcContract } from '@ipc/core'
+
 export type FocusDemoPayload = {
   focused: boolean
   role: string | null
@@ -6,6 +8,9 @@ export type FocusDemoPayload = {
   isSelf: boolean
 }
 
-export const FOCUS_DEMO_CHANNEL = {
-  UPDATE: 'focus-demo:update',
-} as const
+export type FocusDemoContract = IpcContract<
+  {},
+  {
+    update: FocusDemoPayload
+  }
+>

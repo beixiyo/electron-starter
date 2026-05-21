@@ -1,7 +1,5 @@
-export * from './focus-demo-events'
 export * from './screenshot-events'
 export * from './selection-events'
-export * from './shortcut-test-events'
 /**
  * 渲染进程相关的类型和事件常量
  *
