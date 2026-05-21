@@ -1,5 +1,5 @@
 import type { VoiceImeReleaseResult } from '@shared'
-import type { RecordingControls, VoiceRecorderStatus } from 'comps'
+import type { LiveWaveAudioProps, RecordingControls, VoiceRecorderStatus } from 'comps'
 import { convertToWav, formatDuration } from '@jl-org/tool'
 import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUTS, WindowType } from '@shared'
 import { useGetState, useLatestCallback } from 'hooks'
@@ -204,7 +204,7 @@ export function useVoiceIme() {
     }
   }, [])
 
-  const liveWaveState = status === 'recording'
+  const liveWaveState: NonNullable<LiveWaveAudioProps['state']> = status === 'recording'
     ? 'recording'
     : status === 'processing'
       ? 'idle'

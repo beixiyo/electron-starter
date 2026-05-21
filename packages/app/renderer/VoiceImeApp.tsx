@@ -54,7 +54,7 @@ export function VoiceImeApp(): React.JSX.Element {
           ) }
         >
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse flex-shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse shrink-0" />
             <span className="text-xs tabular-nums font-medium text-textPrimary">{ durationLabel }</span>
           </div>
 
@@ -114,7 +114,7 @@ export function VoiceImeApp(): React.JSX.Element {
 const IdleContent = memo(() => (
   <>
     <Mic size={ 16 } className="text-muted-foreground/50" strokeWidth={ 1.5 } />
-    <span className="text-[11px] text-muted-foreground/60 tracking-wide">按住 E 说话</span>
+    <span className="text-[11px] text-muted-foreground/60 tracking-wide">按住 Ctrl/Cmd E 说话</span>
   </>
 ))
 IdleContent.displayName = 'IdleContent'
