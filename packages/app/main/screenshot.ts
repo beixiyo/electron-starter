@@ -167,7 +167,7 @@ function createOverlayWindow(bounds: Electron.Rectangle): BrowserWindow {
     })
   }
 
-  const htmlPath = 'screenshot.html'
+  const htmlPath = 'windows/screenshot/index.html'
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(new URL(htmlPath, process.env.ELECTRON_RENDERER_URL).toString())
   }

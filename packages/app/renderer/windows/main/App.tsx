@@ -1,7 +1,7 @@
 import { Outlet, RouterProvider } from '@jl-org/react-router'
-import { AnimatePresence } from 'motion/react'
 import { useTheme } from 'hooks'
-import { router } from './router'
+import { AnimatePresence } from 'motion/react'
+import { router } from '@/router'
 
 function App() {
   useTheme()

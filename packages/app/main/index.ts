@@ -162,10 +162,10 @@ function createSplashWindow(): BrowserWindow {
   })
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    splash.loadURL(`${process.env.ELECTRON_RENDERER_URL}/splash.html`)
+    splash.loadURL(`${process.env.ELECTRON_RENDERER_URL}/windows/splash/index.html`)
   }
   else {
-    splash.loadFile(join(app.getAppPath(), 'out', 'renderer', 'splash.html'))
+    splash.loadFile(join(app.getAppPath(), 'out', 'renderer', 'windows', 'splash', 'index.html'))
   }
 
   return splash
