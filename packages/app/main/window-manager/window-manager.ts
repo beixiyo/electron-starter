@@ -30,7 +30,7 @@ class WindowManager {
     }
 
     const resolvedParent = parent ?? this.getDefaultParent(type)
-    const window = createBrowserWindow(config, resolvedParent)
+    const window = createBrowserWindow(config, resolvedParent, type)
 
     if (config.openDevTools) {
       window.webContents.openDevTools(

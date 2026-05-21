@@ -74,7 +74,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     hasShadow: false,
     htmlPath: 'voice-ime.html',
     show: false,
-    openDevTools: false,
+    openDevTools: true,
   },
 
   [WindowType.OAUTH]: {

@@ -1,4 +1,4 @@
-import type { WindowConfig, WindowPosition } from '@shared'
+import type { WindowConfig, WindowPosition, WindowType } from '@shared'
 import type { BrowserWindowConstructorOptions } from 'electron'
 import { join, resolve } from 'node:path'
 import { is } from '@electron-toolkit/utils'
@@ -8,6 +8,7 @@ import { DEFAULT_WINDOW_SIZE, WINDOW_POSITION_MARGINS } from './window-position-
 export function createBrowserWindow(
   config: WindowConfig,
   parent?: BrowserWindow,
+  windowType?: WindowType,
 ): BrowserWindow {
   const {
     position,
@@ -67,15 +68,22 @@ export function createBrowserWindow(
   else if (htmlPath) {
     if (is.dev && process.env.ELECTRON_RENDERER_URL) {
       const baseUrl = process.env.ELECTRON_RENDERER_URL
-      const devUrl
+      const devUrlBase
         = htmlPath && htmlPath !== 'index.html'
           ? new URL(htmlPath, baseUrl).toString()
           : baseUrl
-      window.loadURL(devUrl)
+      const devUrl = new URL(devUrlBase)
+
+      if (windowType)
+        devUrl.searchParams.set('windowType', windowType)
+      window.loadURL(devUrl.toString())
     }
     else {
       /** 文件协议加载 */
-      window.loadFile(join(app.getAppPath(), 'out', 'renderer', htmlPath))
+      const query = windowType
+        ? { windowType }
+        : undefined
+      window.loadFile(join(app.getAppPath(), 'out', 'renderer', htmlPath), { query })
 
       /**
        * 自定义协议加载
