@@ -14,8 +14,8 @@
 
 import type { FnShortcutsConfig } from '@shared'
 import type { BrowserWindow } from 'electron'
-import { sendFnDownEvent, sendFnUpEvent } from '@ipc/listeners/fn/events'
-import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/window/events'
+import { sendFnDownEvent, sendFnUpEvent } from '@ipc/services/fn/service'
+import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { FN_DOUBLE_PRESS_INTERVAL_MS } from '@shared'
 import { holdStateManager } from '../hold-state-manager'
 import { logError } from '../utils/logger'

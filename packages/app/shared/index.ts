@@ -1,6 +1,5 @@
 export * from './broadcast'
 export * from './constants'
-export * from './ipc-events'
 export * from './renderer'
 export * from './types'
 export * from './window-config'

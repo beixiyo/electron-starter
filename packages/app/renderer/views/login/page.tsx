@@ -132,7 +132,7 @@ export default function LoginPage() {
       return
     }
 
-    const cleanup = $ipc.oauth.onCallback(async (params: { code?: string, provider?: string }) => {
+    const cleanup = $ipc.oauth.on('callback', async (params: { code?: string, provider?: string }) => {
       if (params.provider !== 'apple' || !params.code) {
         return
       }

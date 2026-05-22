@@ -1,14 +1,13 @@
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { registerAllIpcHandlers } from '@ipc/register'
 import { focusDemoService } from '@ipc/services/focus-demo/service'
 import { shortcutTestService } from '@ipc/services/shortcut-test/service'
+import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
   APP_PROTOCOL,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUTS,
-  VOICE_IME_RENDERER_CHANNEL,
   WindowType,
 } from '@shared'
 import { app, BrowserWindow, shell } from 'electron'
@@ -18,16 +17,16 @@ import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListene
 import { checkFocusedTextInput } from './focus-check'
 import { mediaSessionStore } from './media/session-store'
 import { setupOAuthInterceptor } from './oauth-interceptor'
-import { initScreenshot, registerScreenshotShortcut } from './screenshot'
+import { registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import { registerHoldGlobalShortcut } from './shortcuts'
 import { initTray } from './tray'
 import { pasteText } from './utils'
 import { createWindowsSequentially, windowManager } from './window-manager'
+import '@ipc/services'
 
 initDeeplink(() => {
   setupAppIdentity()
-  registerAllIpcHandlers()
   setupVoiceImeHoldShortcut()
   setupBrowserWindowLifecycle()
   setupAppActivation()
@@ -35,7 +34,6 @@ initDeeplink(() => {
   createMainWindow()
   setupFnKeyShortcuts()
   initSelectionHook()
-  initScreenshot()
   registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
 
   if (process.platform === 'darwin') {
@@ -60,7 +58,7 @@ function setupAppIdentity(): void {
 function sendVoiceImeStatus(payload: VoiceImeRendererStatusPayload): void {
   const win = windowManager.get(WindowType.VOICE_IME)
   if (win && !win.isDestroyed()) {
-    win.webContents.send(VOICE_IME_RENDERER_CHANNEL.STATUS, payload)
+    voiceImeService.emit('status', payload, win)
   }
 }
 

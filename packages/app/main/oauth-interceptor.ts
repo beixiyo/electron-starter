@@ -1,6 +1,6 @@
 import type { OAuthCallbackParams } from '@shared'
 import type { BrowserWindow } from 'electron'
-import { sendOAuthCallback } from '@ipc/listeners/oauth/events'
+import { sendOAuthCallback } from '@ipc/services/oauth/service'
 import { dataToStr, getHostname, getProtocol, getUrlQuery } from '@jl-org/tool'
 import { WindowType } from '@shared'
 import { session } from 'electron'

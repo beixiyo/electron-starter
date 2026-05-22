@@ -11,7 +11,7 @@ export default function SelectionApp(): React.JSX.Element {
   const [selectionData, setSelectionData] = useState<SelectionData | null>(null)
 
   useEffect(() => {
-    return $ipc.selection.onDataChange((data) => {
+    return $ipc.selection.on('data', (data) => {
       if (data?.text)
         setSelectionData(data)
     })

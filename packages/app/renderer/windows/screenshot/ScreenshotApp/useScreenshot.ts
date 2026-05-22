@@ -16,7 +16,7 @@ export function useScreenshot() {
   const dragRef = useRef<DragState | null>(null)
 
   useEffect(() => {
-    return $ipc.screenshot.onInit((data) => {
+    return $ipc.screenshot.on('init', (data) => {
       setInitData(data)
     })
   }, [])

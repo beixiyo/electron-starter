@@ -2,14 +2,13 @@ import type { ScreenshotBounds, ScreenshotOkPayload } from '@shared'
 import { writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { is } from '@electron-toolkit/utils'
-import { SCREENSHOT_CHANNEL, WindowType } from '@shared'
+import { WindowType } from '@shared'
 import {
   app,
   BrowserWindow,
   clipboard,
   dialog,
   globalShortcut,
-  ipcMain,
   nativeImage,
   screen,
 } from 'electron'
@@ -24,56 +23,74 @@ type CaptureStore = {
 let overlayWindows: BrowserWindow[] = []
 const captures: Map<number, CaptureStore> = new Map()
 
-export function initScreenshot(): void {
-  ipcMain.handle('screenshot:confirmCapture', async (_e, displayId: number, rect: ScreenshotBounds) => {
-    const capture = captures.get(displayId)
-    if (!capture)
-      return
+/**
+ * 获取 screenshotService 发射器（延迟导入避免循环依赖）
+ */
+async function getScreenshotService() {
+  const { screenshotService } = await import('@ipc/services/screenshot/service')
+  return screenshotService
+}
 
-    const cropped = await cropImage(capture, rect)
-    if (cropped) {
-      clipboard.writeImage(nativeImage.createFromBuffer(cropped))
-      notifyMainWindow(SCREENSHOT_CHANNEL.OK, {
+export async function handleConfirmCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
+  const capture = captures.get(displayId)
+  if (!capture)
+    return
+
+  const cropped = await cropImage(capture, rect)
+  if (cropped) {
+    clipboard.writeImage(nativeImage.createFromBuffer(cropped))
+    const service = await getScreenshotService()
+    const mainWin = windowManager.get(WindowType.MAIN)
+    if (mainWin && !mainWin.isDestroyed()) {
+      service.emit('ok', {
         base64: cropped.toString('base64'),
         bounds: rect,
-      } satisfies ScreenshotOkPayload)
+      } satisfies ScreenshotOkPayload, mainWin)
     }
+  }
 
+  closeAllOverlays()
+}
+
+export async function handleSaveCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
+  const capture = captures.get(displayId)
+  if (!capture)
+    return
+
+  const cropped = await cropImage(capture, rect)
+  if (!cropped) {
     closeAllOverlays()
+    return
+  }
+
+  closeAllOverlays()
+
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    defaultPath: `screenshot-${Date.now()}.png`,
+    filters: [{ name: 'Images', extensions: ['png'] }],
   })
 
-  ipcMain.handle('screenshot:saveCapture', async (_e, displayId: number, rect: ScreenshotBounds) => {
-    const capture = captures.get(displayId)
-    if (!capture)
-      return
+  if (!canceled && filePath) {
+    await writeFile(filePath, cropped)
+  }
 
-    const cropped = await cropImage(capture, rect)
-    if (!cropped) {
-      closeAllOverlays()
-      return
-    }
-
-    closeAllOverlays()
-
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      defaultPath: `screenshot-${Date.now()}.png`,
-      filters: [{ name: 'Images', extensions: ['png'] }],
-    })
-
-    if (!canceled && filePath) {
-      await writeFile(filePath, cropped)
-    }
-
-    notifyMainWindow(SCREENSHOT_CHANNEL.SAVE, {
+  const service = await getScreenshotService()
+  const mainWin = windowManager.get(WindowType.MAIN)
+  if (mainWin && !mainWin.isDestroyed()) {
+    service.emit('save', {
       base64: cropped.toString('base64'),
       bounds: rect,
-    } satisfies ScreenshotOkPayload)
-  })
+    } satisfies ScreenshotOkPayload, mainWin)
+  }
+}
 
-  ipcMain.handle('screenshot:cancelCapture', () => {
-    closeAllOverlays()
-    notifyMainWindow(SCREENSHOT_CHANNEL.CANCEL, null)
-  })
+export async function handleCancelCapture(): Promise<void> {
+  closeAllOverlays()
+  const service = await getScreenshotService()
+  const mainWin = windowManager.get(WindowType.MAIN)
+  if (mainWin && !mainWin.isDestroyed()) {
+    service.emit('cancel', undefined, mainWin)
+  }
 }
 
 export async function startCapture(): Promise<void> {
@@ -96,14 +113,15 @@ export async function startCapture(): Promise<void> {
 
     const base64 = result.pngBuffer.toString('base64')
 
-    win.once('ready-to-show', () => {
+    win.once('ready-to-show', async () => {
       win.show()
       win.focus()
-      win.webContents.send(SCREENSHOT_CHANNEL.INIT, {
+      const service = await getScreenshotService()
+      service.emit('init', {
         base64,
         displayId: result.displayId,
         scaleFactor: result.scaleFactor,
-      })
+      }, win)
     })
   }
 }
@@ -253,11 +271,4 @@ function closeAllOverlays(): void {
   }
   overlayWindows = []
   captures.clear()
-}
-
-function notifyMainWindow(channel: string, data: unknown): void {
-  const win = windowManager.get(WindowType.MAIN)
-  if (win && !win.isDestroyed()) {
-    win.webContents.send(channel, data)
-  }
 }

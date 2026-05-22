@@ -1,6 +1,7 @@
 import type { SelectionHookConstructor, SelectionHookInstance, TextSelectionData } from 'selection-hook'
 import { windowManager } from '@main/window-manager'
-import { SELECTION_RENDERER_CHANNEL, WindowType } from '@shared'
+import { selectionService } from '@ipc/services/selection/service'
+import { WindowType } from '@shared'
 import { screen, shell, systemPreferences } from 'electron'
 import { isPureNum } from '@jl-org/tool'
 
@@ -102,11 +103,11 @@ class SelectionManager {
         const selectionData = {
           text: data.text,
           programName: data.programName,
-          method: data.method,
+          method: data.method != null ? String(data.method) : undefined,
           mousePosStart: data.mousePosStart,
           mousePosEnd: data.mousePosEnd,
         }
-        window.webContents.send(SELECTION_RENDERER_CHANNEL.DATA, selectionData)
+        selectionService.emit('data', selectionData, window)
       }
 
       /** 如果窗口已经加载完成，直接发送 */

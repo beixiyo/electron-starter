@@ -61,7 +61,7 @@ export function useVoiceIme() {
     try {
       if (!blob && forcedError) {
         const result: VoiceImeReleaseResult = { duration: pending.duration, error: forcedError }
-        await $ipc.hold.release({ type: SHORTCUTS.HOLD_VOICE_IME.windowType, result })
+        await $ipc.window.release(SHORTCUTS.HOLD_VOICE_IME.windowType, result)
       }
       else if (blob) {
         const wavBlob = await convertToWav(blob, { sampleRate: 16000, channels: 1 })
@@ -72,7 +72,7 @@ export function useVoiceIme() {
           size: wavBlob.size,
           audioBuffer,
         }
-        await $ipc.hold.release({ type: SHORTCUTS.HOLD_VOICE_IME.windowType, result })
+        await $ipc.window.release(SHORTCUTS.HOLD_VOICE_IME.windowType, result)
       }
 
       pendingReleaseRef.current = null
@@ -170,11 +170,11 @@ export function useVoiceIme() {
   })
 
   useEffect(() => {
-    const cleanupStart = $ipc.hold.onStart((event) => {
+    const cleanupStart = $ipc.hold.on('start', (event) => {
       if (event.windowType === WindowType.VOICE_IME)
         handleHoldStart()
     })
-    const cleanupEnd = $ipc.hold.onEnd((event) => {
+    const cleanupEnd = $ipc.hold.on('end', (event) => {
       if (event.windowType === WindowType.VOICE_IME)
         handleHoldEnd()
     })
@@ -182,10 +182,7 @@ export function useVoiceIme() {
   }, [])
 
   useEffect(() => {
-    const registerStatusListener = $ipc.voiceIme?.onStatusChange
-    if (!registerStatusListener)
-      return
-    return registerStatusListener(({ status: nextStatus, error: nextError }) => {
+    return $ipc.voiceIme.on('status', ({ status: nextStatus, error: nextError }) => {
       if (nextStatus) {
         setStatus(nextStatus)
         if (nextStatus === 'idle')

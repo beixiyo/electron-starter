@@ -1,27 +1,27 @@
 import { electronAPI } from '@electron-toolkit/preload'
-import { fnApi } from '@ipc/listeners/fn/api'
-import { holdApi } from '@ipc/listeners/hold/api'
-import { oauthApi } from '@ipc/listeners/oauth/api'
-import { screenshotApi } from '@ipc/listeners/screenshot/api'
-import { selectionApi } from '@ipc/listeners/selection/api'
-import { voiceImeApi } from '@ipc/listeners/voice-ime/api'
+import { fnClient } from '@ipc/services/fn/client'
 import { focusDemoClient } from '@ipc/services/focus-demo/client'
-import { mediaApi } from '@ipc/services/media/api'
+import { holdClient } from '@ipc/services/hold/client'
+import { mediaClient } from '@ipc/services/media/client'
+import { oauthClient } from '@ipc/services/oauth/client'
+import { screenshotClient } from '@ipc/services/screenshot/client'
+import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutTestClient } from '@ipc/services/shortcut-test/client'
-import { windowApi } from '@ipc/services/window/api'
+import { voiceImeClient } from '@ipc/services/voice-ime/client'
+import { windowClient } from '@ipc/services/window/client'
 import { contextBridge } from 'electron'
 
 export const ipc = {
-  media: mediaApi,
-  window: windowApi,
+  media: mediaClient,
+  window: windowClient,
   focusDemo: focusDemoClient,
-  hold: holdApi,
-  voiceIme: voiceImeApi,
-  selection: selectionApi,
+  hold: holdClient,
+  voiceIme: voiceImeClient,
+  selection: selectionClient,
   shortcutTest: shortcutTestClient,
-  oauth: oauthApi,
-  fn: fnApi,
-  screenshot: screenshotApi,
+  oauth: oauthClient,
+  fn: fnClient,
+  screenshot: screenshotClient,
 }
 
 if (process.contextIsolated) {

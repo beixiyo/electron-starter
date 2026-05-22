@@ -7,9 +7,3 @@ export type SelectionData = {
   /** 选择结束时的鼠标位置 */
   mousePosEnd?: { x: number, y: number }
 }
-
-export const SELECTION_RENDERER_CHANNEL = {
-  DATA: 'selection:data',
-} as const
-
-export type SelectionRendererChannel = typeof SELECTION_RENDERER_CHANNEL[keyof typeof SELECTION_RENDERER_CHANNEL]

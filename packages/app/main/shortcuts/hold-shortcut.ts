@@ -1,6 +1,6 @@
 import type { WindowType } from '@shared'
 import type { HoldGlobalShortcutConfig, HoldShortcutConfig } from './types'
-import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/window/events'
+import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, WINDOW_CONFIGS } from '@shared'
 import { globalShortcut } from 'electron'
 import { holdStateManager } from '../hold-state-manager'
