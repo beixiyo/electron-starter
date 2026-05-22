@@ -45,18 +45,16 @@ packages/app/
 │   ├── api/           # HTTP 客户端实例
 │   └── [*.html/tsx]   # 多窗口入口（voiceIme, selection, screenshot…）
 │
-├── ipc/               # IPC 通信层
-│   ├── core/          # IPC 框架定义（main.ts / renderer.ts / types.ts）
-│   ├── register.ts    # 统一注册所有 handlers
-│   ├── listeners/     # 事件监听（fn / hold / oauth / screenshot…）
-│   └── services/      # IPC 服务（media / window / screenshot / selection）
+├── ipc/               # IPC 通信层（contract-driven 架构）
+│   ├── core/          # IPC 框架（contract.ts / service.ts / client.ts）
+│   └── services/      # 各 IPC 服务（fn / hold / media / oauth / screenshot / selection / voice-ime / window…）
 │
 ├── shared/            # 主进程与渲染进程共享代码
+│   ├── broadcast/     # 广播通信（channel / types）
 │   ├── constants/     # 快捷键、协议、Fn 键等常量
-│   ├── ipc-events/    # IPC 事件名常量
 │   ├── types/         # TypeScript 类型（window / media / oauth）
 │   ├── window-config/ # 各窗口类型的配置（WINDOW_CONFIGS）
-│   └── renderer/      # 渲染进程间通信事件
+│   └── renderer/      # 渲染进程间事件定义（screenshot / selection / voice-ime）
 │
 ├── resources/         # 原生二进制（Swift 编译产物，已 gitignore）
 │   ├── fn-listener    # Fn 键监听二进制
@@ -130,19 +128,33 @@ pnpm build:focus-check   # → resources/focus-check
 
 ## IPC 通信规范
 
-IPC 分两层，遵循以下分工：
+采用 **contract-driven** 架构，每个服务由三个文件组成，类型安全贯穿主进程与渲染进程：
 
-- **`ipc/listeners/`** — 事件驱动（Fn 键、hold、oauth 等），主进程向渲染进程推送
-- **`ipc/services/`** — 请求-响应（media、window、screenshot、selection），渲染进程发起调用
+| 文件 | 职责 |
+|---|---|
+| `contract.ts` | 定义 `IpcContract<InvokeSignatures, EventPayloads>` 类型，声明请求-响应方法签名和事件载荷 |
+| `service.ts` | 主进程实现，调用 `createIpcService<Contract>(namespace, handlers)` 自动注册到 `ipcMain.handle()` |
+| `client.ts` | 渲染进程客户端，调用 `createServiceClient<Contract>(namespace, methods)` 生成类型安全的调用代理 |
+
+核心类型（`ipc/core/contract.ts`）：
+
+- `IpcContract<H, E>` — 合并 invoke 方法与 event 推送的契约类型
+- `ServiceHandlers<C>` — 自动为 handler 签名添加 `event` 参数
+- `IpcEmitter<C>` — 主进程类型安全的事件发射器
+- `IpcClient<C>` — 渲染进程合并请求方法 + 订阅方法的客户端类型
+
+**服务加载方式：**
+
+- **核心服务**（window / media / screenshot / selection）通过 `ipc/services/index.ts` 统一导入，在 `main/index.ts` 中 `import '@ipc/services'` 始终加载
+- **按需服务**（fn / hold / oauth / voice-ime / focus-demo / shortcut-test）在使用处直接导入 `service.ts`，按需注册
 
 **新增 IPC 能力的步骤：**
 
-1. 在 `shared/ipc-events/` 定义事件名常量
-2. 在 `ipc/services/<name>/api.ts` 定义 API 类型
-3. 在 `ipc/services/<name>/handlers.ts` 实现主进程逻辑
-4. 在 `ipc/services/<name>/register.ts` 注册 handlers
-5. 在 `ipc/register.ts` 调用注册函数
-6. 在 `preload/index.ts` 通过 Context Bridge 暴露给渲染进程（`window.$ipc`）
+1. 创建 `ipc/services/<name>/contract.ts`，定义 `IpcContract` 类型
+2. 创建 `ipc/services/<name>/service.ts`，用 `createIpcService()` 实现并自动注册
+3. 创建 `ipc/services/<name>/client.ts`，用 `createServiceClient()` 生成客户端
+4. 在主进程入口或使用处导入 `service.ts`（核心服务加到 `ipc/services/index.ts`，按需服务在使用处导入）
+5. 在 `preload/index.ts` 通过 Context Bridge 暴露客户端（`window.$ipc`）
 
 **渲染进程通过 `window.$ipc.xxx` 调用，不要直接使用 `ipcRenderer`。**
 
