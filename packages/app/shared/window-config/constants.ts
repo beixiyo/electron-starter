@@ -56,7 +56,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     htmlPath: 'windows/main/index.html',
     autoHideMenuBar: true,
     show: false,
-    openDevTools: true,
+    openDevTools: false,
   },
 
   [WindowType.VOICE_IME]: {
@@ -74,7 +74,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     hasShadow: false,
     htmlPath: 'windows/voice-ime/index.html',
     show: false,
-    openDevTools: true,
+    openDevTools: false,
   },
 
   [WindowType.OAUTH]: {
