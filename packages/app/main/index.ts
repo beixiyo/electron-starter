@@ -150,6 +150,8 @@ function createSplashWindow(): BrowserWindow {
     height: 180,
     frame: false,
     transparent: true,
+    hasShadow: false,
+    roundedCorners: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
