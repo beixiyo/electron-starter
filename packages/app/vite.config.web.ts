@@ -121,7 +121,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
          * 编辑器通过项目根目录 `.env.local` 的 `CODE_EDITOR` 配置
          * @example CODE_EDITOR=code        # VSCode
          * @example CODE_EDITOR=cursor      # Cursor
-         * @example CODE_EDITOR=~/bin/nvim-open  # Neovim
+         * @example CODE_EDITOR=~/bin/open-nvim  # Neovim
          * @link https://inspector.fe-dev.cn/en/more/question.html#using-in-wsl-or-dev-containers
          */
       }),
