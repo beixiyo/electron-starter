@@ -144,8 +144,8 @@ function setupAppActivation(): void {
 
 function createSplashWindow(): BrowserWindow {
   const splash = new BrowserWindow({
-    width: 280,
-    height: 180,
+    width: 308,
+    height: 208,
     frame: false,
     transparent: true,
     hasShadow: false,
