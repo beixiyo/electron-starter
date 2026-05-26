@@ -57,10 +57,10 @@ export function createBrowserWindow(
   const window = new BrowserWindow(browserWindowOptions)
 
   if (browserWindowOptions.alwaysOnTop) {
-    window.setAlwaysOnTop(true, 'screen-saver')
+    window.setAlwaysOnTop(true, 'floating')
     window.on('blur', () => {
       if (!window.isDestroyed()) {
-        window.setAlwaysOnTop(true, 'screen-saver')
+        window.setAlwaysOnTop(true, 'floating')
       }
     })
   }
