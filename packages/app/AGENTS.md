@@ -38,6 +38,7 @@ packages/app/
 ├── preload/           # Context Bridge（暴露 window.$ipc）
 │
 ├── renderer/          # React 前端
+│   ├── broadcast/     # 渲染进程间广播通信（renderer-only，基于 BroadcastChannel）
 │   ├── router/        # 文件路由
 │   ├── store/         # 全局状态（user）
 │   ├── views/         # 页面组件（login / recorder）
@@ -49,12 +50,11 @@ packages/app/
 │   ├── core/          # IPC 框架（contract.ts / service.ts / client.ts）
 │   └── services/      # 各 IPC 服务（fn / hold / media / oauth / screenshot / selection / voice-ime / window…）
 │
-├── shared/            # 主进程与渲染进程共享代码
-│   ├── broadcast/     # 广播通信（channel / types）
+├── shared/            # 主进程与渲染进程共享代码（禁止引入 electron / react 等端专属模块）
 │   ├── constants/     # 快捷键、协议、Fn 键等常量
+│   ├── ipc-types/     # IPC 消息 payload 类型（screenshot / selection / voice-ime，主进程与渲染进程都用）
 │   ├── types/         # TypeScript 类型（window / media / oauth）
-│   ├── window-config/ # 各窗口类型的配置（WINDOW_CONFIGS）
-│   └── renderer/      # 渲染进程间事件定义（screenshot / selection / voice-ime）
+│   └── window-config/ # 各窗口类型的配置（WINDOW_CONFIGS）
 │
 ├── resources/         # 原生二进制（Swift 编译产物，已 gitignore）
 │   ├── fn-listener    # Fn 键监听二进制
@@ -160,6 +160,45 @@ pnpm build:focus-check   # → resources/focus-check
 
 ---
 
+## 广播通信（Broadcast）
+
+> 仅限 **renderer 进程**使用，基于浏览器原生 `BroadcastChannel` API，**不经过主进程**，适合多渲染进程间的轻量状态同步。
+> 代码位置：`renderer/broadcast/`（不在 `shared/`，因为含浏览器专属 API）
+
+### 核心 API
+
+```ts
+import { createWindowBroadcast } from '../broadcast'   // 在 renderer 内相对路径导入
+
+const bc = createWindowBroadcast<{ theme: string }>('theme-sync')
+```
+
+| 方法 / 属性 | 说明 |
+|---|---|
+| `bc.selfType` | 当前窗口类型（只读），从 URL `?windowType` query param 自动读取 |
+| `bc.post(payload, to?)` | 发送消息；`to` 省略时广播到 **所有** 渲染窗口，传入 `WindowType[]` 则定向发送 |
+| `bc.on(callback)` | 订阅消息，**自动过滤**掉定向给其他窗口的消息；返回取消订阅函数 |
+| `bc.close()` | 关闭通道，释放底层 `BroadcastChannel` 资源 |
+
+### 消息结构 `BroadcastMessage<T>`
+
+```ts
+type BroadcastMessage<T> = {
+  payload: T          // 消息内容
+  from: WindowType    // 发送方窗口类型
+  to?: WindowType[]   // 目标列表；undefined = 全体广播
+}
+```
+
+### 使用规则
+
+1. **不可在主进程（main/preload）使用** —— `BroadcastChannel` 依赖 `window.location`，Node.js 环境会直接报错；跨进程通信请走 IPC 层
+2. **通道名需全局唯一**：建议在 `shared/constants/` 统一定义字符串常量，避免散落
+3. **订阅务必清理**：React 组件内用 `useEffect` 返回 `unsub`；泄漏会导致重复触发
+4. **`selfType` 可能为 null**：若窗口 URL 没有 `?windowType` 参数，`post()` 发出的消息 `from` 字段为 `null`，发送定向消息前注意校验
+
+---
+
 ## macOS 原生功能
 
 > 详见 `docs/fn-key.md` 和 `docs/focus-check.md`，下手前必读
@@ -249,5 +288,6 @@ pnpm build:unpack
 1. **Swift 二进制未编译**：clone 后忘记运行 `pnpm build:fn-listener` / `pnpm build:focus-check`，运行时子进程启动失败
 2. **窗口配置散落**：窗口参数应统一在 `shared/window-config/constants.ts` 定义，不要在多处硬编码
 3. **直接使用 ipcRenderer**：渲染进程应通过 `window.$ipc` 访问，`ipcRenderer` 未通过 Context Bridge 暴露
-4. **主进程引入渲染进程模块**：`shared/` 是唯一可以安全共用的目录，`renderer/` 内容不能在主进程中导入
-5. **Fn 键 combo 时序**：HID 层有 50ms 抖动，处理 Combo 事件时参考 `docs/fn-key.md` 的缓冲方案，不要假设事件严格有序
+4. **shared/ 引入端专属模块**：`shared/` 不得有任何运行时 `import` 引用 `electron`、`react`、`window.*` 等端专属 API；`import type` 可以例外，但仍应优先用字面量类型替代
+5. **broadcast 误放 shared**：`renderer/broadcast/` 使用了 `window.location`，不可在主进程中导入；广播通道只能在 `renderer/` 内使用
+6. **Fn 键 combo 时序**：HID 层有 50ms 抖动，处理 Combo 事件时参考 `docs/fn-key.md` 的缓冲方案，不要假设事件严格有序

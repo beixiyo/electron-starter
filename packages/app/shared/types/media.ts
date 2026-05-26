@@ -1,7 +1,14 @@
-import type { systemPreferences } from 'electron'
+/**
+ * macOS 媒体权限类型
+ * 对应 Electron systemPreferences.getMediaAccessStatus 的入参
+ */
+export type MediaType = 'microphone' | 'camera' | 'screen'
 
-export type MediaType = Parameters<typeof systemPreferences.getMediaAccessStatus>[0]
-export type MediaAccessStatus = ReturnType<typeof systemPreferences.getMediaAccessStatus>
+/**
+ * macOS 媒体权限状态
+ * 对应 Electron systemPreferences.getMediaAccessStatus 的返回值
+ */
+export type MediaAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
 
 export type DesktopSourcePayload = {
   id: string

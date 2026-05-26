@@ -1,4 +1,4 @@
-import type { WindowType } from '../types/window'
+import type { WindowType } from '@shared/types/window'
 import type { BroadcastMessage, WindowBroadcast } from './types'
 
 /** 从 URL query param 读取当前窗口类型 */

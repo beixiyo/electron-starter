@@ -1,4 +1,4 @@
-import type { WindowType } from '../types/window'
+import type { WindowType } from '@shared/types/window'
 
 /**
  * 广播消息结构

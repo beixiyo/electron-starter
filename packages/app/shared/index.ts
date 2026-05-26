@@ -1,5 +1,4 @@
-export * from './broadcast'
 export * from './constants'
-export * from './renderer'
+export * from './ipc-types'
 export * from './types'
 export * from './window-config'

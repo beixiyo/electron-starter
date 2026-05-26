@@ -1,7 +1,17 @@
+import type { Privileges } from 'electron'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { APP_PROTOCOL, APP_PROTOCOL_PRIVILEGES } from '@shared'
+import { APP_PROTOCOL } from '@shared'
 import { app, net, protocol } from 'electron'
+
+/** 自定义协议权限，仅在主进程注册阶段使用 */
+const APP_PROTOCOL_PRIVILEGES: Privileges = {
+  standard: true,
+  secure: true,
+  supportFetchAPI: true,
+  corsEnabled: true,
+  stream: true,
+}
 
 export function initProtocol() {
   protocol.registerSchemesAsPrivileged([
