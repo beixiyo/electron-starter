@@ -56,6 +56,19 @@ export function createBrowserWindow(
 
   const window = new BrowserWindow(browserWindowOptions)
 
+  if (browserWindowOptions.alwaysOnTop) {
+    window.setAlwaysOnTop(true, 'screen-saver')
+    window.on('blur', () => {
+      if (!window.isDestroyed()) {
+        window.setAlwaysOnTop(true, 'screen-saver')
+      }
+    })
+  }
+
+  window.webContents.on('did-finish-load', () => {
+    window.webContents.insertCSS('html { overflow: hidden !important; }')
+  })
+
   /** 移除窗口菜单（如果需要） */
   if (!config.frame) {
     window.setMenuBarVisibility(false)
