@@ -21,6 +21,7 @@ type CaptureStore = {
 }
 
 let overlayWindows: BrowserWindow[] = []
+const dimmedWindows: BrowserWindow[] = []
 const captures: Map<number, CaptureStore> = new Map()
 
 /**
@@ -93,9 +94,19 @@ export async function handleCancelCapture(): Promise<void> {
   }
 }
 
-export async function startCapture(): Promise<void> {
+export async function startCapture(options?: { hideWindows?: string[] }): Promise<void> {
   closeAllOverlays()
   captures.clear()
+
+  if (options?.hideWindows?.length) {
+    for (const type of options.hideWindows) {
+      const win = windowManager.get(type as WindowType)
+      if (win && !win.isDestroyed() && win.isVisible()) {
+        win.setOpacity(0)
+        dimmedWindows.push(win)
+      }
+    }
+  }
 
   const displays = screen.getAllDisplays()
 
@@ -271,4 +282,11 @@ function closeAllOverlays(): void {
   }
   overlayWindows = []
   captures.clear()
+
+  for (const win of dimmedWindows) {
+    if (!win.isDestroyed()) {
+      win.setOpacity(1)
+    }
+  }
+  dimmedWindows.splice(0)
 }

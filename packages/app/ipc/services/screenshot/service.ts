@@ -4,8 +4,8 @@ import { createIpcService } from '@ipc/core'
 import { endCapture, startCapture } from '@main/screenshot'
 
 export const screenshotService = createIpcService<ScreenshotContract>('screenshot', {
-  async startCapture(_e) {
-    await startCapture()
+  async startCapture(_e, options) {
+    await startCapture(options)
     return { success: true }
   },
 
