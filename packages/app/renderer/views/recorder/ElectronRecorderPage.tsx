@@ -10,6 +10,7 @@ import { RecorderSidebar } from './components/RecorderSidebar'
 import { SourceGrid } from './components/SourceGrid'
 import { buildRecorderStateMeta } from './constants/state-meta'
 import { useLiveWaveAudio } from './hooks/useLiveWaveAudio'
+import { useMeetingRecordingSaver } from './hooks/useMeetingRecordingSaver'
 import { useRecorderController } from './hooks/useRecorderController'
 import { useRecordingTimer } from './hooks/useRecordingTimer'
 import { useSourceManager } from './hooks/useSourceManager'
@@ -24,6 +25,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const [viewingRecordId, setViewingRecordId] = useState<string | null>(null)
   const [listRefreshKey, setListRefreshKey] = useState(0)
   const [showSourceSelectModal, setShowSourceSelectModal] = useState(false)
+
+  useMeetingRecordingSaver(() => {
+    setListRefreshKey(prev => prev + 1)
+    Message.success(t('meetingRecording.saved', '会议录音已保存'))
+  })
   const {
     sources,
     selectedSource,
@@ -342,7 +348,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   return (
     <div className="min-h-screen bg-backgroundSubtle px-4 py-6 text-sm text-textPrimary lg:px-8">
       <div
-        className="mx-auto flex w-full max-w-[1440px] flex-col gap-5"
+        className="mx-auto flex w-full max-w-360 flex-col gap-5"
         style={ layoutStyle }
       >
         <header className="flex flex-col gap-2">
@@ -389,7 +395,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
             </div>
 
-            <section className="flex-1 rounded-3xl border border-border bg-background p-5 shadow-card overflow-hidden flex flex-col">
+            <section className="min-h-[480px] rounded-3xl border border-border bg-background p-5 shadow-card overflow-hidden flex flex-col">
               <RecorderList
                 key={ listRefreshKey }
                 onViewRecord={ setViewingRecordId }

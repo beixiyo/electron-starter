@@ -61,7 +61,9 @@ var fnUpTimer: DispatchWorkItem?
 
 func output(_ msg: String) {
   print(msg)
-  fflush(stdout)
+  if fflush(stdout) != 0 {
+    exit(0)
+  }
 }
 
 let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -116,5 +118,18 @@ guard result == kIOReturnSuccess || result == kIOReturnExclusiveAccess else {
   fputs("OPEN_FAILED:\(result)\n", stderr)
   exit(1)
 }
+
+// 忽略 SIGPIPE（父进程退出时管道断裂，不要直接崩溃）
+signal(SIGPIPE, SIG_IGN)
+
+// 定时检测父进程是否存活（每 5 秒）
+let parentCheckTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+parentCheckTimer.schedule(deadline: .now() + 5, repeating: 5)
+parentCheckTimer.setEventHandler {
+  if getppid() == 1 {
+    exit(0)
+  }
+}
+parentCheckTimer.resume()
 
 CFRunLoopRun()

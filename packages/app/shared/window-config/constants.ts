@@ -39,6 +39,18 @@ export const FOCUS_DEMO_WINDOW_SIZE = {
   focused: { width: 260 + SHADOW_INSET * 2, height: 120 + SHADOW_INSET * 2 },
 } as const
 
+/** MEETING_TOAST 内容尺寸（不含 shadow inset） */
+export const MEETING_TOAST_CONTENT_SIZE = {
+  width: 340,
+  height: 72,
+} as const
+
+/** MEETING_TOAST 窗口尺寸（内容 + 2×SHADOW_INSET） */
+export const MEETING_TOAST_WINDOW_SIZE = {
+  width: MEETING_TOAST_CONTENT_SIZE.width + SHADOW_INSET * 2,
+  height: MEETING_TOAST_CONTENT_SIZE.height + SHADOW_INSET * 2,
+} as const
+
 export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
   [WindowType.MAIN]: {
     width: 1440,
@@ -161,6 +173,24 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     focusable: true,
     hasShadow: true,
     htmlPath: 'windows/menubar/index.html',
+    show: false,
+    openDevTools: false,
+  },
+
+  [WindowType.MEETING_TOAST]: {
+    width: MEETING_TOAST_WINDOW_SIZE.width,
+    height: MEETING_TOAST_WINDOW_SIZE.height,
+    position: 'top-right',
+    title: 'Meeting Detected',
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    hasShadow: false,
+    htmlPath: 'windows/meeting-toast/index.html',
     show: false,
     openDevTools: false,
   },

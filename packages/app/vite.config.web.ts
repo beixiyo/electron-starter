@@ -84,6 +84,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           screenshot: resolve(__dirname, './renderer/windows/screenshot/index.html'),
           focusDemo: resolve(__dirname, './renderer/windows/focus-demo/index.html'),
           menubar: resolve(__dirname, './renderer/windows/menubar/index.html'),
+          meetingToast: resolve(__dirname, './renderer/windows/meeting-toast/index.html'),
         },
       },
     },

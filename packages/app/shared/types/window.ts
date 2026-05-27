@@ -46,6 +46,8 @@ export enum WindowType {
   FOCUS_DEMO = 'focus-demo',
   /** MenuBar 托盘面板窗口 */
   MENUBAR = 'menubar',
+  /** 会议检测提醒浮窗 */
+  MEETING_TOAST = 'meeting-toast',
 }
 
 /**

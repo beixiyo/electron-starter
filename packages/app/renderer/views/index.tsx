@@ -17,8 +17,8 @@ export default function Layout() {
   ]
 
   return (
-    <main className="min-h-screen bg-white dark:bg-zinc-950">
-      <div className="flex min-h-screen">
+    <main className="h-screen bg-white dark:bg-zinc-950">
+      <div className="flex h-full">
         {/* 左侧折叠菜单 */ }
         <CollapsibleSidebar
           isCollapsed={ isCollapsed }
@@ -60,7 +60,7 @@ export default function Layout() {
         </CollapsibleSidebar>
 
         {/* 右侧内容区 */ }
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           <Outlet />
         </div>
       </div>

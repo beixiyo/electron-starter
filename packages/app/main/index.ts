@@ -16,6 +16,7 @@ import { initDeeplink } from './deeplink'
 import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
 import { checkFocusedTextInput } from './focus-check'
 import { mediaSessionStore } from './media/session-store'
+import { initMeetingDetection } from './meeting-detection'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
@@ -38,6 +39,7 @@ initDeeplink(() => {
 
   if (process.platform === 'darwin') {
     startFocusCheckPolling()
+    initMeetingDetection()
   }
 })
 
@@ -271,16 +273,17 @@ function startFocusCheckPolling(): void {
     const isSelf = result.pid === process.pid
 
     const key = `${result.focused}-${result.bundleId ?? ''}-${result.role ?? ''}-${result.pid}`
-    if (key !== prevKey) {
-      prevKey = key
-      focusDemoService.emit('update', {
-        focused: result.focused,
-        role: result.role,
-        app: result.app,
-        bundleId: result.bundleId,
-        isSelf,
-      }, windowManager.get(WindowType.FOCUS_DEMO)!)
-    }
+    if (key === prevKey)
+      return
+    prevKey = key
+
+    focusDemoService.emit('update', {
+      focused: result.focused,
+      role: result.role,
+      app: result.app,
+      bundleId: result.bundleId,
+      isSelf,
+    }, windowManager.get(WindowType.FOCUS_DEMO)!)
 
     if (isSelf) {
       console.log(`[focus-check] 🏠 self  focused=${result.focused}  role=${result.role}`)

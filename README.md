@@ -1,5 +1,17 @@
 # Electron Mono-Repo 模板
 
+## 系统要求
+
+| 功能 | 最低 macOS 版本 | 说明 |
+|------|----------------|------|
+| 会议检测（audio-monitor） | 14.2 Sonoma | Core Audio Taps API |
+| 录音 — 系统音频 | 14.0 | ScreenCaptureKit |
+| 录音 — 麦克风 | **15.0** Sequoia | `SCStreamConfiguration.captureMicrophone` |
+
+> Windows / Linux 不涉及 native 二进制，相关功能静默跳过
+
+---
+
 ## Env 配置
 
 https://cn.electron-vite.org/guide/env-and-mode
@@ -48,11 +60,35 @@ MAIN_VITE_ASR_CLUSTER=xxx
 pnpm i
 pnpm build
 
+# macOS：编译 Swift native 二进制（audio-monitor / audio-recorder / fn-listener / focus-check）
+bash packages/app/scripts/build-native.sh
+
 cd packages/electron
 pnpm dev
 ```
 
 VSCode 开发直接按下 **F5**
+
+---
+
+## Native 二进制
+
+`packages/app/resources/` 下有多个 Swift 源码，通过统一脚本编译为 Universal Binary（arm64 + x86_64）：
+
+```bash
+bash packages/app/scripts/build-native.sh
+```
+
+| 二进制 | 源码 | 功能 |
+|--------|------|------|
+| `audio-monitor` | `audio-monitor.swift` | 轮询 Core Audio，检测哪些进程正在使用音频设备 |
+| `audio-recorder` | `audio-recorder.swift` | ScreenCaptureKit 录制系统音频 + 麦克风，stdin/stdout JSON 通信 |
+| `fn-listener` | `fn-listener.swift` | 监听 Fn 键事件 |
+| `focus-check` | `focus-check.swift` | 检查前台应用焦点状态 |
+
+所有二进制通过 `NativeBridge` 类（`main/native-bridge.ts`）统一管理生命周期和事件通信。
+
+> 产物（无扩展名的二进制文件）已在 `.gitignore` 中排除，每次拉取后需重新编译
 
 ---
 

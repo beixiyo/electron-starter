@@ -28,6 +28,8 @@ dist-ssr
 # compiled binaries
 packages/app/resources/fn-listener
 packages/app/resources/focus-check
+packages/app/resources/audio-monitor
+packages/app/resources/audio-recorder
 
 # build
 *.tsbuildinfo
