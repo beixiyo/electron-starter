@@ -1,6 +1,6 @@
 import type { AliasOptions } from 'vite'
 import { resolve } from 'node:path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import { getRenderConfig } from './vite.config.web'
 
 const alias: AliasOptions = {
@@ -23,7 +23,6 @@ export default defineConfig((params) => {
 
     main: {
       envDir: './env',
-      plugins: [externalizeDepsPlugin()],
       resolve: {
         alias,
       },
@@ -40,7 +39,6 @@ export default defineConfig((params) => {
     },
     preload: {
       envDir: './env',
-      plugins: [externalizeDepsPlugin()],
       resolve: {
         alias,
       },

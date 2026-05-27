@@ -1,4 +1,5 @@
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
+
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { focusDemoService } from '@ipc/services/focus-demo/service'
@@ -25,6 +26,9 @@ import { initTray } from './tray'
 import { pasteText } from './utils'
 import { createWindowsSequentially, windowManager } from './window-manager'
 import '@ipc/services'
+
+// Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃
+app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
 
 initDeeplink(() => {
   setupAppIdentity()

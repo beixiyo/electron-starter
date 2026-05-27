@@ -114,13 +114,44 @@ pip3 install setuptools
 
 ---
 
+### Arch Linux: `libcrypt.so.1` 缺失（仅 electron-builder 26+）
+
+electron-builder 26+ 内置的 fpm（Ruby 预编译）依赖 `libcrypt.so.1`，但 Arch Linux 已升级为 `libcrypt.so.2`，导致 deb/snap 打包失败：
+
+```
+ruby: error while loading shared libraries: libcrypt.so.1: cannot open shared object file
+```
+
+**修复**：安装兼容库（Arch 官方 core 仓库）：
+
+```bash
+sudo pacman -S libxcrypt-compat
+```
+
+> **注意**：electron-builder 25.x 使用旧版 fpm，不受此问题影响。
+
+### electron-builder 26 + pnpm monorepo: `Cannot find module`
+
+electron-builder v26 重写了模块收集器（纯 JS 替代旧 `app-builder` 二进制），对 pnpm monorepo 的 symlink 结构支持存在**已知 bug**（[#8986](https://github.com/electron-userland/electron-builder/issues/8986)、[#9654](https://github.com/electron-userland/electron-builder/issues/9654)），导致 ASAR 中缺失 node_modules，运行时报错：
+
+```
+Error: Cannot find module '@electron-toolkit/utils'
+Error: Cannot find module 'uiohook-napi'
+```
+
+**修复**：降级到 electron-builder **25.1.8**（旧收集器能正确跟踪 pnpm symlink）：
+
+```bash
+pnpm -F app add -D electron-builder@25.1.8
+```
+
+---
+
 ## 打包
 
 ```bash
-# Windows bug 必须全局安装
-npm i -g electron-builder@25.1.8
-
-# 打包产物在 packages/electron/dist
-pnpm -F electron build:win
-pnpm -F electron build:mac
+# 打包产物在 packages/app/dist/dist
+pnpm -F app build:win
+pnpm -F app build:mac
+pnpm -F app build:linux
 ```
