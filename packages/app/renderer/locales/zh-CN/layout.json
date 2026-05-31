@@ -2,6 +2,7 @@
   "title": "功能",
   "menu": {
     "recorder": "一起录",
+    "notifyTest": "通知测试",
     "cards": "卡片",
     "editor": "编辑器",
     "speak": "对你说",

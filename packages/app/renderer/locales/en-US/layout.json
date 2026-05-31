@@ -2,6 +2,7 @@
   "title": "Features",
   "menu": {
     "recorder": "Recording",
+    "notifyTest": "Notifications",
     "cards": "Notes",
     "editor": "Editor",
     "speak": "Ask XXX",

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from '@jl-org/react-router'
 import { CollapsibleSidebar } from 'comps'
-import { Camera } from 'lucide-react'
+import { Bell, Camera } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -14,6 +14,7 @@ export default function Layout() {
 
   const menu = [
     { key: 'recorder', path: '/recorder', icon: <Camera size={ 18 } />, label: t('menu.recorder') },
+    { key: 'notify-test', path: '/notify-test', icon: <Bell size={ 18 } />, label: t('menu.notifyTest') },
   ]
 
   return (

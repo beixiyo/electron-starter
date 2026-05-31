@@ -4,6 +4,7 @@ import { focusDemoClient } from '@ipc/services/focus-demo/client'
 import { holdClient } from '@ipc/services/hold/client'
 import { mediaClient } from '@ipc/services/media/client'
 import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
+import { notificationClient } from '@ipc/services/notification/client'
 import { oauthClient } from '@ipc/services/oauth/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
@@ -24,6 +25,7 @@ export const ipc = {
   fn: fnClient,
   screenshot: screenshotClient,
   meetingDetection: meetingDetectionClient,
+  notification: notificationClient,
 }
 
 if (process.contextIsolated) {
