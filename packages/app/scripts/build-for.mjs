@@ -23,6 +23,12 @@ const options = {
     short: 'p',
     description: 'Target platform (win, mac, linux, dir)',
   },
+  mode: {
+    type: 'string',
+    default: 'production',
+    short: 'm',
+    description: 'Build mode (development, test, production)',
+  },
   skipBuild: {
     type: 'boolean',
     default: false,
@@ -33,7 +39,7 @@ const options = {
 
 const { values: args } = parseArgs({ options, strict: true })
 
-console.log(`Building for platform: ${args.platform}`)
+console.log(`Building for platform: ${args.platform}, mode: ${args.mode}`)
 
 try {
   // 1. 清理部署目录
@@ -46,7 +52,7 @@ try {
   // 2. 执行构建和准备（除非跳过）
   if (!args.skipBuild) {
     console.log('Running build...')
-    execSync('pnpm -F app build', execOpts)
+    execSync(`pnpm -F app build --mode ${args.mode}`, execOpts)
 
     console.log('Preparing deployment...')
     /** 部署包 */

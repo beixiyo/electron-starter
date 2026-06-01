@@ -18,8 +18,14 @@
     "build": "pnpm run build:native && electron-vite build",
     "postinstall": "npx install-electron --no && electron-builder install-app-deps",
     "build:win": "node ./scripts/build-for.mjs --platform=win",
+    "build:win:test": "node ./scripts/build-for.mjs --platform=win --mode=test",
+    "build:win:prod": "node ./scripts/build-for.mjs --platform=win --mode=production",
     "build:mac": "node ./scripts/build-for.mjs --platform=mac",
+    "build:mac:test": "node ./scripts/build-for.mjs --platform=mac --mode=test",
+    "build:mac:prod": "node ./scripts/build-for.mjs --platform=mac --mode=production",
     "build:linux": "node ./scripts/build-for.mjs --platform=linux",
+    "build:linux:test": "node ./scripts/build-for.mjs --platform=linux --mode=test",
+    "build:linux:prod": "node ./scripts/build-for.mjs --platform=linux --mode=production",
     "build:unpack": "node ./scripts/build-for.mjs --platform=dir"
   },
   "dependencies": {
