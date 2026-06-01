@@ -27,8 +27,7 @@ mac:
     - NSAudioCaptureUsageDescription: Application requests access to system audio for screen recording.
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-    - NSInputMonitoringUsageDescription: 需要输入监控权限以监听全局键盘事件（如 fn/Globe 键）。
-    - NSAccessibilityUsageDescription: 需要辅助功能权限以检测全局文本输入焦点。
+    - NSAccessibilityUsageDescription: Application requests Accessibility access to detect the focused text field and insert dictated text.
   extraResources:
     - from: resources/fn-listener
       to: fn-listener
