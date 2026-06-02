@@ -243,6 +243,128 @@ methods: ['create', 'show', 'hide', ..., 'resizeTo']
 
 `AnimatePresence mode="wait"` 确保旧内容退出后再进新内容，避免两个视图同时存在
 
+## 拖拽四角缩放 + 尺寸持久化
+
+上一节的 `resizeTo` 是**应用驱动**（程序在预设形态间切换）。这一节是**用户驱动**：让用户拖窗口四角/四边自由改尺寸，并把结果持久化、下次打开还原
+
+### 为什么自绘手柄，而不用原生 resize
+
+透明无边框窗有两个坎，导致原生边缘缩放不可用：
+
+1. 窗口真实边缘落在 **SHADOW_INSET 阴影留白**里，离可见内容差着 30px——原生 resize 热区在透明区，用户根本抓不到可见边角
+2. `transparent: true` + `hasShadow: false` 下，原生边缘手柄既不可见、命中也别扭
+
+所以走**渲染层自绘四角/四边手柄**（对齐可见内容边角）+ 指针捕获，把新尺寸经 IPC 交给主进程 `setBounds`。这套与具体窗口解耦，任意透明窗挂上 `<ResizeHandles>` 即获得能力
+
+### 架构
+
+```
+渲染进程                                   主进程 (Electron)
+┌─────────────────────────────┐          ┌────────────────────────────────┐
+│ <ResizeHandles>             │          │ windowManager.setBounds()        │
+│   8 个透明手柄(角+边)       │          │                                  │
+│ useWindowResize             │          │ create(): persistBounds 时       │
+│   pointerdown→指针捕获      │──setBounds│   回填 getSavedBounds+clampToScreen │
+│   pointermove→算 bounds     │   (IPC)  │   监听 resize/move               │
+│   rafThrottle 逐帧提交      │          │        │                         │
+└─────────────────────────────┘          └────────┼─────────────────────────┘
+                                                   │ saveBounds(防抖)
+                                                   ▼
+                                          userData/window-bounds.json
+```
+
+### 渲染层
+
+- **`ResizeHandles.tsx`**：`absolute` 覆盖层，`inset` 对齐可见内容边角（透明窗传 `SHADOW_INSET`）；渲染 8 个透明手柄（4 角 + 4 边），各自带 `cursor-nwse/nesw/ns/ew-resize` 光标，且必须 `[-webkit-app-region:no-drag]`（否则被拖拽区吞掉）
+- **`useWindowResize.ts`**：拖拽核心逻辑
+  - `pointerdown` → `setPointerCapture` 锁定指针（移出手柄也持续收事件），异步取一次起始 bounds
+  - `pointermove` → 用**屏幕坐标增量**算新 bounds，方位字符判定（含 `e/w` 改宽、`s/n` 改高，含 `w/n` 同步移动原点），触达 min/max 时锁住被拖边、对侧锚点不动
+  - 经 `rafThrottle`（`@jl-org/tool`）**逐帧节流**调 `$ipc.window.setBounds`，避免高频 IPC 卡顿
+
+```tsx
+// 任意透明窗挂载即可（ShortcutTestApp.tsx 为例）
+<div className="relative w-screen h-screen" style={{ padding: SHADOW_INSET }}>
+  {/* 可见内容 */}
+  <div className="bg-background rounded-2xl shadow-[...]">...</div>
+
+  <ResizeHandles
+    windowType={WindowType.SHORTCUT_TEST}
+    inset={SHADOW_INSET}            // 对齐可见边角
+    minWidth={280 + SHADOW_INSET * 2}
+    minHeight={180 + SHADOW_INSET * 2}
+  />
+</div>
+```
+
+### 主进程
+
+`setBounds` / `getBounds` 直接读写窗口 bounds；尺寸下限由窗口自身 `minWidth/minHeight` 兜底（Electron 原生裁剪）：
+
+```ts
+// window-manager.ts
+setBounds(type, bounds, animate = false) {     // 高频调用，默认不开动画
+  const win = this.windows.get(type)
+  if (!win || win.isDestroyed()) return false
+  win.setBounds({ ...win.getBounds(), ...bounds }, animate)
+  return true
+}
+```
+
+持久化由 `config.persistBounds` 开关驱动，集中在 `create()`：
+
+```ts
+// create() 内
+if (config.persistBounds) {
+  const saved = getSavedBounds(type)
+  if (saved) {                                 // 回填上次尺寸/位置
+    const c = this.clampToScreen(saved)        // 裁进当前显示器，防还原到屏外
+    config.width = c.width; config.height = c.height
+    config.position = { x: c.x, y: c.y }
+  }
+}
+// 创建后监听 resize/move → saveBounds（内部防抖）
+window.on('resize', persist)
+window.on('move', persist)
+```
+
+### 持久化存储
+
+| 项 | 值 |
+|----|----|
+| 位置 | `app.getPath('userData')/window-bounds.json`（macOS：`~/Library/Application Support/<appName>/window-bounds.json`） |
+| 格式 | JSON，按 `WindowType` 作 key 的 map，每项存完整 `{ x, y, width, height }`（含阴影留白，屏幕坐标 DIP） |
+| 写入 | 窗口 `resize`/`move` 触发，**300ms 防抖**合并写整个 map（`bounds-store.ts`，主进程用 Node 原生 `setTimeout`，不依赖 `window`） |
+| 读取 | `create()` 时回填，经 `clampToScreen` 裁进最近显示器工作区 |
+
+### 让某个窗口支持缩放：三步
+
+1. **配置**（`shared/window-config/constants.ts`）：该窗口加 `resizable: true`、`minWidth`/`minHeight`、`persistBounds: true`
+2. **IPC**：`setBounds`/`getBounds` 已在 `ipc/services/window/{contract,client,service}.ts` 暴露，无需改动
+3. **UI**：在该窗口根容器（`relative`）挂 `<ResizeHandles windowType inset minWidth minHeight />`
+
+### 与 resizeTo 的区别
+
+| | `resizeTo`（上一节） | 拖拽四角缩放（本节） |
+|--|--------------------|---------------------|
+| 驱动方 | 应用（预设形态切换） | 用户（自由拖拽） |
+| 定位策略 | 水平居中 + 底边锚定 | 拖动边变化、对侧锚点不动 |
+| 动画 | `setBounds(animate=true)` 原生过渡 | 逐帧无动画，跟手 |
+| 持久化 | 无 | `persistBounds` 落盘还原 |
+
+### 涉及文件
+
+| 文件 | 职责 |
+|------|------|
+| `renderer/windows/shared/ResizeHandles.tsx` | 四角 + 四边透明手柄覆盖层（含方向光标） |
+| `renderer/windows/shared/useWindowResize.ts` | 拖拽核心：指针捕获 + 屏幕坐标增量算 bounds + min/max 锚点 + rafThrottle 逐帧提交 |
+| `renderer/windows/shared/index.ts` | barrel 导出 |
+| `main/window-manager/window-manager.ts` | `setBounds`/`getBounds`/`clampToScreen`，create 时回填 + 监听 resize/move 落盘 |
+| `main/window-manager/bounds-store.ts` | bounds 持久化（`userData/window-bounds.json`，防抖写） |
+| `shared/window-config/types.ts` | `WindowConfig.persistBounds` 开关 + `WindowBounds` 类型 |
+| `shared/window-config/constants.ts` | 目标窗口 `resizable`/`minWidth`/`minHeight`/`persistBounds` 配置（演示宿主：`SHORTCUT_TEST`） |
+| `ipc/services/window/{contract,client,service}.ts` | `setBounds`/`getBounds` IPC 契约 + 实现 |
+| `renderer/windows/shortcut-test/ShortcutTestApp.tsx` | 接入示例（托盘可直接打开验证） |
+
 ## 核心文件
 
 | 文件 | 职责 |

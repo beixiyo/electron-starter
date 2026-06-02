@@ -6,6 +6,11 @@ import { useTheme } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useState } from 'react'
 import { cn } from 'utils'
+import { ResizeHandles } from '../shared'
+
+/** 缩放尺寸下限（含阴影留白），与窗口 config 的 minWidth/minHeight 对齐 */
+const MIN_WIDTH = 280 + SHADOW_INSET * 2
+const MIN_HEIGHT = 180 + SHADOW_INSET * 2
 
 const TRIGGER_COLOR: Record<ShortcutTestPayload['triggerType'], string> = {
   hold: 'text-emerald-400',
@@ -36,7 +41,7 @@ export const ShortcutTestApp = memo(() => {
 
   return (
     <div
-      className="w-screen h-screen"
+      className="relative w-screen h-screen"
       style={ { padding: SHADOW_INSET } }
     >
       {/* 实际可见的自绘容器，relative 作为 CloseBtn absolute 定位基准 */}
@@ -97,6 +102,14 @@ export const ShortcutTestApp = memo(() => {
           onClick={ handleClose }
         />
       </div>
+
+      {/* 四角 + 四边拖拽缩放（透明手柄，对齐可见内容边角；尺寸经主进程持久化） */}
+      <ResizeHandles
+        windowType={ WindowType.SHORTCUT_TEST }
+        inset={ SHADOW_INSET }
+        minWidth={ MIN_WIDTH }
+        minHeight={ MIN_HEIGHT }
+      />
     </div>
   )
 })

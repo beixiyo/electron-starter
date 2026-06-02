@@ -19,8 +19,8 @@ importers:
         specifier: ^0.0.8
         version: 0.0.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@jl-org/tool':
-        specifier: ^3.4.6
-        version: 3.4.6
+        specifier: 4.0.2
+        version: 4.0.2
       '@tanstack/react-query':
         specifier: ^5.59.20
         version: 5.100.14(react@19.2.4)
@@ -168,8 +168,8 @@ importers:
         specifier: ^1.0.1
         version: 1.0.2
       '@jl-org/tool':
-        specifier: ^3.3.8
-        version: 3.4.6
+        specifier: 4.0.2
+        version: 4.0.2
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.2(vite@8.0.14(@types/node@24.12.4)(jiti@2.7.0)(sass@1.100.0)(yaml@2.9.0))
@@ -1138,8 +1138,8 @@ packages:
       react: '>=18.3.1'
       react-dom: '>=18.3.1'
 
-  '@jl-org/tool@3.4.6':
-    resolution: {integrity: sha512-YleoyGMVSFMHjavUSk42TvTEJhwKgYoI/jIg6rCn6uOL8k5pI4GCDDArV6kiQOKqStpRM6tkVezhtERr+NKcnQ==}
+  '@jl-org/tool@4.0.2':
+    resolution: {integrity: sha512-GJEv7PZejvqb782dVSU+BugqiC2k5AJwgbLYPZDIMMiY9XBtwGEUt+WYRSE1FtabfeLFvxj4cLmDUh0tdKsPlA==}
 
   '@jl-org/ts-tool@0.0.8':
     resolution: {integrity: sha512-2YwGmzod5LBOi7cKknRXn2H9xcp99OhokZJ55t+kg7wvPST4obcwLxO03ji0gVuFoHp5BgrkwzDICV+z1a3TDg==}
@@ -6149,7 +6149,7 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@jl-org/tool@3.4.6': {}
+  '@jl-org/tool@4.0.2': {}
 
   '@jl-org/ts-tool@0.0.8': {}
 

@@ -1,8 +1,9 @@
-import type { WindowConfig, WindowMetadata } from '@shared'
+import type { WindowBounds, WindowConfig, WindowMetadata } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { isObj } from '@jl-org/tool'
 import { WINDOW_CONFIGS, WindowType } from '@shared'
 import { screen } from 'electron'
+import { getSavedBounds, saveBounds } from './bounds-store'
 import { createBrowserWindow } from './window-factory'
 
 class WindowManager {
@@ -29,8 +30,29 @@ class WindowManager {
       ...configOverride,
     }
 
+    /** 持久化窗口：用上次保存的 bounds 回填（已做屏幕内裁剪） */
+    if (config.persistBounds) {
+      const saved = getSavedBounds(type)
+      if (saved) {
+        const clamped = this.clampToScreen(saved)
+        config.width = clamped.width
+        config.height = clamped.height
+        config.position = { x: clamped.x, y: clamped.y }
+      }
+    }
+
     const resolvedParent = parent ?? this.getDefaultParent(type)
     const window = createBrowserWindow(config, resolvedParent, type)
+
+    /** 持久化窗口：resize / move 落盘（saveBounds 内部已防抖） */
+    if (config.persistBounds) {
+      const persist = (): void => {
+        if (!window.isDestroyed())
+          saveBounds(type, window.getBounds())
+      }
+      window.on('resize', persist)
+      window.on('move', persist)
+    }
 
     if (config.openDevTools) {
       window.webContents.openDevTools(
@@ -159,8 +181,8 @@ class WindowManager {
   }
 
   /**
-   * 调整窗口尺寸，水平居中、底边锚定（向上扩展）。
-   * animate 仅在 macOS 有原生过渡效果。
+   * 调整窗口尺寸，水平居中、底边锚定（向上扩展）
+   * animate 仅在 macOS 有原生过渡效果
    */
   resizeTo(type: WindowType, width: number, height: number, animate = false): boolean {
     const win = this.windows.get(type)
@@ -179,6 +201,44 @@ class WindowManager {
 
     win.setBounds({ x, y, width, height }, animate)
     return true
+  }
+
+  /**
+   * 直接设置窗口 bounds（支持部分字段，缺省沿用当前值）
+   * 用于渲染层自绘四角/四边拖拽缩放，高频调用故默认不开动画
+   * 尺寸下限由窗口自身 minWidth/minHeight 约束（Electron 原生裁剪）
+   */
+  setBounds(type: WindowType, bounds: Partial<WindowBounds>, animate = false): boolean {
+    const win = this.windows.get(type)
+    if (!win || win.isDestroyed())
+      return false
+
+    win.setBounds({ ...win.getBounds(), ...bounds }, animate)
+    return true
+  }
+
+  getBounds(type: WindowType): WindowBounds | null {
+    const win = this.windows.get(type)
+    if (!win || win.isDestroyed())
+      return null
+
+    return win.getBounds()
+  }
+
+  /** 把保存的 bounds 裁剪进最近的显示器工作区，避免还原到屏幕外 */
+  private clampToScreen(bounds: WindowBounds): WindowBounds {
+    const display = screen.getDisplayNearestPoint({
+      x: bounds.x + bounds.width / 2,
+      y: bounds.y + bounds.height / 2,
+    })
+    const area = display.workArea
+
+    const width = Math.min(bounds.width, area.width)
+    const height = Math.min(bounds.height, area.height)
+    const x = Math.min(Math.max(bounds.x, area.x), area.x + area.width - width)
+    const y = Math.min(Math.max(bounds.y, area.y), area.y + area.height - height)
+
+    return { x, y, width, height }
   }
 }
 

@@ -144,19 +144,22 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
   [WindowType.SHORTCUT_TEST]: {
     width: 400 + SHADOW_INSET * 2,
     height: 240 + SHADOW_INSET * 2,
+    minWidth: 280 + SHADOW_INSET * 2,
+    minHeight: 180 + SHADOW_INSET * 2,
     position: 'center',
     title: 'Shortcut Test',
     frame: false,
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    resizable: false,
+    resizable: true,
     movable: true,
     focusable: true,
     hasShadow: false,
     htmlPath: 'windows/shortcut-test/index.html',
     show: false,
     openDevTools: false,
+    persistBounds: true,
   },
 
   [WindowType.MENUBAR]: {

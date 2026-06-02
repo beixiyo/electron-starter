@@ -1,5 +1,5 @@
 import type { IpcContract } from '@ipc/core'
-import type { WindowConfig, WindowMetadata, WindowType } from '@shared'
+import type { WindowBounds, WindowConfig, WindowMetadata, WindowType } from '@shared'
 
 export type WindowContract = IpcContract<{
   create: (type: WindowType, configOverride?: Partial<WindowConfig>) => { success: boolean, windowId?: number, error?: string }
@@ -15,4 +15,6 @@ export type WindowContract = IpcContract<{
   isHolding: (type: WindowType | undefined) => { isHolding: boolean }
   getState: (type: WindowType | undefined) => { state: unknown }
   resizeTo: (type: WindowType, width: number, height: number, animate?: boolean) => { success: boolean }
+  setBounds: (type: WindowType, bounds: Partial<WindowBounds>, animate?: boolean) => { success: boolean }
+  getBounds: (type: WindowType) => { bounds: WindowBounds | null }
 }>

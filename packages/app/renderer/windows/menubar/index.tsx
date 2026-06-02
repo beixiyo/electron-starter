@@ -8,7 +8,10 @@ import 'styles/css/index.css'
 function MenuBarApp() {
   useTheme()
 
-  const showWindow = (type: WindowType) => {
+  const showWindow = async (type: WindowType) => {
+    const { exists } = await window.$ipc.window.exists(type)
+    if (!exists)
+      await window.$ipc.window.create(type)
     window.$ipc.window.show(type)
   }
 

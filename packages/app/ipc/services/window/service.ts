@@ -1,9 +1,8 @@
-import type { WindowConfig } from '@shared'
+import type { WindowBounds, WindowConfig, WindowType } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { holdStateManager } from '@main/hold-state-manager'
 import { windowManager } from '@main/window-manager'
-import { WindowType } from '@shared'
 
 export const windowService = createIpcService<WindowContract>('window', {
   create: async (_event, type: WindowType, configOverride?: Partial<WindowConfig>) => {
@@ -86,5 +85,15 @@ export const windowService = createIpcService<WindowContract>('window', {
   resizeTo: async (_event, type: WindowType, width: number, height: number, animate?: boolean) => {
     const success = windowManager.resizeTo(type, width, height, animate)
     return { success }
+  },
+
+  setBounds: async (_event, type: WindowType, bounds: Partial<WindowBounds>, animate?: boolean) => {
+    const success = windowManager.setBounds(type, bounds, animate)
+    return { success }
+  },
+
+  getBounds: async (_event, type: WindowType) => {
+    const bounds = windowManager.getBounds(type)
+    return { bounds }
   },
 })

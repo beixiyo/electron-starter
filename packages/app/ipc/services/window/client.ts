@@ -15,4 +15,6 @@ export const windowClient = createServiceClient<WindowContract>('window', [
   'isHolding',
   'getState',
   'resizeTo',
+  'setBounds',
+  'getBounds',
 ])

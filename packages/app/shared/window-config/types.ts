@@ -60,6 +60,22 @@ export interface WindowConfig extends BrowserWindowConstructorOptions {
    * 这样可以覆盖创建时的 alwaysOnTop 配置，实现动态控制
    */
   setAlwaysOnTopOnShow?: boolean
+  /**
+   * 是否持久化窗口尺寸/位置
+   * 为 true 时：创建时回填上次保存的 bounds（已做屏幕内裁剪），
+   * resize / move 时防抖落盘到 userData
+   *
+   * @default false
+   */
+  persistBounds?: boolean
+}
+
+/** 窗口矩形边界（屏幕坐标，单位 DIP） */
+export interface WindowBounds {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 /** 长按状态信息 */
