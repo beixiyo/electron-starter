@@ -51,6 +51,14 @@ try {
 
   // 2. 执行构建和准备（除非跳过）
   if (!args.skipBuild) {
+    // 仅 mac 目标才编 swift 原生二进制（swift 只能在 macOS 编，
+    const needsNative = args.platform === 'mac'
+      || (args.platform === 'dir' && process.platform === 'darwin')
+    if (needsNative) {
+      console.log('Building native (swift) binaries...')
+      execSync('pnpm -F app build:native', execOpts)
+    }
+
     console.log('Running build...')
     execSync(`pnpm -F app build --mode ${args.mode}`, execOpts)
 

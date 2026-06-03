@@ -15,7 +15,7 @@
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.config.web.ts",
     "build:native": "bash scripts/build-native.sh",
-    "build": "pnpm run build:native && electron-vite build",
+    "build": "electron-vite build",
     "postinstall": "npx install-electron --no && electron-builder install-app-deps",
     "build:win": "node ./scripts/build-for.mjs --platform=win",
     "build:win:test": "node ./scripts/build-for.mjs --platform=win --mode=test",
