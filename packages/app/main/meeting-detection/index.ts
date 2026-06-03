@@ -2,11 +2,11 @@ import type { RecordingStatePayload } from '@ipc/services/meeting-detection/cont
 import type { MeetingSession } from './meeting-detector'
 import path from 'node:path'
 import { meetingDetectionService } from '@ipc/services/meeting-detection/service'
-import { onRecorderEvent, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { getRecorderPid, onRecorderEvent, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
 import { WindowType } from '@shared'
 import { app } from 'electron'
 import { windowManager } from '../window-manager'
-import { onMeetingEvent, startMeetingDetector, stopMeetingDetector } from './meeting-detector'
+import { addSelfPidSource, onMeetingEvent, startMeetingDetector, stopMeetingDetector } from './meeting-detector'
 
 function emitToToast(eventName: 'detected' | 'ended', session: MeetingSession): void {
   const win = windowManager.get(WindowType.MEETING_TOAST)
@@ -38,6 +38,14 @@ export function initMeetingDetection(): void {
   const win = windowManager.create(WindowType.MEETING_TOAST)
   if (!win)
     return
+
+  /** 「会议录制」自身的子进程同时占麦+系统音频，会被误判为会议，排除掉 */
+  addSelfPidSource(() => {
+    const pid = getRecorderPid()
+    return pid
+      ? [pid]
+      : []
+  })
 
   onMeetingEvent((event) => {
     const label = event.type === 'meeting-confirmed'

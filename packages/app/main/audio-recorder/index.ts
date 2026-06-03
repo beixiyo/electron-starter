@@ -48,6 +48,11 @@ export function stopRecorder(): void {
   bridge.stop()
 }
 
+/** 录制子进程 pid（未启动时为 null），供会议检测排除自身录音误报 */
+export function getRecorderPid(): number | null {
+  return bridge.pid
+}
+
 export function startRecording(outputPath?: string): void {
   const filePath = outputPath ?? defaultOutputPath()
   mkdirSync(path.dirname(filePath), { recursive: true })

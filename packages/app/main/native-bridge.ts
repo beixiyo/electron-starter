@@ -20,6 +20,11 @@ export class NativeBridge<T extends Record<string, any>> {
     return this.child !== null
   }
 
+  /** 子进程 pid（未启动时为 null），供会议检测排除自身录音 */
+  get pid(): number | null {
+    return this.child?.pid ?? null
+  }
+
   start(): void {
     if (process.platform !== 'darwin')
       throw new Error(`[${this.config.name}] macOS only`)
