@@ -1,4 +1,4 @@
-appId: com.xxx
+appId: com.flowtica.electronstarter
 productName: electron-app
 electronVersion: 42.2.0
 directories:
@@ -33,6 +33,10 @@ mac:
       to: fn-listener
     - from: resources/focus-check
       to: focus-check
+    - from: resources/audio-monitor
+      to: audio-monitor
+    - from: resources/audio-recorder
+      to: audio-recorder
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}

@@ -2,11 +2,13 @@
 
 ## 原理
 
-macOS Apple Silicon 上的 fn/Globe 键走独立的 HID 接口（usage page `0x00FF`, usage `0x0003`），
-不经过 CGEventTap 或标准键盘接口。通过 IOHIDManager 监听，以 Swift 子进程实现
+> 排查全过程、权限模型与踩坑详见 [`fn-key-investigation.md`](./fn-key-investigation.md)
 
-Swift 二进制同时监听键盘 HID 事件（page `0x07`），在 HID 层直接检测 Fn+Key 组合，
-输出 `FN_COMBO_<key>` 事件。这避免了 IOHIDManager 与 uIOhook 的跨事件源时序问题
+以 Swift 子进程监听 Fn/Globe 键，通过 **`CGEvent.tapCreate(tap: .cghidEventTap, options: .defaultTap)`**（HID 层的主动事件 tap）读取，**只需「辅助功能」权限，不需要「输入监控」**
+
+- Fn 键在 `flagsChanged` 事件里以 `keyCode == 63`（kVK_Function）出现，配合 `maskSecondaryFn` 标志判断按下/松开
+- Fn+Key 组合：Fn 按住期间带 `maskSecondaryFn` 的 `keyDown` → 输出 `FN_COMBO_<key>`
+- 选 **HID 层**（而非 session 层 / NSEvent）的原因：HID 层在「Karabiner 虚拟键盘剥标志」和「系统按🌐键消费 Globe」之前，所以即便开着 Karabiner 也能稳读、标志也完好
 
 ## 首次配置（开发者）
 
@@ -20,13 +22,16 @@ pnpm build:fn-listener
 
 ## 权限
 
-macOS 会弹出「输入监控」权限请求，授权一次即可
-Karabiner-Elements 兼容：Globe 键走独立接口，不受 Karabiner 影响
+只需 **「辅助功能」**（隐私与安全性 → 辅助功能），授权一次即可 —— app 本来就为 `focus-check` / 自动打字申请了它
+**不需要「输入监控」**：主动 CGEventTap（`.defaultTap`）走的是 PostEvent（显示在辅助功能面板），不是输入监控
+Karabiner-Elements 兼容：HID 层 tap 在 Karabiner 处理之前，不受影响
+
+> ⚠️ **打包后双击启动「授权了也没用」是签名问题，不是这里的实现问题** —— ad-hoc 签名让 TCC 授权绑不准，需稳定签名身份。根因与修复（自签名验证 + 生产 Developer ID + 公证）见 [`mac-code-signing.md`](./mac-code-signing.md)
 
 ## 架构
 
 ```
-Swift 子进程 (IOHIDManager)
+Swift 子进程 (CGEventTap .cghidEventTap)
   → stdout: "FN_DOWN" / "FN_UP" / "FN_COMBO_Space" / ...
     → core.ts
       ├─ addFnKeyListener    → 'down' / 'up'
@@ -43,18 +48,14 @@ Swift 子进程 (IOHIDManager)
 | stdout 输出 | 含义 |
 |-------------|------|
 | `FN_DOWN` | Fn 键按下 |
-| `FN_UP` | Fn 键松开（经 50ms 缓冲，未被 combo 消费时才输出） |
+| `FN_UP` | Fn 键松开 |
 | `FN_COMBO_<key>` | Fn+Key 组合触发（如 `FN_COMBO_Space`） |
 
-### macOS Fn+Key 时序处理
+### Fn 判定与防误判
 
-macOS 按下 Fn+ 其他键时，IOHIDManager 会先发送合成 FN_UP，随后才有键盘 keydown
-Swift 二进制内部用 50ms 缓冲吞掉合成 FN_UP：
-
-1. FN_DOWN → 立即输出
-2. FN_UP → 缓冲 50ms，不立即输出
-3. 50ms 内有 combo key → 输出 `FN_COMBO_<key>`，**不输出** FN_UP
-4. 50ms 内无 combo key → 输出 FN_UP
+- **按下/松开**：`flagsChanged` 中 `keyCode == 63`，优先用 `maskSecondaryFn` 标志判定；标志缺失（如被 Karabiner 剥掉）时退回翻转
+- **组合键**：带 `maskSecondaryFn` 的 `keyDown` → `FN_COMBO_<key>`；另设 0.6s 时间窗，兼容 Karabiner 下标志被剥的场景
+- **防污染**：无 `maskSecondaryFn` 的普通打字会强制清零 Fn 按下态并补发 `FN_UP`，杜绝掉边沿后把正常输入误判成组合键
 
 ### 支持的 combo 键
 
@@ -68,7 +69,7 @@ Swift 二进制内部用 50ms 缓冲吞掉合成 FN_UP：
 | 特殊 | `Space` `Enter` `Escape` `Tab` `Backspace` `Delete` `CapsLock` |
 | 标点 | `Minus` `Equal` `Comma` `Period` `Slash` `Backslash` `Quote` `Semicolon` `Grave` `LeftBracket` `RightBracket` |
 
-扩展：在 `fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 HID usage → 键名映射即可
+扩展：在 `fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 虚拟键码 `kVK_*` → 键名映射即可（注意是 CGEvent 虚拟键码，不是 HID usage）
 
 ## 快捷键集成
 

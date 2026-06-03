@@ -26,7 +26,12 @@
     "build:linux": "node ./scripts/build-for.mjs --platform=linux",
     "build:linux:test": "node ./scripts/build-for.mjs --platform=linux --mode=test",
     "build:linux:prod": "node ./scripts/build-for.mjs --platform=linux --mode=production",
-    "build:unpack": "node ./scripts/build-for.mjs --platform=dir"
+    "build:unpack": "node ./scripts/build-for.mjs --platform=dir && bun scripts/selfsign-app.ts install",
+    "build:unpack:test": "node ./scripts/build-for.mjs --platform=dir --mode=test && bun scripts/selfsign-app.ts install",
+    "build:unpack:prod": "node ./scripts/build-for.mjs --platform=dir --mode=production && bun scripts/selfsign-app.ts install",
+    "sign:setup": "bun scripts/selfsign-app.ts setup",
+    "sign:install": "bun scripts/selfsign-app.ts install",
+    "sign:cleanup": "bun scripts/selfsign-app.ts cleanup"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "4.2.6",
