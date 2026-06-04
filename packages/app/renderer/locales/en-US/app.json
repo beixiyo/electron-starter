@@ -79,6 +79,35 @@
     "recordingPermission": "Recording permission denied",
     "recordingError": "An error occurred during recording"
   },
+  "permission": {
+    "title": "Permissions required",
+    "subtitle": "Grant the permissions below to use this feature",
+    "continue": "Continue",
+    "openSettings": "Open System Settings",
+    "granted": "Granted",
+    "recordingTitle": "Allow this app to record your meetings",
+    "recordingSubtitle": "Grant the permissions below to record properly",
+    "accessibilityTitle": "Allow this app to use Accessibility",
+    "accessibilitySubtitle": "Long-press Fn / text selection need Accessibility permission",
+    "microphone": {
+      "label": "Microphone",
+      "enable": "Enable Microphone"
+    },
+    "screen": {
+      "label": "System Audio",
+      "enable": "Enable Screen Recording",
+      "hint": "System audio relies on screen recording permission; you may need to restart the app after granting it"
+    },
+    "camera": {
+      "label": "Camera",
+      "enable": "Enable Camera"
+    },
+    "accessibility": {
+      "label": "Accessibility",
+      "enable": "Enable Accessibility",
+      "hint": "You may need to restart the app after granting it"
+    }
+  },
   "saveModal": {
     "title": "Save Recording",
     "nameLabel": "File Name",

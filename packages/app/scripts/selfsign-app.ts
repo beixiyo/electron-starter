@@ -131,6 +131,13 @@ async function install(appArg?: string) {
   await $`cp -R ${built} ${dest}`
 
   await sign(dest)
+
+  /** 仅自动发现的 dist 产物才清理；用户手动传入的路径不删 */
+  if (!appArg) {
+    console.log(`==> 清理 dist 产物 ${built}`)
+    await $`rm -rf ${built}`
+  }
+
   console.log(`\n✅ 已安装: ${dest}`)
   console.log('   证书 / bundle id 未变 → 已授的辅助功能权限自动沿用，双击即可用')
   console.log('   （只有首次需在 系统设置 → 辅助功能 里授权一次）')

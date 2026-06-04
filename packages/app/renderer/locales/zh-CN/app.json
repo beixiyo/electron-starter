@@ -79,6 +79,35 @@
     "recordingPermission": "录制权限被拒绝",
     "recordingError": "录制过程中发生异常"
   },
+  "permission": {
+    "title": "需要以下权限",
+    "subtitle": "请授予权限以使用该功能",
+    "continue": "继续",
+    "openSettings": "去系统设置开启",
+    "granted": "已授权",
+    "recordingTitle": "允许应用录制你的会议",
+    "recordingSubtitle": "为正常录制，请授予以下权限",
+    "accessibilityTitle": "允许应用使用辅助功能",
+    "accessibilitySubtitle": "Fn 长按 / 划词等功能需要辅助功能权限",
+    "microphone": {
+      "label": "麦克风",
+      "enable": "开启麦克风"
+    },
+    "screen": {
+      "label": "系统音频",
+      "enable": "开启屏幕录制",
+      "hint": "系统音频依赖屏幕录制权限，授权后可能需要重启应用生效"
+    },
+    "camera": {
+      "label": "摄像头",
+      "enable": "开启摄像头"
+    },
+    "accessibility": {
+      "label": "辅助功能",
+      "enable": "开启辅助功能",
+      "hint": "授权后可能需要重启应用生效"
+    }
+  },
   "saveModal": {
     "title": "保存录制文件",
     "nameLabel": "文件名称",

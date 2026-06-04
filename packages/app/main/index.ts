@@ -16,6 +16,7 @@ import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
 import { checkFocusedTextInput } from './focus-check'
+import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { setupOAuthInterceptor } from './oauth-interceptor'
@@ -30,8 +31,20 @@ import '@ipc/services'
 // Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
 
+// macOS: 启用系统音频回环（loopback）捕获能力
+// - MacSckSystemAudioLoopbackOverride：强制走 ScreenCaptureKit 回环（macOS 15/26 实测可用，需 video 轨）
+// - MacLoopbackAudioForScreenShare：屏幕共享时附带系统音频
+/** 配合 getDisplayMedia handler 的 audio:'loopback' 与 Info.plist 的 NSAudioCaptureUsageDescription 生效 */
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch(
+    'enable-features',
+    'MacLoopbackAudioForScreenShare,MacSckSystemAudioLoopbackOverride',
+  )
+}
+
 initDeeplink(() => {
   setupAppIdentity()
+  setupDisplayMediaHandler()
   setupVoiceImeHoldShortcut()
   setupBrowserWindowLifecycle()
   setupAppActivation()

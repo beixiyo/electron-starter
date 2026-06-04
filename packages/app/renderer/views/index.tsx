@@ -3,6 +3,7 @@ import { CollapsibleSidebar } from 'comps'
 import { Bell, Camera } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AccessibilityGate } from '../components/permission'
 
 /**
  * 主布局组件，包含侧边栏导航
@@ -65,6 +66,9 @@ export default function Layout() {
           <Outlet />
         </div>
       </div>
+
+      {/* 启动时检查辅助功能权限（Fn 长按 / 划词），缺失则引导开启 */ }
+      <AccessibilityGate />
     </main>
   )
 }

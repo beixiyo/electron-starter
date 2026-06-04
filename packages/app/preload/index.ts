@@ -6,6 +6,7 @@ import { mediaClient } from '@ipc/services/media/client'
 import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
 import { notificationClient } from '@ipc/services/notification/client'
 import { oauthClient } from '@ipc/services/oauth/client'
+import { permissionClient } from '@ipc/services/permission/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutTestClient } from '@ipc/services/shortcut-test/client'
@@ -22,6 +23,7 @@ export const ipc = {
   selection: selectionClient,
   shortcutTest: shortcutTestClient,
   oauth: oauthClient,
+  permission: permissionClient,
   fn: fnClient,
   screenshot: screenshotClient,
   meetingDetection: meetingDetectionClient,

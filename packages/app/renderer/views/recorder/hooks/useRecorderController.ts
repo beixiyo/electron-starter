@@ -22,7 +22,12 @@ export function useRecorderController({
   const liveVideoRef = useRef<HTMLVideoElement | null>(null)
   const liveAudioRef = useRef<HTMLAudioElement | null>(null)
   const discardRecordingRef = useRef(false)
-  const [systemAudio, setSystemAudio] = useState(true)
+  /**
+   * 系统音频默认关闭：在 macOS 上捕获系统声音只能走屏幕捕获管线
+   * （getDisplayMedia / desktopCapturer），会触发「屏幕录制」权限
+   * 「仅录音」默认只录麦克风，需要系统声音时由用户显式开启
+   */
+  const [systemAudio, setSystemAudio] = useState(false)
   const [micAudio, setMicAudio] = useState(true)
   const [audioOnly, setAudioOnly] = useState(true)
   const [recorderState, setRecorderState] = useState<RecorderState>('idle')

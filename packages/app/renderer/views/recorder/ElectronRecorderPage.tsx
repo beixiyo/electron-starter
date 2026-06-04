@@ -1,10 +1,13 @@
+import type { PermissionKind } from '@shared'
 import type { PreviewSummary } from './components/PreviewPanel/types'
 import type { PrimaryAction } from './types'
 import { Input, LiveWaveAudio, Message, Modal } from 'comps'
+import { useLatestCallback } from 'hooks'
 import { Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
+import { PermissionModal, usePermissions } from '../../components/permission'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RecorderSidebar } from './components/RecorderSidebar'
 import { SourceGrid } from './components/SourceGrid'
@@ -85,6 +88,8 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     selectedSource,
   })
 
+  const permissions = usePermissions()
+
   const layoutStyle = useMemo(() => ({
     minHeight: 'calc(100vh - 48px)',
   }), [])
@@ -94,10 +99,10 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   }, [loadSources, reportError])
 
   /**
-   * 处理开始录制
-   * 如果是音频录制，直接开始；否则先显示窗口选择 Modal
+   * 权限满足后真正进入录制流程
+   * 音频录制直接开始；视频录制先显示窗口选择 Modal
    */
-  const handleStartRecording = useCallback(() => {
+  const proceedStart = useLatestCallback(() => {
     if (audioOnly) {
       /** 音频录制不需要选择窗口，直接开始 */
       start()
@@ -105,7 +110,36 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     }
     /** 视频录制需要先选择窗口 */
     setShowSourceSelectModal(true)
-  }, [audioOnly, start])
+  })
+
+  /**
+   * 处理开始录制：先做权限前置检查
+   * - 麦克风（micAudio）/ 屏幕录制（systemAudio）未授予时弹出权限引导窗
+   * - 权限满足后才进入录制流程
+   */
+  const handleStartRecording = useLatestCallback(async () => {
+    const kinds: PermissionKind[] = []
+    if (micAudio) {
+      kinds.push('microphone')
+    }
+    if (systemAudio) {
+      kinds.push('screen')
+    }
+
+    const ok = await permissions.ensure(kinds, {
+      title: t('permission.recordingTitle', '允许应用录制你的会议'),
+      subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
+    })
+    if (ok) {
+      proceedStart()
+    }
+  })
+
+  /** 权限引导窗「继续」：关闭后进入录制流程 */
+  const handlePermissionContinue = useLatestCallback(() => {
+    permissions.close()
+    proceedStart()
+  })
 
   /**
    * 确认选择窗口并开始录制
@@ -125,11 +159,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     setListRefreshKey(prev => prev + 1)
   }, [saveToIndexedDB])
 
-  useEffect(() => {
-    refreshSources()
-  }, [refreshSources])
-
-  /** 当选择窗口 Modal 打开时，自动刷新窗口列表 */
+  /**
+   * 仅在打开「选择窗口」Modal（即视频录制流程）时才拉取桌面源
+   * 不在挂载时预拉：desktopCapturer.getSources 带缩略图枚举屏幕，
+   * 本身就会在 macOS 上触发「屏幕录制」权限，纯麦克风录音无需如此
+   */
   useEffect(() => {
     if (showSourceSelectModal) {
       refreshSources()
@@ -137,10 +171,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   }, [showSourceSelectModal, refreshSources])
 
   useEffect(() => {
-    if (typeof sessionSystemAudio === 'boolean') {
+    /** audioOnly 下不从会话同步系统音频，避免把屏幕录制权限带进纯录音流程 */
+    if (!audioOnly && typeof sessionSystemAudio === 'boolean') {
       setSystemAudioFromSession(sessionSystemAudio)
     }
-  }, [sessionSystemAudio, setSystemAudioFromSession])
+  }, [audioOnly, sessionSystemAudio, setSystemAudioFromSession])
 
   useEffect(() => {
     const videoEl = liveVideoRef.current
@@ -470,6 +505,18 @@ export default function ElectronRecorderPage(): React.JSX.Element {
           } }
         />
       </Modal>
+
+      <PermissionModal
+        isOpen={ permissions.open }
+        onClose={ permissions.close }
+        kinds={ permissions.kinds }
+        statuses={ permissions.statuses }
+        title={ permissions.title }
+        subtitle={ permissions.subtitle }
+        canContinue={ permissions.canContinue }
+        onRequest={ permissions.requestOne }
+        onContinue={ handlePermissionContinue }
+      />
 
       <RecorderDetail
         recordId={ viewingRecordId }

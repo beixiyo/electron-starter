@@ -1,0 +1,117 @@
+import type { PermissionKind, PermissionStatus } from '@shared'
+import { ensureMediaAccess, getMediaAccessStatus } from '@main/media'
+import { logWarn } from '@main/utils/logger'
+import { desktopCapturer, shell, systemPreferences } from 'electron'
+
+/** macOS 各权限对应的隐私设置面板 URL */
+const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
+  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  camera: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
+  screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+}
+
+/**
+ * 查询统一权限状态
+ * @param kind 权限类型
+ */
+export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
+  if (kind === 'accessibility') {
+    /** 非 macOS 无此概念，视为已授予 */
+    if (process.platform !== 'darwin') {
+      return 'granted'
+    }
+    return systemPreferences.isTrustedAccessibilityClient(false)
+      ? 'granted'
+      : 'denied'
+  }
+
+  return getMediaAccessStatus(kind)
+}
+
+/**
+ * 主动申请权限
+ * - microphone / camera：弹系统授权框；未授予则打开隐私设置
+ * - screen：not-determined 触发系统弹窗；denied 打开隐私设置（macOS 无法编程式授予）
+ * - accessibility：触发系统授权弹窗并打开隐私设置（macOS 需用户手动勾选，通常需重启）
+ *
+ * 共同特性：**即使此前被拒绝，再次调用也会打开系统设置引导用户开启**
+ */
+export async function requestPermission(kind: PermissionKind): Promise<PermissionStatus> {
+  if (kind === 'accessibility') {
+    if (process.platform !== 'darwin') {
+      return 'granted'
+    }
+    /** 传 true 会触发系统授权弹窗（首次）；非首次需用户去设置勾选 */
+    const trusted = systemPreferences.isTrustedAccessibilityClient(true)
+    if (!trusted) {
+      openPrivacySettings('accessibility')
+    }
+    return trusted
+      ? 'granted'
+      : 'denied'
+  }
+
+  if (kind === 'screen') {
+    const status = getMediaAccessStatus('screen')
+    if (status === 'granted') {
+      return status
+    }
+
+    if (status === 'not-determined') {
+      /** 触发系统屏幕录制授权弹窗 */
+      try {
+        await desktopCapturer.getSources({
+          types: ['screen'],
+          thumbnailSize: { width: 1, height: 1 },
+        })
+      }
+      catch (error) {
+        logWarn('触发屏幕录制授权时发生错误', {
+          module: 'permissions',
+          operation: 'requestPermission',
+          context: { error: String(error) },
+        })
+      }
+      return getMediaAccessStatus('screen')
+    }
+
+    /** denied / restricted：打开系统隐私设置 */
+    openPrivacySettings('screen')
+    return getMediaAccessStatus('screen')
+  }
+
+  const result = await ensureMediaAccess(kind)
+  if (result !== 'granted') {
+    openPrivacySettings(kind)
+  }
+  return result
+}
+
+/**
+ * 打开 macOS 系统隐私设置对应面板
+ * @returns 是否成功发起打开（非 macOS 返回 false）
+ */
+export function openPrivacySettings(kind: PermissionKind): boolean {
+  if (process.platform !== 'darwin') {
+    return false
+  }
+
+  const url = MACOS_PRIVACY_URLS[kind]
+  if (!url) {
+    return false
+  }
+
+  try {
+    shell.openExternal(url)
+    return true
+  }
+  catch (error) {
+    logWarn('打开系统隐私设置失败', {
+      module: 'permissions',
+      operation: 'openPrivacySettings',
+      context: { kind, error: String(error) },
+    })
+    return false
+  }
+}

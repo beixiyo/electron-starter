@@ -1,5 +1,6 @@
 import './window/service'
 import './media/service'
+import './permission/service'
 import './screenshot/service'
 import './selection/service'
 import './meeting-detection/service'
