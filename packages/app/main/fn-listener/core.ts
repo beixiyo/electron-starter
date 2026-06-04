@@ -1,3 +1,4 @@
+import type { FnComboKey } from '@ipc/services/fn/contract'
 import { NativeBridge } from '../native-bridge'
 
 const bridge = new NativeBridge<FnEvents>({
@@ -9,7 +10,7 @@ const bridge = new NativeBridge<FnEvents>({
     else if (line === 'FN_UP')
       bus.emit('key', 'up')
     else if (line.startsWith('FN_COMBO_'))
-      bus.emit('combo', line.slice(9))
+      bus.emit('combo', line.slice(9) as FnComboKey)
   },
 })
 
@@ -24,15 +25,15 @@ export function removeFnKeyListener(listener: (event: FnKeyEvent) => void): void
   bridge.events.off('key', listener)
 }
 
-export function addFnComboListener(listener: (key: string) => void): () => void {
+export function addFnComboListener(listener: (key: FnComboKey) => void): () => void {
   return bridge.events.on('combo', listener)
 }
 
 type FnEvents = {
   key: FnKeyEvent
-  combo: string
+  combo: FnComboKey
 }
 
 export type FnKeyEvent = 'down' | 'up'
 export type FnKeyListener = (event: FnKeyEvent) => void
-export type FnComboListener = (key: string) => void
+export type FnComboListener = (key: FnComboKey) => void

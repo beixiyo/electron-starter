@@ -14,7 +14,7 @@
 
 import type { FnShortcutsConfig } from '@shared'
 import type { BrowserWindow } from 'electron'
-import { sendFnDownEvent, sendFnUpEvent } from '@ipc/services/fn/service'
+import { sendFnComboEvent, sendFnDownEvent, sendFnUpEvent } from '@ipc/services/fn/service'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { FN_DOUBLE_PRESS_INTERVAL_MS } from '@shared'
 import { holdStateManager } from '../hold-state-manager'
@@ -178,7 +178,7 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
 }
 
 export function setupFnKeyIpc(mainWindow: BrowserWindow): void {
-  const unsub = addFnKeyListener((event) => {
+  const unsubKey = addFnKeyListener((event) => {
     if (mainWindow.isDestroyed())
       return
 
@@ -188,7 +188,12 @@ export function setupFnKeyIpc(mainWindow: BrowserWindow): void {
       sendFnUpEvent(mainWindow)
   })
 
-  cleanupFns.push(unsub)
+  const unsubCombo = addFnComboListener((key) => {
+    if (!mainWindow.isDestroyed())
+      sendFnComboEvent(mainWindow, key)
+  })
+
+  cleanupFns.push(unsubKey, unsubCombo)
 }
 
 export function resetFnShortcutStates(): void {
