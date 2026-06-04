@@ -76,7 +76,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       outDir: resolve(__dirname, './out/renderer'),
       rollupOptions: {
         input: {
-          index: resolve(__dirname, './renderer/windows/main/index.html'),
+          index: resolve(__dirname, './renderer/index.html'),
           splash: resolve(__dirname, './renderer/windows/splash/index.html'),
           voiceIme: resolve(__dirname, './renderer/windows/voice-ime/index.html'),
           shortcutTest: resolve(__dirname, './renderer/windows/shortcut-test/index.html'),
@@ -149,7 +149,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
        */
       {
         name: 'react-devtools-inject',
-        apply: 'serve', // 仅在开发服务器模式下应用
+        apply: 'serve',
         transformIndexHtml(html) {
           return html.replace(
             '</head>',

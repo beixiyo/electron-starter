@@ -65,7 +65,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     movable: true,
     focusable: true,
     hasShadow: true,
-    htmlPath: 'windows/main/index.html',
+    htmlPath: 'index.html',
     autoHideMenuBar: true,
     show: false,
     openDevTools: false,
