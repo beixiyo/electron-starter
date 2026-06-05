@@ -1,8 +1,8 @@
-import type { GlobalShortcutConfig, ShortcutConfig } from './types'
+import type { GlobalShortcutConfig, ShortcutConfig } from '../types'
 import { globalShortcut } from 'electron'
-import { logError } from '../utils/logger'
-import { windowManager } from '../window-manager'
-import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from './shortcut-utils'
+import { logError } from '../../utils/logger'
+import { windowManager } from '../../window-manager'
+import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from '../shortcut-utils'
 
 /**
  * 已注册的全局快捷键映射表

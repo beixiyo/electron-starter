@@ -1,8 +1,8 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import type { ShortcutBindings, ShortcutConfigContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { resumeFnShortcuts, suspendFnShortcuts } from '@main/fn-listener'
-import { startRecordHotkeyDetection, stopRecordHotkeyDetection } from '@main/shortcuts/record-hotkey-detector'
+import { resumeFnShortcuts, suspendFnShortcuts } from '@main/keyboard'
+import { startRecordHotkeyDetection, stopRecordHotkeyDetection } from '@main/keyboard'
 import { readShortcutBindings, writeShortcutBindings } from '@main/store/shortcut-bindings'
 import { BrowserWindow } from 'electron'
 

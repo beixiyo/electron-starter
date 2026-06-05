@@ -1,6 +1,6 @@
 import type { Modifier, ShortcutBindings } from '@ipc/services/shortcut-config/contract'
 import { globalShortcut } from 'electron'
-import { isSuspended } from './fn-listener'
+import { isSuspended } from '../fn'
 
 function toAccelerator(modifiers: Modifier[], key: string): string {
   const parts: string[] = []

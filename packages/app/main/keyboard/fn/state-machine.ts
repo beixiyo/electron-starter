@@ -18,9 +18,9 @@ import type { BrowserWindow } from 'electron'
 import { sendFnComboEvent, sendFnDownEvent, sendFnUpEvent } from '@ipc/services/fn/service'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { FN_DOUBLE_PRESS_INTERVAL_MS } from '@shared'
-import { holdStateManager } from '../hold-state-manager'
-import { logError } from '../utils/logger'
-import { windowManager } from '../window-manager'
+import { logError } from '../../utils/logger'
+import { windowManager } from '../../window-manager'
+import { holdStateManager } from '../hold/state-manager'
 import { addFnComboListener, addFnKeyListener } from './core'
 
 const DECIDING_MS = FN_DOUBLE_PRESS_INTERVAL_MS

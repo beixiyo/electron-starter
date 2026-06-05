@@ -1,7 +1,7 @@
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { uIOhook } from 'uiohook-napi'
-import { resolveKeyGroup } from './resolveKeyGroup'
-import { acquireHook, releaseHook } from './uiohook-lifecycle'
+import { resolveKeyGroup } from './resolve-key-group'
+import { acquireHook, releaseHook } from '../uiohook-lifecycle'
 
 const registeredAccelerators = new Map<string, RegisteredAccelerator>()
 const activeAccelerators = new Map<string, ActiveAccelerator>()

@@ -1,19 +1,19 @@
 import type { WindowType } from '@shared'
-import type { HoldGlobalShortcutConfig, HoldShortcutConfig } from './types'
+import type { HoldGlobalShortcutConfig, HoldShortcutConfig } from '../types'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, WINDOW_CONFIGS } from '@shared'
 import { globalShortcut } from 'electron'
-import { holdStateManager } from '../hold-state-manager'
-import { logError } from '../utils/logger'
-import { windowManager } from '../window-manager'
+import { holdStateManager } from './state-manager'
+import { logError } from '../../utils/logger'
+import { windowManager } from '../../window-manager'
 import {
   activateHoldReleaseDetector,
   clearHoldReleaseDetectors,
   deactivateHoldReleaseDetector,
   registerHoldReleaseDetector,
   unregisterHoldReleaseDetector,
-} from './hold-release-detector'
-import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from './shortcut-utils'
+} from './release-detector'
+import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from '../shortcut-utils'
 
 const holdShortcuts = new Map<string, HoldShortcutConfig>()
 const activeHoldAccelerators = new Set<string>()

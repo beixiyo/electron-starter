@@ -1,5 +1,5 @@
 import type { FnComboKey, Modifier } from '@ipc/services/fn/contract'
-import { NativeBridge } from '../native-bridge'
+import { NativeBridge } from '../../native-bridge'
 
 export type FnComboEvent = { key: FnComboKey, modifiers: Modifier[] }
 

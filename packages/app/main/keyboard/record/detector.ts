@@ -1,7 +1,7 @@
 import type { Modifier } from '@ipc/services/fn/contract'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { uIOhook, UiohookKey } from 'uiohook-napi'
-import { acquireHook, releaseHook } from './uiohook-lifecycle'
+import { acquireHook, releaseHook } from '../uiohook-lifecycle'
 
 export type RecordedHotkey = { key: string, modifiers: Modifier[] }
 

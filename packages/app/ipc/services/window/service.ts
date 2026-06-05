@@ -1,7 +1,7 @@
 import type { WindowBounds, WindowConfig, WindowType } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { holdStateManager } from '@main/hold-state-manager'
+import { holdStateManager } from '@main/keyboard'
 import { windowManager } from '@main/window-manager'
 
 export const windowService = createIpcService<WindowContract>('window', {

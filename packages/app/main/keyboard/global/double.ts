@@ -1,9 +1,9 @@
-import type { DoublePressGlobalShortcutConfig, DoublePressShortcutConfig } from './types'
+import type { DoublePressGlobalShortcutConfig, DoublePressShortcutConfig } from '../types'
 import { DOUBLE_PRESS_INTERVAL_MS } from '@shared'
 import { globalShortcut } from 'electron'
-import { logError } from '../utils/logger'
-import { windowManager } from '../window-manager'
-import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from './shortcut-utils'
+import { logError } from '../../utils/logger'
+import { windowManager } from '../../window-manager'
+import { checkAndWarnShortcutConflict, formatShortcutLogInfo } from '../shortcut-utils'
 
 const doublePressShortcuts = new Map<string, DoublePressShortcutConfig>()
 const lastPressTime = new Map<string, number>()

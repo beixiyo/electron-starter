@@ -1,8 +1,8 @@
 import { app } from 'electron'
-import { resetFnShortcutStates, stopFnKeyListener } from '../fn-listener'
-import { resetDoublePressShortcutStates } from './double-shortcut'
-import { getHoldShortcutsMap, resetHoldShortcutStates } from './hold-shortcut'
-import { unregisterAllGlobalShortcuts } from './normal-shortcut'
+import { resetDoublePressShortcutStates } from './global'
+import { resetFnShortcutStates, stopFnKeyListener } from './fn'
+import { getHoldShortcutsMap, resetHoldShortcutStates } from './hold'
+import { unregisterAllGlobalShortcuts } from './global'
 
 /**
  * 应用退出前取消注册所有快捷键
