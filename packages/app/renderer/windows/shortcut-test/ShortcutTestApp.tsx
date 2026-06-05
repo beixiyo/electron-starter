@@ -16,12 +16,14 @@ const TRIGGER_COLOR: Record<ShortcutTestPayload['triggerType'], string> = {
   hold: 'text-emerald-400',
   doublePress: 'text-sky-400',
   combo: 'text-amber-400',
+  hotkey: 'text-violet-400',
 }
 
 const TRIGGER_DOT: Record<ShortcutTestPayload['triggerType'], string> = {
   hold: 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.7)]',
   doublePress: 'bg-sky-400 shadow-[0_0_8px_rgba(14,165,233,0.7)]',
   combo: 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.7)]',
+  hotkey: 'bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.7)]',
 }
 
 export const ShortcutTestApp = memo(() => {

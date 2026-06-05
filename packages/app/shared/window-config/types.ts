@@ -111,8 +111,9 @@ export type FnShortcutsConfig = {
     onTrigger: () => void
   }
   combos?: Array<{
-    /** Electron accelerator，如 'Space'、'A' */
     key: string
+    /** 额外要求同时按住的修饰符（空 / undefined = 无修饰符） */
+    modifiers?: import('@ipc/services/fn/contract').Modifier[]
     onTrigger: () => void
   }>
 }

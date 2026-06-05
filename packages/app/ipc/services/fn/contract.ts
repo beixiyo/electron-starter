@@ -1,5 +1,8 @@
 import type { IpcContract } from '@ipc/core'
 
+/** Fn 组合键触发时可能附带的修饰符 */
+export type Modifier = 'Meta' | 'Control' | 'Alt' | 'Shift'
+
 /** 与 fn-listener.swift COMBO_KEYS 保持一一对应 */
 export type FnComboKey
   = | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
@@ -17,5 +20,5 @@ export type FnContract = IpcContract<{}, {
   down: undefined
   up: undefined
   doublePress: undefined
-  combo: { key: FnComboKey }
+  combo: { key: FnComboKey, modifiers: Modifier[] }
 }>

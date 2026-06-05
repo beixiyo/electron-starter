@@ -1,51 +1,41 @@
 import type { ShortcutAction, ShortcutBinding } from './types'
-import { useState } from 'react'
+import { useLatestCallback } from 'hooks'
+import { useEffect, useState } from 'react'
 import { DEFAULT_ACTIONS } from './types'
 
-const STORAGE_KEY = 'fn-shortcut-bindings'
-
-function loadActions(): ShortcutAction[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored)
-      return DEFAULT_ACTIONS
-
-    const parsed = JSON.parse(stored) as Record<string, ShortcutBinding | null>
-    return DEFAULT_ACTIONS.map(action => ({
-      ...action,
-      binding: action.id in parsed
-        ? parsed[action.id]
-        : action.binding,
-    }))
-  }
-  catch {
-    return DEFAULT_ACTIONS
-  }
-}
-
-function persistActions(actions: ShortcutAction[]): void {
-  const map = Object.fromEntries(actions.map(a => [a.id, a.binding]))
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(map))
-}
-
 export function useShortcutsList() {
-  const [actions, setActions] = useState<ShortcutAction[]>(loadActions)
+  const [actions, setActions] = useState<ShortcutAction[]>(
+    () => DEFAULT_ACTIONS.map(a => ({ ...a })),
+  )
 
-  const updateBinding = (id: string, binding: ShortcutBinding | null) => {
+  useEffect(() => {
+    window.$ipc.shortcutConfig.getBindings().then((bindings) => {
+      setActions(DEFAULT_ACTIONS.map(a => ({
+        ...a,
+        binding: a.id in bindings
+          ? bindings[a.id]
+          : a.binding,
+      })))
+    })
+  }, [])
+
+  const updateBinding = useLatestCallback((id: string, binding: ShortcutBinding | null) => {
     setActions((prev) => {
-      const next = prev.map(a => (a.id === id
+      const next = prev.map(a => a.id === id
         ? { ...a, binding }
-        : a))
-      persistActions(next)
+        : a)
+      window.$ipc.shortcutConfig.setBindings(
+        Object.fromEntries(next.map(a => [a.id, a.binding])),
+      )
       return next
     })
-  }
+  })
 
-  const resetToDefault = (id: string) => {
+  const resetToDefault = useLatestCallback((id: string) => {
     const def = DEFAULT_ACTIONS.find(a => a.id === id)
     if (def)
       updateBinding(id, def.binding)
-  }
+  })
 
   return { actions, updateBinding, resetToDefault }
 }

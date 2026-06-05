@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import type { FnComboKey, FnContract } from './contract'
+import type { FnComboKey, FnContract, Modifier } from './contract'
 import { createIpcService } from '@ipc/core'
 
 export const fnService = createIpcService<FnContract>('fn', {})
@@ -19,7 +19,11 @@ export function sendFnDoublePressEvent(window: BrowserWindow): void {
     fnService.emit('doublePress', undefined, window)
 }
 
-export function sendFnComboEvent(window: BrowserWindow, key: FnComboKey): void {
+export function sendFnComboEvent(
+  window: BrowserWindow,
+  key: FnComboKey,
+  modifiers: Modifier[] = [],
+): void {
   if (window && !window.isDestroyed())
-    fnService.emit('combo', { key }, window)
+    fnService.emit('combo', { key, modifiers }, window)
 }

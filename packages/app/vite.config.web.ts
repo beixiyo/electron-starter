@@ -107,6 +107,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       alias: {
         '@': resolve(__dirname, './renderer'),
         '@shared': resolve(__dirname, './shared'),
+        '@ipc': resolve(__dirname, './ipc'),
         'comps/index.css': resolve(__dirname, '../comps/dist/index.css'),
         'comps': resolve(__dirname, '../comps/src/index.ts'),
         'http-api': resolve(__dirname, '../http-api/src/index.ts'),

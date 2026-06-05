@@ -54,6 +54,17 @@ func output(_ msg: String) {
   }
 }
 
+// 从事件 flags 中提取修饰符，排除 fn/secondaryFn 本身
+func modifierSuffix(from event: CGEvent) -> String {
+  var mods: [String] = []
+  let f = event.flags
+  if f.contains(.maskControl)   { mods.append("Control") }
+  if f.contains(.maskAlternate) { mods.append("Alt") }
+  if f.contains(.maskShift)     { mods.append("Shift") }
+  if f.contains(.maskCommand)   { mods.append("Meta") }
+  return mods.isEmpty ? "" : ":" + mods.joined(separator: ",")
+}
+
 // Fn 按下态。优先信任 maskSecondaryFn 标志（非 Karabiner 机器可靠）；标志被剥时退回 keyCode==63 翻转。
 // 组合键识别：
 //   - 有标志的 keydown → 直接判组合（非 Karabiner，零误判）
@@ -100,13 +111,13 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
         output("FN_DOWN")
       }
       if let keyName = COMBO_KEYS[keyCode] {
-        output("FN_COMBO_\(keyName)")
+        output("FN_COMBO_\(keyName)\(modifierSuffix(from: event))")
       }
     }
     else if fnDown {
       if nowSec() - fnDownAt < FN_COMBO_WINDOW_SEC, let keyName = COMBO_KEYS[keyCode] {
         // Karabiner 下 flag 被剥：靠「Fn 刚按下不久」时间窗识别组合
-        output("FN_COMBO_\(keyName)")
+        output("FN_COMBO_\(keyName)\(modifierSuffix(from: event))")
       }
       else {
         // 超窗 / 卡死态：清零并补 FN_UP，杜绝打字污染、自愈掉边沿

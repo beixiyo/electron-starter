@@ -9,6 +9,7 @@ import { oauthClient } from '@ipc/services/oauth/client'
 import { permissionClient } from '@ipc/services/permission/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
+import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
 import { shortcutTestClient } from '@ipc/services/shortcut-test/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
@@ -21,6 +22,7 @@ export const ipc = {
   hold: holdClient,
   voiceIme: voiceImeClient,
   selection: selectionClient,
+  shortcutConfig: shortcutConfigClient,
   shortcutTest: shortcutTestClient,
   oauth: oauthClient,
   permission: permissionClient,

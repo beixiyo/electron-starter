@@ -1,8 +1,10 @@
+import type { ShortcutBindings } from '@ipc/services/shortcut-config/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { focusDemoService } from '@ipc/services/focus-demo/service'
+import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
 import { shortcutTestService } from '@ipc/services/shortcut-test/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
@@ -14,8 +16,9 @@ import {
 import { app, BrowserWindow, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
-import { addFnKeyListener, registerFnShortcuts, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
+import { registerFnShortcuts, resetShortcutHandlers, setupFnKeyIpc, startFnKeyListener } from './fn-listener'
 import { checkFocusedTextInput } from './focus-check'
+import { registerHotkeyShortcuts, unregisterHotkeyShortcuts } from './hotkey-shortcuts'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
@@ -23,6 +26,7 @@ import { setupOAuthInterceptor } from './oauth-interceptor'
 import { registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import { registerHoldGlobalShortcut } from './shortcuts'
+import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
 import { createWindowsSequentially, windowManager } from './window-manager'
@@ -50,7 +54,17 @@ initDeeplink(() => {
   setupAppActivation()
 
   createMainWindow()
-  setupFnKeyShortcuts()
+
+  const initialBindings = readShortcutBindings()
+  setupFnKeyShortcuts(initialBindings)
+  registerHotkeyShortcuts(initialBindings, HOTKEY_HANDLERS)
+  createShortcutConfigService((bindings) => {
+    resetShortcutHandlers()
+    unregisterHotkeyShortcuts()
+    setupFnKeyShortcuts(bindings)
+    registerHotkeyShortcuts(bindings, HOTKEY_HANDLERS)
+  })
+
   initSelectionHook()
   registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
 
@@ -239,46 +253,61 @@ function createMainWindow(): void {
 // Fn 键状态机快捷键
 // ─────────────────────────────────────────────
 
-function setupFnKeyShortcuts(): void {
+function showShortcutTestWindow(
+  label: string,
+  triggerType: 'combo' | 'doublePress' | 'hold' | 'hotkey',
+): void {
+  if (!windowManager.exists(WindowType.SHORTCUT_TEST))
+    windowManager.create(WindowType.SHORTCUT_TEST)
+  windowManager.show(WindowType.SHORTCUT_TEST)
+  shortcutTestService.emit(
+    'trigger',
+    { triggerType, label },
+    windowManager.get(WindowType.SHORTCUT_TEST)!,
+  )
+}
+
+/** hotkey 绑定的触发处理器，按 action id 索引 */
+const HOTKEY_HANDLERS: Record<string, () => void> = {
+  recording: () => showShortcutTestWindow('Recording (hotkey)', 'hotkey'),
+  askFlowtica: () => showShortcutTestWindow('Ask (hotkey)', 'hotkey'),
+  bookmark: () => showShortcutTestWindow('Bookmark (hotkey)', 'hotkey'),
+}
+
+function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
   if (process.platform !== 'darwin')
     return
 
-  addFnKeyListener(event =>
-    console.log(`[fn:raw] ${event === 'down'
-      ? '⬇ DOWN'
-      : '⬆ UP'}`),
-  )
+  /** 收集所有 combo 类型绑定，含修饰符信息 */
+  const combos = Object.entries(bindings).flatMap(([id, b]) => {
+    if (b?.type !== 'combo')
+      return []
+    const { key, modifiers } = b
+    return [{
+      key,
+      modifiers,
+      onTrigger: () => {
+        console.log(`[fn:combo] ✅ Fn+${key} → ${id}`)
+        showShortcutTestWindow(`Fn + ${key}`, 'combo')
+      },
+    }]
+  })
 
   registerFnShortcuts({
-    hold: {
-      windowType: WindowType.VOICE_IME,
-      onRelease: handleVoiceImeRelease,
-    },
+    hold: bindings.voiceDictation?.type === 'hold'
+      ? { windowType: WindowType.VOICE_IME, onRelease: handleVoiceImeRelease }
+      : undefined,
 
-    doublePress: {
-      onTrigger: () => {
-        console.log('[fn:double] ✅ 双击触发')
-        if (!windowManager.exists(WindowType.SHORTCUT_TEST)) {
-          windowManager.create(WindowType.SHORTCUT_TEST)
+    doublePress: bindings.askFlowtica?.type === 'doublePress'
+      ? {
+          onTrigger: () => {
+            console.log('[fn:double] ✅ 双击触发')
+            showShortcutTestWindow('Ask (double fn)', 'doublePress')
+          },
         }
-        windowManager.show(WindowType.SHORTCUT_TEST)
-        shortcutTestService.emit('trigger', { triggerType: 'doublePress', label: 'Double Press Triggered' }, windowManager.get(WindowType.SHORTCUT_TEST)!)
-      },
-    },
+      : undefined,
 
-    combos: [
-      {
-        key: 'Space',
-        onTrigger: () => {
-          console.log('[fn:combo] ✅ Fn+Space 触发')
-          if (!windowManager.exists(WindowType.SHORTCUT_TEST)) {
-            windowManager.create(WindowType.SHORTCUT_TEST)
-          }
-          windowManager.show(WindowType.SHORTCUT_TEST)
-          shortcutTestService.emit('trigger', { triggerType: 'combo', label: 'Fn + Space' }, windowManager.get(WindowType.SHORTCUT_TEST)!)
-        },
-      },
-    ],
+    combos,
   })
 }
 
