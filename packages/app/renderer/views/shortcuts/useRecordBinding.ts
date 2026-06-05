@@ -5,26 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 const DECIDING_MS = 300
 const UNSUPPORTED_RESET_MS = 1500
 
-const MODIFIER_KEYS = new Set([
-  'Meta',
-  'Control',
-  'Alt',
-  'Shift',
-  'CapsLock',
-  'Dead',
-  'Process',
-  'AltGraph',
-])
-
 type RecordPhase = 'idle' | 'waiting' | 'deciding' | 'wait_double' | 'detected' | 'unsupported'
-
-function normalizeHotkeyKey(e: KeyboardEvent): string {
-  if (e.key === ' ')
-    return 'Space'
-  if (e.key.length === 1)
-    return e.key.toUpperCase()
-  return e.key
-}
 
 export function useRecordBinding() {
   const [phase, setPhase] = useState<RecordPhase>('idle')
@@ -81,15 +62,16 @@ export function useRecordBinding() {
 
   const isActive = phase !== 'idle'
 
+  // Fn 手势 + 主进程 hotkey 检测
   useEffect(() => {
     if (!isActive)
       return
 
-    const ipc = window.$ipc?.fn
+    const ipc = window.$ipc
     if (!ipc)
       return
 
-    const unsubDown = ipc.on('down', () => {
+    const unsubDown = ipc.fn.on('down', () => {
       const cur = phaseRef.current
       if (cur === 'waiting' || cur === 'deciding') {
         clearTimer()
@@ -101,7 +83,7 @@ export function useRecordBinding() {
       }
     })
 
-    const unsubUp = ipc.on('up', () => {
+    const unsubUp = ipc.fn.on('up', () => {
       if (phaseRef.current !== 'deciding')
         return
       clearTimer()
@@ -120,43 +102,38 @@ export function useRecordBinding() {
       }
     })
 
-    const unsubCombo = ipc.on('combo', ({ key, modifiers }) => {
+    const unsubCombo = ipc.fn.on('combo', ({ key, modifiers }) => {
       const cur = phaseRef.current
       if (cur === 'deciding' || cur === 'waiting')
         detect({ type: 'combo', key, modifiers })
     })
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (phaseRef.current === 'idle')
-        return
-      const hasMainMod = e.metaKey || e.ctrlKey || e.altKey
-      if (!hasMainMod || MODIFIER_KEYS.has(e.key))
-        return
-
-      e.preventDefault()
-      e.stopPropagation()
-
-      const modifiers: Array<'Meta' | 'Control' | 'Alt' | 'Shift'> = []
-      if (e.metaKey)
-        modifiers.push('Meta')
-      if (e.ctrlKey)
-        modifiers.push('Control')
-      if (e.altKey)
-        modifiers.push('Alt')
-      if (e.shiftKey)
-        modifiers.push('Shift')
-
-      detect({ type: 'hotkey', modifiers, key: normalizeHotkeyKey(e) })
-    }
-
-    window.addEventListener('keydown', onKeyDown, true)
+    /** 主进程 uIOhook 检测到修饰键组合（替代原浏览器 keydown 方案） */
+    const unsubHotkey = ipc.shortcutConfig.on('hotkey', ({ key, modifiers }) => {
+      const cur = phaseRef.current
+      if (cur === 'waiting' || cur === 'deciding')
+        detect({ type: 'hotkey', key, modifiers })
+    })
 
     return () => {
       unsubDown()
       unsubUp()
       unsubCombo()
-      window.removeEventListener('keydown', onKeyDown, true)
+      unsubHotkey()
     }
+  }, [isActive])
+
+  /** 录制期间屏蔽浏览器滚动默认行为（Space / 方向键等） */
+  useEffect(() => {
+    if (!isActive)
+      return
+    const SCROLL_KEYS = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'])
+    const prevent = (e: KeyboardEvent) => {
+      if (SCROLL_KEYS.has(e.key))
+        e.preventDefault()
+    }
+    window.addEventListener('keydown', prevent, true)
+    return () => window.removeEventListener('keydown', prevent, true)
   }, [isActive])
 
   return {

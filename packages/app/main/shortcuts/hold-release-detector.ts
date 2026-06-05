@@ -1,20 +1,20 @@
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { uIOhook } from 'uiohook-napi'
 import { resolveKeyGroup } from './resolveKeyGroup'
+import { acquireHook, releaseHook } from './uiohook-lifecycle'
 
 const registeredAccelerators = new Map<string, RegisteredAccelerator>()
 const activeAccelerators = new Map<string, ActiveAccelerator>()
 
-let hookStarted = false
+let hookAcquired = false
 let listenerBound = false
 
 /**
  * 注册长按快捷键，预解析 accelerator
  */
 export function registerHoldReleaseDetector(accelerator: string): void {
-  if (registeredAccelerators.has(accelerator)) {
+  if (registeredAccelerators.has(accelerator))
     return
-  }
 
   const entry: RegisteredAccelerator = {
     accelerator,
@@ -42,14 +42,10 @@ export function activateHoldReleaseDetector(
   onRelease: () => void,
 ): void {
   const entry = registeredAccelerators.get(accelerator)
-  if (!entry) {
+  if (!entry)
     throw new Error(`未注册的长按快捷键: ${accelerator}`)
-  }
 
-  activeAccelerators.set(accelerator, {
-    ...entry,
-    onRelease,
-  })
+  activeAccelerators.set(accelerator, { ...entry, onRelease })
 }
 
 /**
@@ -87,61 +83,40 @@ function ensureHookRunning(): void {
     listenerBound = true
   }
 
-  if (hookStarted) {
-    return
-  }
-
-  try {
-    uIOhook.start()
-    hookStarted = true
-  }
-  catch (error) {
-    throw new Error(
-      error instanceof Error
-        ? `启动 uIOhook 失败: ${error.message}`
-        : '启动 uIOhook 失败: 未知错误',
-    )
+  if (!hookAcquired) {
+    acquireHook()
+    hookAcquired = true
   }
 }
 
 function maybeStopHook(): void {
-  if (!hookStarted) {
+  if (registeredAccelerators.size > 0)
     return
+
+  if (listenerBound) {
+    uIOhook.off('keyup', handleKeyUp)
+    listenerBound = false
   }
 
-  if (registeredAccelerators.size > 0) {
-    return
+  if (hookAcquired) {
+    releaseHook()
+    hookAcquired = false
   }
-
-  try {
-    uIOhook.stop()
-  }
-  catch (error) {
-    console.error('停止 uIOhook 失败', error)
-  }
-  hookStarted = false
 }
 
 function parseAccelerator(accelerator: string): number[][] {
   const tokens = accelerator.split('+').map(token => token.trim()).filter(Boolean)
-  if (!tokens.length) {
+  if (!tokens.length)
     throw new Error(`非法的快捷键: ${accelerator}`)
-  }
 
   return tokens.map(resolveKeyGroup)
 }
 
-/**
- * 注册的长按快捷键信息
- */
 type RegisteredAccelerator = {
   accelerator: string
   keyGroups: number[][]
 }
 
-/**
- * 激活中的长按快捷键信息
- */
 type ActiveAccelerator = RegisteredAccelerator & {
   onRelease: () => void
 }

@@ -26,4 +26,7 @@ export type ShortcutConfigContract = IpcContract<{
   pauseForRecord: () => void
   /** 录制结束后调用，恢复主进程响应 */
   resumeAfterRecord: () => void
-}, {}>
+}, {
+  /** 主进程检测到修饰键组合，推送给录制中的渲染进程 */
+  hotkey: { key: string, modifiers: Modifier[] }
+}>
