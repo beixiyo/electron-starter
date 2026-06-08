@@ -1,4 +1,4 @@
-import { applePopupLogin, googlePopupLogin } from '@jl-org/auth'
+import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
 import { useNavigate } from '@jl-org/react-router'
 import { WindowType } from '@shared'
 import { Button, Message } from 'comps'
@@ -7,8 +7,8 @@ import { Chrome, Mail } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
-import { api } from '@/api/httpInstance'
 import { INDEX_PAGE } from '@/config'
+import { api } from '@/http/httpInstance'
 import { UserActions } from '@/store/user'
 import { isElectron } from '@/utils/env'
 import AppleIcon from '../../assets/svg/apple.svg?react'
@@ -33,7 +33,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     try {
       const clientContext = buildClientContext()
-      const data = await googlePopupLogin({
+      const data = await googlePopupCodeLogin({
         client_id: GOOGLE_CLIENT_ID,
         redirect_uri: GOOGLE_REDIRECT_URI,
         response_mode: 'fragment',

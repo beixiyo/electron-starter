@@ -1,4 +1,4 @@
-import { api } from '@/api/httpInstance'
+import { api } from '@/http/httpInstance'
 import { createUserActions } from './createUserActions'
 
 /**

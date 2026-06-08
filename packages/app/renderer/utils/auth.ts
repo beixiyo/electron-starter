@@ -1,4 +1,4 @@
-import { api } from '@/api/httpInstance'
+import { api } from '@/http/httpInstance'
 
 /**
  * 调用服务端「当前用户」接口来判断是否已登录

@@ -36,31 +36,6 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
         '/api': {
           target: `http://${devUrl}`,
           changeOrigin: true,
-          bypass(req) {
-            const url = req.url || ''
-            /**
-             * 排除静态资源请求（包含文件扩展名的请求）
-             * 这些请求应该由 Vite 处理，而不是代理到后端
-             */
-            if (/\.(ts|tsx|js|jsx|mjs|cjs|css|scss|sass|less|json|svg|png|jpg|jpeg|gif|ico|woff|woff2|ttf|eot|map)$/i.test(
-              url,
-            )) {
-              return url
-            }
-            /** 排除 Vite 的内部请求（如 HMR、source map 等） */
-            // Vite 的模块请求通常包含查询参数，如 ?import、&t= 等
-            if (url.includes('?') && (url.includes('import') || url.includes('&t=') || url.includes('?t='))) {
-              return url
-            }
-            /**
-             * 如果请求路径看起来像文件路径（包含 /api/ 但后面跟着文件路径结构）
-             * 这可能是 Vite 在解析模块时生成的路径
-             */
-            if (/^\/api\/[^/]+\.[^/]+/.test(url)) {
-              return url
-            }
-            return undefined
-          },
         },
         '/ws': {
           target: `ws://${devUrl}`,

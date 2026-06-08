@@ -2,7 +2,7 @@ import { Button, Form, Input, Message, Modal, useForm } from 'comps'
 import { X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from 'utils'
-import { api } from '@/api/httpInstance'
+import { api } from '@/http/httpInstance'
 import { UserActions } from '@/store/user'
 
 interface EmailModalProps {
