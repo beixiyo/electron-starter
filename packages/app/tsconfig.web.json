@@ -9,8 +9,16 @@
     "../hooks/src/index.ts",
     "../comps/src/index.ts"
   ],
+  // service 实现是主进程代码（依赖 @main/* 别名），渲染端只消费 contract + client，
+  // 不从 web 视角 typecheck，归 tsconfig.node.json 管
+  "exclude": [
+    "./ipc/services/**/service.ts",
+    "./ipc/services/index.ts"
+  ],
   "compilerOptions": {
     "composite": true,
+    // 与根 tsconfig.base.json 对齐（electron-toolkit 预设默认开启）
+    "noImplicitReturns": false,
     "types": ["vite/client", "vite-plugin-svgr/client"],
     "jsx": "react-jsx",
     "noEmit": true,

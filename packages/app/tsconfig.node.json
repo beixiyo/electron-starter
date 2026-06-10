@@ -10,6 +10,8 @@
   ],
   "compilerOptions": {
     "composite": true,
+    // 与根 tsconfig.base.json 对齐（electron-toolkit 预设默认开启）
+    "noImplicitReturns": false,
     "types": [
       "electron-vite/node"
     ],
