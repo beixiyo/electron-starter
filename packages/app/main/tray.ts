@@ -5,9 +5,20 @@ import { windowManager } from './window-manager'
 
 let tray: Tray | null = null
 
-export function initTray(): void {
+export type TrayOptions = {
+  /**
+   * 点击 Open / Setting 时打开主窗口
+   * 由调用方注入「不存在则重建」的逻辑——windowManager.show 对已销毁的窗口只会静默返回 false
+   */
+  onOpenMain?: () => void
+}
+
+export function initTray(options: TrayOptions = {}): void {
   if (tray)
     return
+
+  const openMain = options.onOpenMain
+    ?? (() => windowManager.show(WindowType.MAIN))
 
   const image = nativeImage.createFromPath(icon)
   image.setTemplateImage(true)
@@ -42,12 +53,12 @@ export function initTray(): void {
     const contextMenu = Menu.buildFromTemplate([
       {
         label: 'Open',
-        click: () => windowManager.show(WindowType.MAIN),
+        click: openMain,
       },
       { type: 'separator' },
       {
         label: 'Setting',
-        click: () => windowManager.show(WindowType.MAIN),
+        click: openMain,
       },
       { type: 'separator' },
       {

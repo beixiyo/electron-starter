@@ -1,10 +1,13 @@
 /**
  * ASR 客户端使用示例
+ *
+ * 仅供参考，不要在生产路径 import。
+ * 运行方式：`bun run main/api/AsrClient/AsrExample.ts` 并自行调用 example()
  */
 
 import { AsrClient } from '.'
 
-async function example() {
+export async function example() {
   /**
    * ⚠️ 重要提示：WebM 格式文件需要先转换为 WAV 或 OGG 格式
    *
@@ -147,5 +150,3 @@ async function example() {
     console.error('ASR 转录过程中出错:', error)
   }
 }
-
-example()

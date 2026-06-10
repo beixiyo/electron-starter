@@ -56,7 +56,12 @@ export function createBrowserWindow(
 
   const window = new BrowserWindow(browserWindowOptions)
 
-  if (browserWindowOptions.alwaysOnTop) {
+  /**
+   * blur 时重新置顶，防止部分平台失焦后置顶失效
+   * 配置了 setAlwaysOnTopOnShow 的窗口除外：其置顶由 windowManager 的
+   * show/hide 动态管理，hide 触发的 blur 若在此重新置顶会与之互相抵消
+   */
+  if (browserWindowOptions.alwaysOnTop && !config.setAlwaysOnTopOnShow) {
     window.setAlwaysOnTop(true, 'floating')
     window.on('blur', () => {
       if (!window.isDestroyed()) {

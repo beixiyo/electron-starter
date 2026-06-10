@@ -1,3 +1,4 @@
+import type { MotionValue } from 'motion/react'
 import { formatDuration } from '@jl-org/tool'
 import { WindowType } from '@shared'
 import { MEETING_TOAST_CONTENT_SIZE, SHADOW_INSET } from '@shared/window-config/constants'
@@ -164,7 +165,6 @@ const DetectionView = memo<DetectionViewProps>((props) => {
                 rotate: -90,
                 pathLength: progress,
               } }
-              transition={ { duration: 0.05, ease: 'linear' } }
             />
           </svg>
           <div className="size-3.5 rounded-full bg-sky-500/15" />
@@ -290,7 +290,8 @@ RecordingDot.displayName = 'RecordingDot'
 
 type DetectionViewProps = {
   displayName: string
-  progress: number
+  /** 倒计时进度（1 → 0），MotionValue 直驱动画，不经 React 渲染 */
+  progress: MotionValue<number>
   onRecord: () => void
   onDismiss: () => void
 }

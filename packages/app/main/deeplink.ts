@@ -24,7 +24,7 @@ export function initDeeplink(whenReady: Function): void {
     app.quit()
   }
   else {
-    app.on('second-instance', (_event, commandLine, workingDirectory) => {
+    app.on('second-instance', (_event, commandLine, _workingDirectory) => {
       const mainWindow = windowManager.get(WindowType.MAIN)
       /** 用户正在尝试运行第二个实例，我们需要让焦点指向我们的窗口 */
       if (mainWindow) {
@@ -44,7 +44,7 @@ export function initDeeplink(whenReady: Function): void {
   }
 
   // Mac
-  app.on('open-url', (event, url) => {
+  app.on('open-url', (_event, url) => {
     handleDeepLinkUrl(url)
   })
 }

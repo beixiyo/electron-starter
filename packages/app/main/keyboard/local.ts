@@ -43,7 +43,7 @@ import type { BrowserWindow } from 'electron'
 export function registerLocalShortcut(
   window: BrowserWindow,
   accelerator: string,
-  callback: () => void,
+  _callback: () => void,
 ): boolean {
   /**
    * TODO: 实现应用内快捷键注册逻辑

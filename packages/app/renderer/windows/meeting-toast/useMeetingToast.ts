@@ -1,27 +1,32 @@
 import type { MeetingDetectedPayload, RecordingStatePayload } from '@ipc/services/meeting-detection/contract'
 import { WindowType } from '@shared'
 import { useLatestCallback } from 'hooks'
+import { animate, useMotionValue } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 
 const TOAST_DURATION_MS = 8000
-const TICK_INTERVAL_MS = 50
 
 export function useMeetingToast() {
   const [meeting, setMeeting] = useState<MeetingDetectedPayload | null>(null)
-  const [progress, setProgress] = useState(1)
   const [recordingState, setRecordingState] = useState<RecordingStatePayload | null>(null)
   const [elapsed, setElapsed] = useState(0)
 
+  /** 进度环走 MotionValue 直驱合成层，倒计时期间不触发 React 重渲染 */
+  const progress = useMotionValue(1)
+
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const countdownAnimRef = useRef<ReturnType<typeof animate> | null>(null)
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const elapsedStartRef = useRef(0)
   const totalPausedRef = useRef(0)
   const pausedAtRef = useRef(0)
 
   const clearCountdown = useLatestCallback(() => {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current)
-      countdownRef.current = null
+    countdownAnimRef.current?.stop()
+    countdownAnimRef.current = null
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current)
+      dismissTimerRef.current = null
     }
   })
 
@@ -40,19 +45,16 @@ export function useMeetingToast() {
 
   const startCountdown = useLatestCallback(() => {
     clearCountdown()
-    const start = Date.now()
-    setProgress(1)
+    progress.set(1)
 
-    countdownRef.current = setInterval(() => {
-      const remaining = 1 - (Date.now() - start) / TOAST_DURATION_MS
-      if (remaining <= 0) {
-        setProgress(0)
-        handleDismiss()
-      }
-      else {
-        setProgress(remaining)
-      }
-    }, TICK_INTERVAL_MS)
+    countdownAnimRef.current = animate(progress, 0, {
+      duration: TOAST_DURATION_MS / 1000,
+      ease: 'linear',
+    })
+    dismissTimerRef.current = setTimeout(() => {
+      dismissTimerRef.current = null
+      handleDismiss()
+    }, TOAST_DURATION_MS)
   })
 
   const tickElapsed = useLatestCallback(() => {

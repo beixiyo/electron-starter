@@ -7,8 +7,8 @@ import type { WindowType } from '@shared/types/window'
 export type BroadcastMessage<T = unknown> = {
   /** 消息内容 */
   payload: T
-  /** 发送方窗口类型 */
-  from: WindowType
+  /** 发送方窗口类型；窗口 URL 无 ?windowType 参数时为 null */
+  from: WindowType | null
   /**
    * 目标窗口列表，undefined 表示广播到所有窗口
    * 基于 WindowConfig 的过滤：接收方窗口类型不在列表中时自动忽略

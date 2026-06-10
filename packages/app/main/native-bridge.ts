@@ -26,8 +26,11 @@ export class NativeBridge<T extends Record<string, any>> {
   }
 
   start(): void {
-    if (process.platform !== 'darwin')
-      throw new Error(`[${this.config.name}] macOS only`)
+    /** 与 startFnKeyListener 约定一致：非 macOS 静默跳过而非抛错，避免上层产生 unhandled rejection */
+    if (process.platform !== 'darwin') {
+      console.warn(`[${this.config.name}] macOS only, start() skipped`)
+      return
+    }
     if (this.child !== null)
       return
 

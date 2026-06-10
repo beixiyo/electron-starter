@@ -30,10 +30,9 @@ type State
     | 'DECIDING'
     | 'WAIT_DOUBLE'
     | 'HOLD_ACTIVE'
-    | 'COMBO_DONE'
     | 'DOUBLE_DONE'
 
-/** IPC 转发监听器，生命周期与 app 一致，不随快捷键重注册而清除 */
+/** IPC 转发监听器，不随快捷键重注册而清除；仅在 setupFnKeyIpc 重绑定窗口或 app 退出时清除 */
 const ipcCleanupFns: Array<() => void> = []
 
 /** 快捷键业务监听器，重新注册时先清除 */
@@ -191,7 +190,6 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
           break
         }
 
-        case 'COMBO_DONE':
         case 'DOUBLE_DONE': {
           state = 'IDLE'
           break
@@ -204,6 +202,13 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
 }
 
 export function setupFnKeyIpc(mainWindow: BrowserWindow): void {
+  /**
+   * 主窗口重建（macOS activate）时会再次调用：
+   * 先清掉指向旧窗口的转发监听器，避免随重建次数累积
+   */
+  for (const fn of ipcCleanupFns) fn()
+  ipcCleanupFns.length = 0
+
   const unsubKey = addFnKeyListener((event) => {
     if (mainWindow.isDestroyed())
       return

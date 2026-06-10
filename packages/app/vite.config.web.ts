@@ -6,7 +6,6 @@ import react from '@vitejs/plugin-react'
 import { codeInspectorPlugin } from 'code-inspector-plugin'
 import AutoImport from 'unplugin-auto-import/vite'
 import { defineConfig } from 'vite'
-import { envParse } from 'vite-plugin-env-parse'
 import svgr from 'vite-plugin-svgr'
 
 /**

@@ -33,7 +33,9 @@ export function createStore<T extends object>(
     try {
       if (!existsSync(filePath))
         return { ...defaults }
-      return JSON.parse(readFileSync(filePath, 'utf-8')) as T
+      /** 与 defaults 浅合并：版本升级新增的键，老配置文件也能拿到默认值 */
+      const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as Partial<T>
+      return { ...defaults, ...parsed }
     }
     catch {
       return { ...defaults }

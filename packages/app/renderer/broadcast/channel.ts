@@ -33,14 +33,15 @@ export function createWindowBroadcast<T = unknown>(channelName: string): WindowB
     },
 
     post(payload: T, to?: WindowType[]) {
-      const message: BroadcastMessage<T> = { payload, from: selfType!, to }
+      const message: BroadcastMessage<T> = { payload, from: selfType, to }
       bc.postMessage(message)
     },
 
     on(callback: (message: BroadcastMessage<T>) => void) {
       const handler = (event: MessageEvent<BroadcastMessage<T>>) => {
         const msg = event.data
-        if (msg.to && selfType && !msg.to.includes(selfType))
+        /** 定向消息：本窗口无身份（URL 缺 ?windowType）或不在目标列表中时一律丢弃 */
+        if (msg.to && (!selfType || !msg.to.includes(selfType)))
           return
         callback(msg)
       }

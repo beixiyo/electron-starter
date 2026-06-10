@@ -16,16 +16,14 @@ import {
 import { app, BrowserWindow, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
-import { registerFnShortcuts, resetShortcutHandlers, setupFnKeyIpc, startFnKeyListener } from './keyboard'
 import { checkFocusedTextInput } from './focus-check'
-import { registerHotkeyShortcuts, unregisterHotkeyShortcuts } from './keyboard'
+import { holdStateManager, registerFnShortcuts, registerHoldGlobalShortcut, registerHotkeyShortcuts, resetShortcutHandlers, setupFnKeyIpc, startFnKeyListener, unregisterHotkeyShortcuts } from './keyboard'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
-import { registerHoldGlobalShortcut } from './keyboard'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
@@ -95,8 +93,30 @@ function sendVoiceImeStatus(payload: VoiceImeRendererStatusPayload): void {
   }
 }
 
+/** 延迟隐藏 Voice IME 的定时器句柄，防止旧定时器把下一轮正在录音的窗口藏掉 */
+let voiceImeHideTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearVoiceImeHideTimer(): void {
+  if (voiceImeHideTimer) {
+    clearTimeout(voiceImeHideTimer)
+    voiceImeHideTimer = null
+  }
+}
+
+function hideVoiceImeLater(delayMs: number): void {
+  clearVoiceImeHideTimer()
+  voiceImeHideTimer = setTimeout(() => {
+    voiceImeHideTimer = null
+    /** 延迟期间用户可能再次长按开始了新录音，此时不能隐藏 */
+    if (!holdStateManager.isHolding(WindowType.VOICE_IME)) {
+      windowManager.hide(WindowType.VOICE_IME)
+    }
+  }, delayMs)
+}
+
 async function handleVoiceImeRelease(raw: unknown): Promise<void> {
   const result = raw as VoiceImeReleaseResult
+  clearVoiceImeHideTimer()
 
   if ('error' in result) {
     const isShortHold = result.error === HOLD_SHORT_ERROR_MESSAGE
@@ -108,7 +128,8 @@ async function handleVoiceImeRelease(raw: unknown): Promise<void> {
     })
 
     if (isShortHold) {
-      setTimeout(() => windowManager.hide(WindowType.VOICE_IME), 1000)
+      /** 短按错误提示停留 1s 再隐藏 */
+      hideVoiceImeLater(1000)
     }
     else {
       windowManager.hide(WindowType.VOICE_IME)
@@ -168,11 +189,18 @@ function setupBrowserWindowLifecycle(): void {
 
 function setupAppActivation(): void {
   app.on('activate', () => {
-    const mainWindow = windowManager.get(WindowType.MAIN)
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createMainWindow()
-    }
+    showOrCreateMainWindow()
   })
+}
+
+/** 主窗口存活则前置显示，已销毁（如 macOS 关闭主窗后）则重建——tray 与 Dock activate 共用 */
+function showOrCreateMainWindow(): void {
+  const mainWindow = windowManager.get(WindowType.MAIN)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    windowManager.show(WindowType.MAIN)
+    return
+  }
+  createMainWindow()
 }
 
 function createSplashWindow(): BrowserWindow {
@@ -228,7 +256,7 @@ function createMainWindow(): void {
     // SELECTION / SHORTCUT_TEST 按需懒创建，不在此列
     createWindowsSequentially([
       { type: WindowType.VOICE_IME },
-      { type: WindowType.MENUBAR, onLoaded: () => initTray() },
+      { type: WindowType.MENUBAR, onLoaded: () => initTray({ onOpenMain: showOrCreateMainWindow }) },
       { type: WindowType.FOCUS_DEMO, onLoaded: win => win.showInactive() },
     ])
   })

@@ -2,9 +2,13 @@ import type { MediaSessionSnapshot } from '@shared'
 
 /**
  * 管理每个渲染进程的媒体会话快照
+ *
+ * 必须持强引用：快照是用户偏好（如关闭系统音频）的唯一存储，
+ * 用 WeakRef 会在任意一次 GC 后悄悄丢失并重建默认值。
+ * 条目的生命周期由窗口 closed 事件里的 deleteSnapshot 负责清理
  */
 export class MediaSessionStore {
-  private readonly snapshots = new Map<number, WeakRef<MediaSessionSnapshot>>()
+  private readonly snapshots = new Map<number, MediaSessionSnapshot>()
 
   /**
    * 读取指定渲染进程的快照
@@ -22,7 +26,7 @@ export class MediaSessionStore {
       ...this.ensureSnapshot(webContentsId),
       ...patch,
     }
-    this.snapshots.set(webContentsId, new WeakRef(next))
+    this.snapshots.set(webContentsId, next)
     return { ...next }
   }
 
@@ -34,22 +38,17 @@ export class MediaSessionStore {
   }
 
   private ensureSnapshot(webContentsId: number): MediaSessionSnapshot {
-    /** 尝试获取现有的快照 */
-    const existingRef = this.snapshots.get(webContentsId)
-    const existingSnapshot = existingRef?.deref()
-
-    /** 如果快照存在且未被 GC 回收，直接返回 */
+    const existingSnapshot = this.snapshots.get(webContentsId)
     if (existingSnapshot) {
       return existingSnapshot
     }
 
-    /** 如果快照不存在或已被 GC 回收，创建新的快照 */
     const newSnapshot: MediaSessionSnapshot = {
       systemAudio: true,
       microphoneAccess: 'unknown',
       screenAccess: 'unknown',
     }
-    this.snapshots.set(webContentsId, new WeakRef(newSnapshot))
+    this.snapshots.set(webContentsId, newSnapshot)
     return newSnapshot
   }
 }
