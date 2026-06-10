@@ -6,7 +6,7 @@ export interface ModalRef {
   hide: () => void
 }
 
-export type ModalVariant = SemanticVariant
+export type ModalVariant = SemanticVariant | 'error'
 
 export type TitleAlign = 'left' | 'center' | 'right'
 
@@ -74,7 +74,8 @@ export interface ModalProps {
   bordered?: boolean
   children?: ReactNode
   /**
-   * @default 50
+   * 自定义层级。不传时由全局栈自动分配递增的 z-index（从 `Z.modal` 起），
+   * 保证后打开的 Modal 始终在更高层
    */
   zIndex?: number
   /**

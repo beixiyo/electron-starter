@@ -4,6 +4,10 @@ import type { Size } from '../../types'
 export interface ToggleItem {
   id: string
   icon: ReactNode
+  /** 激活时显示的内容，未设置则使用 icon */
+  activeIcon?: ReactNode
+  /** 单项激活宽度，优先级高于 StackButton 的 activeWidth */
+  activeWidth?: number | 'auto'
   /** 每一项自定义类名 */
   className?: string
 }
@@ -17,6 +21,8 @@ export interface StackButtonProps {
   defaultActiveId?: string
   /** 激活项变化时的回调 */
   onActiveChange?: (id: string) => void
+  /** 双击某项的回调 */
+  onItemDoubleClick?: (id: string) => void
   /**
    * 尺寸或按钮大小（像素）
    * @default 'md'
@@ -26,6 +32,8 @@ export interface StackButtonProps {
   width?: number
   /** 按钮高度（像素），优先级高于 size */
   height?: number
+  /** 激活项的宽度，'auto' 则 fit-content，未设置则使用 width */
+  activeWidth?: number | 'auto'
   /** 堆叠的非激活按钮之间的重叠边距（负值） */
   overlapMargin?: number
   /** 激活按钮与相邻按钮之间的间距 */
@@ -34,24 +42,6 @@ export interface StackButtonProps {
   borderRadius?: number
   /** 图标大小类名（Tailwind） */
   iconSize?: string
-  /** 图标描边宽度 */
-  iconStrokeWidth?: number
-  /** 激活按钮背景色 */
-  activeBackground?: string
-  /** 非激活按钮背景色 */
-  inactiveBackground?: string
-  /** 激活按钮边框色 */
-  activeBorderColor?: string
-  /** 非激活按钮边框色 */
-  inactiveBorderColor?: string
-  /** 激活图标颜色 */
-  activeIconColor?: string
-  /** 非激活图标颜色 */
-  inactiveIconColor?: string
-  /** 激活按钮阴影 */
-  activeShadow?: string
-  /** 非激活按钮阴影 */
-  inactiveShadow?: string
   /** 布局动画的弹簧刚度 */
   springStiffness?: number
   /** 布局动画的弹簧阻尼 */

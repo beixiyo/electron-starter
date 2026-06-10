@@ -3,17 +3,16 @@
 import type React from 'react'
 import type { PopoverRef } from '../../..'
 import type { VoiceMode } from '../types'
-import { useT } from 'i18n/react'
 import { Check, ChevronDown, FileText, Loader2, Mic, RotateCcw, Square } from 'lucide-react'
 import { memo, useMemo, useRef } from 'react'
 import { cn } from 'utils'
 import { Button, Popover, Tooltip } from '../../..'
+import { useT } from '../../../i18n'
 
 export type VoiceControlStatus = 'idle' | 'recording' | 'processing' | 'review'
 
 export type VoiceControlButtonProps = {
   status: VoiceControlStatus
-  durationLabel: string
   disabled?: boolean
   onClick: () => void
   voiceMode: VoiceMode
@@ -32,7 +31,6 @@ export type VoiceControlButtonProps = {
 export const VoiceControlButton = memo<VoiceControlButtonProps>((props) => {
   const {
     status,
-    durationLabel,
     disabled = false,
     onClick,
     voiceMode,

@@ -1,5 +1,7 @@
 export * from './types'
+export * from './useAutoScrollBottom'
 export * from './useClickOutside'
+export * from './useDoubleKeyDown'
 export * from './useInsertStyle'
 export * from './useMouse'
 export * from './useScroll'

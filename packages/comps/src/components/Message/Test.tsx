@@ -1,5 +1,6 @@
 import { Message } from '.'
 import { Button } from '../Button'
+import { GradientText } from '../GradientText'
 import { ThemeToggle } from '../ThemeToggle'
 
 export default function MessageExample() {
@@ -34,7 +35,7 @@ export default function MessageExample() {
         <Button
           variant="danger"
           onClick={ () => {
-            Message.danger('发生错误')
+            Message.error('发生错误')
           } }
         >
           错误消息
@@ -78,6 +79,63 @@ export default function MessageExample() {
           } }
         >
           对象配置调用
+        </Button>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="success"
+          onClick={ () => {
+            for (let i = 1; i <= 5; i++) {
+              Message.info(`堆叠消息 #${i}`, 5000)
+            }
+          } }
+        >
+          连发 5 条（堆叠）
+        </Button>
+        <Button
+          variant="danger"
+          onClick={ () => {
+            for (let i = 1; i <= 30; i++) {
+              Message.default(`溢出测试 #${i}（超出窗口自动关顶部）`, 8000)
+            }
+          } }
+        >
+          连发 30 条（溢出自动关顶部）
+        </Button>
+      </div>
+
+      { /* content 类型为 ReactNode，可直接传入任意自定义 tsx */ }
+      <div className="flex gap-2">
+        <Button
+          onClick={ () => {
+            Message.default(
+              <GradientText colors={ ['#ffaa40', '#9c40ff', '#ffaa40'] }>
+                自定义 GradientText 内容
+              </GradientText>,
+            )
+          } }
+        >
+          自定义 tsx 内容
+        </Button>
+        <Button
+          onClick={ () => {
+            Message.success({
+              content: (
+                <GradientText
+                  colors={ ['#10b981', '#3b82f6', '#10b981'] }
+                  className="text-base font-bold"
+                >
+                  渐变标题 + 自定义图标
+                </GradientText>
+              ),
+              icon: props => <span { ...props }>🎉</span>,
+              showClose: true,
+              duration: 4000,
+            })
+          } }
+        >
+          tsx 内容 + 配置
         </Button>
       </div>
     </div>

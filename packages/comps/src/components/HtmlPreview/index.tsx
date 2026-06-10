@@ -7,12 +7,11 @@ import { motion } from 'motion/react'
 import { memo, useEffect, useId, useRef, useState } from 'react'
 import { cn, createZIndexStore } from 'utils'
 import { Button } from '../Button'
-import { MacTabDot } from '../MacTabDot'
 import { Moveable } from '../Moveable'
+import { TitleBarButtons } from '../TitleBarButtons'
 import { setIframe } from './tool'
 
 const {
-  getZIndex,
   increaseZindex,
   decreaseZindex,
 } = createZIndexStore()
@@ -118,7 +117,7 @@ export const HtmlPreview = memo<HtmlPreviewProps>(({
           style={ { height: headerHeight } }
         >
           <div className="flex items-center gap-3">
-            <MacTabDot />
+            <TitleBarButtons />
             <h2 className="text-gray-800 dark:text-gray-200">{ title }</h2>
           </div>
 
