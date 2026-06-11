@@ -189,6 +189,7 @@ function setupBrowserWindowLifecycle(): void {
 
 function setupAppActivation(): void {
   app.on('activate', () => {
+    console.log('[dock-test] ===== activate 触发 =====')
     showOrCreateMainWindow()
   })
 }
@@ -197,9 +198,11 @@ function setupAppActivation(): void {
 function showOrCreateMainWindow(): void {
   const mainWindow = windowManager.get(WindowType.MAIN)
   if (mainWindow && !mainWindow.isDestroyed()) {
+    console.log('[dock-test] showOrCreateMainWindow: 主窗口存活，直接 show')
     windowManager.show(WindowType.MAIN)
     return
   }
+  console.log('[dock-test] showOrCreateMainWindow: 主窗口已销毁，重建')
   createMainWindow()
 }
 
@@ -232,7 +235,11 @@ function createSplashWindow(): BrowserWindow {
   return splash
 }
 
+/** [dock-test] 统计 createMainWindow 重入次数 */
+let createMainWindowCount = 0
+
 function createMainWindow(): void {
+  console.log(`[dock-test] createMainWindow 第 ${++createMainWindowCount} 次执行`)
   const splash = createSplashWindow()
 
   const mainWindow = windowManager.create(WindowType.MAIN, {

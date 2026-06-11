@@ -201,18 +201,28 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
   shortcutCleanupFns.push(unsub, clearTimers)
 }
 
+/** [dock-test] 统计 setupFnKeyIpc 注册次数 */
+let fnIpcSetupCount = 0
+
 export function setupFnKeyIpc(mainWindow: BrowserWindow): void {
   /**
    * 主窗口重建（macOS activate）时会再次调用：
    * 先清掉指向旧窗口的转发监听器，避免随重建次数累积
    */
+  const cleanedCount = ipcCleanupFns.length
   for (const fn of ipcCleanupFns) fn()
   ipcCleanupFns.length = 0
 
-  const unsubKey = addFnKeyListener((event) => {
-    if (mainWindow.isDestroyed())
-      return
+  const instanceId = ++fnIpcSetupCount
+  console.log(`[dock-test] setupFnKeyIpc 第 ${instanceId} 次注册：先清理旧监听器 ${cleanedCount} 个，注册后总数恒为 2`)
 
+  const unsubKey = addFnKeyListener((event) => {
+    if (mainWindow.isDestroyed()) {
+      console.log(`[dock-test] fn 转发 #${instanceId}: 目标窗口已销毁（修复后不应出现此日志！出现即 bug）`)
+      return
+    }
+
+    console.log(`[dock-test] fn 转发 #${instanceId}: ${event} → 当前主窗口`)
     if (event === 'down')
       sendFnDownEvent(mainWindow)
     else
