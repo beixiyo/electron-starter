@@ -1,31 +1,30 @@
 import type { ScreenshotBounds } from '@shared'
+import type { IpcMainInvokeEvent } from 'electron'
 import type { ScreenshotContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { endCapture, startCapture } from '@main/screenshot'
+import {
+  handleCancelCapture,
+  handleConfirmCapture,
+  handleSaveCapture,
+  startCapture,
+} from '@main/screenshot'
 
 export const screenshotService = createIpcService<ScreenshotContract>('screenshot', {
-  async startCapture(_e, options) {
-    await startCapture(options)
-    return { success: true }
-  },
-
-  async endCapture(_e) {
-    endCapture()
-    return { success: true }
+  /** 申请截图会话：记录发起方 webContents，返回主进程生成的 captureId */
+  async startCapture(e, options) {
+    const captureId = await startCapture(options, (e as IpcMainInvokeEvent).sender)
+    return { captureId }
   },
 
   async confirmCapture(_e, displayId: number, rect: ScreenshotBounds) {
-    const { handleConfirmCapture } = await import('@main/screenshot')
     return handleConfirmCapture(displayId, rect)
   },
 
   async saveCapture(_e, displayId: number, rect: ScreenshotBounds) {
-    const { handleSaveCapture } = await import('@main/screenshot')
     return handleSaveCapture(displayId, rect)
   },
 
   async cancelCapture(_e) {
-    const { handleCancelCapture } = await import('@main/screenshot')
     return handleCancelCapture()
   },
 })

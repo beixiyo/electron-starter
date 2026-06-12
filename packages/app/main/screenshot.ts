@@ -1,4 +1,11 @@
-import type { ScreenshotBounds, ScreenshotOkPayload } from '@shared'
+import type {
+  ScreenshotBounds,
+  ScreenshotCancelPayload,
+  ScreenshotFallbackTarget,
+  ScreenshotOkPayload,
+  ScreenshotStartOptions,
+} from '@shared'
+import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { is } from '@electron-toolkit/utils'
@@ -11,6 +18,7 @@ import {
   globalShortcut,
   nativeImage,
   screen,
+  webContents,
 } from 'electron'
 import { windowManager } from './window-manager'
 
@@ -20,9 +28,31 @@ type CaptureStore = {
   imageBuffer: Buffer
 }
 
+/**
+ * 截图会话（申请制）：同一时刻仅一个活跃会话
+ *
+ * - 渲染端发起：记录发起方 webContents id，完成/取消事件只定向发回该 webContents
+ * - 全局快捷键发起：无渲染端申请方，按触发时的活跃功能裁决投递窗口与兜底消费方角色
+ */
+type CaptureSession = {
+  /** 主进程生成的会话 id，事件 payload 携带，消费方校验 */
+  captureId: string
+  /** 发起方 webContents id；全局快捷键发起时为 null */
+  ownerWebContentsId: number | null
+  /** 快捷键会话的投递目标窗口（owner 为 null 时使用） */
+  targetWindowType: WindowType | null
+  /** 快捷键会话的兜底消费方角色，随完成事件下发 */
+  fallback?: ScreenshotFallbackTarget
+  /** 调试标识，仅用于日志，不参与路由 */
+  requester?: string
+}
+
 let overlayWindows: BrowserWindow[] = []
 const dimmedWindows: BrowserWindow[] = []
 const captures: Map<number, CaptureStore> = new Map()
+
+/** 当前活跃截图会话，新申请作废旧会话 */
+let currentSession: CaptureSession | null = null
 
 /**
  * 获取 screenshotService 发射器（延迟导入避免循环依赖）
@@ -33,38 +63,19 @@ async function getScreenshotService() {
 }
 
 export async function handleConfirmCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
-  const capture = captures.get(displayId)
-  if (!capture)
+  const result = await cropCaptureForSession(displayId, rect)
+  if (!result)
     return
 
-  const cropped = await cropImage(capture, rect)
-  if (cropped) {
-    clipboard.writeImage(nativeImage.createFromBuffer(cropped))
-    const service = await getScreenshotService()
-    const mainWin = windowManager.get(WindowType.MAIN)
-    if (mainWin && !mainWin.isDestroyed()) {
-      service.emit('ok', {
-        base64: cropped.toString('base64'),
-        bounds: rect,
-      } satisfies ScreenshotOkPayload, mainWin)
-    }
-  }
-
-  closeAllOverlays()
+  clipboard.writeImage(nativeImage.createFromBuffer(result.cropped))
+  await emitCaptureResult(result.session, result.cropped, rect)
+  releaseSession(result.session)
 }
 
 export async function handleSaveCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
-  const capture = captures.get(displayId)
-  if (!capture)
+  const result = await cropCaptureForSession(displayId, rect)
+  if (!result)
     return
-
-  const cropped = await cropImage(capture, rect)
-  if (!cropped) {
-    closeAllOverlays()
-    return
-  }
-
-  closeAllOverlays()
 
   const { canceled, filePath } = await dialog.showSaveDialog({
     defaultPath: `screenshot-${Date.now()}.png`,
@@ -72,35 +83,97 @@ export async function handleSaveCapture(displayId: number, rect: ScreenshotBound
   })
 
   if (!canceled && filePath) {
-    await writeFile(filePath, cropped)
+    await writeFile(filePath, result.cropped)
   }
 
-  const service = await getScreenshotService()
-  const mainWin = windowManager.get(WindowType.MAIN)
-  if (mainWin && !mainWin.isDestroyed()) {
-    service.emit('save', {
-      base64: cropped.toString('base64'),
-      bounds: rect,
-    } satisfies ScreenshotOkPayload, mainWin)
-  }
+  /** 保存到文件不向渲染端投递图片，发 cancel 让发起方清理本地持有的会话 id */
+  await cancelSession(result.session)
 }
 
 export async function handleCancelCapture(): Promise<void> {
   closeAllOverlays()
-  const service = await getScreenshotService()
-  const mainWin = windowManager.get(WindowType.MAIN)
-  if (mainWin && !mainWin.isDestroyed()) {
-    service.emit('cancel', undefined, mainWin)
-  }
+  await cancelCurrentSession()
 }
 
-export async function startCapture(options?: { hideWindows?: string[] }): Promise<void> {
+/**
+ * 确认/保存的共享前奏：快照会话、裁剪选区、关闭覆盖层
+ *
+ * 快照当前会话：await 期间可能有新会话顶替，结果必须归属发起时的会话；
+ * 裁剪失败视作取消（定向通知发起方清理本地会话状态），返回 null
+ */
+async function cropCaptureForSession(
+  displayId: number,
+  rect: ScreenshotBounds,
+): Promise<{ session: CaptureSession, cropped: Buffer } | null> {
+  const session = currentSession
+  const capture = captures.get(displayId)
+  if (!capture || !session)
+    return null
+
+  const cropped = await cropImage(capture, rect)
   closeAllOverlays()
-  captures.clear()
+
+  if (!cropped) {
+    await cancelSession(session)
+    return null
+  }
+
+  return { session, cropped }
+}
+
+/**
+ * 渲染端申请截图会话
+ *
+ * @param options 截图选项（hideWindows / requester 调试标识）
+ * @param owner 发起方 webContents，完成/取消事件只定向发回它
+ * @returns 主进程生成的会话 id
+ */
+export async function startCapture(
+  options?: ScreenshotStartOptions,
+  owner?: Electron.WebContents,
+): Promise<string> {
+  return beginCaptureSession({
+    captureId: randomUUID(),
+    ownerWebContentsId: owner?.id ?? null,
+    targetWindowType: null,
+    requester: options?.requester,
+  }, options)
+}
+
+/**
+ * 全局快捷键（Cmd+Shift+A）发起截图：无渲染端申请方，
+ * 投递给主窗并携带 `main` 兜底角色，由声明了该角色的消费者接收
+ */
+export async function startCaptureFromShortcut(): Promise<string> {
+  return beginCaptureSession({
+    captureId: randomUUID(),
+    ownerWebContentsId: null,
+    targetWindowType: WindowType.MAIN,
+    fallback: 'main',
+    requester: 'global-shortcut',
+  })
+}
+
+/** 注册全局快捷键截图（模板仍走 globalShortcut；下游可迁移到绑定配置体系） */
+export function registerScreenshotShortcut(accelerator: string): void {
+  globalShortcut.register(accelerator, () => {
+    startCaptureFromShortcut()
+  })
+}
+
+/** 建立新会话（作废旧会话并定向通知旧 owner），随后唤起选区覆盖层 */
+async function beginCaptureSession(
+  session: CaptureSession,
+  options?: ScreenshotStartOptions,
+): Promise<string> {
+  closeAllOverlays()
+  await cancelCurrentSession()
+
+  currentSession = session
 
   if (options?.hideWindows?.length) {
     for (const type of options.hideWindows) {
-      const win = windowManager.get(type as WindowType)
+      const win = windowManager.get(type)
       if (win && !win.isDestroyed() && win.isVisible()) {
         win.setOpacity(0)
         dimmedWindows.push(win)
@@ -109,7 +182,6 @@ export async function startCapture(options?: { hideWindows?: string[] }): Promis
   }
 
   const displays = screen.getAllDisplays()
-
   const captureResults = await captureAllDisplays(displays)
 
   for (const result of captureResults) {
@@ -135,16 +207,76 @@ export async function startCapture(options?: { hideWindows?: string[] }): Promis
       }, win)
     })
   }
+
+  return session.captureId
 }
 
-export function endCapture(): void {
-  closeAllOverlays()
+/** 解析会话事件的投递目标窗口：owner webContents 优先，快捷键会话回落到目标窗口 */
+function resolveSessionWindow(session: CaptureSession): BrowserWindow | null {
+  if (session.ownerWebContentsId !== null) {
+    const wc = webContents.fromId(session.ownerWebContentsId)
+    if (!wc || wc.isDestroyed())
+      return null
+    const win = BrowserWindow.fromWebContents(wc)
+    return win && !win.isDestroyed()
+      ? win
+      : null
+  }
+
+  if (session.targetWindowType) {
+    const win = windowManager.get(session.targetWindowType)
+    return win && !win.isDestroyed()
+      ? win
+      : null
+  }
+
+  return null
 }
 
-export function registerScreenshotShortcut(accelerator: string): void {
-  globalShortcut.register(accelerator, () => {
-    startCapture()
-  })
+/** 完成事件：携带 captureId 定向发给会话发起方（彻底废除广播） */
+async function emitCaptureResult(
+  session: CaptureSession,
+  cropped: Buffer,
+  rect: ScreenshotBounds,
+): Promise<void> {
+  const target = resolveSessionWindow(session)
+  if (!target) {
+    console.warn(`[screenshot] capture result dropped: session owner gone (id=${session.captureId})`)
+    return
+  }
+
+  const service = await getScreenshotService()
+  service.emit('ok', {
+    captureId: session.captureId,
+    base64: cropped.toString('base64'),
+    bounds: rect,
+    fallback: session.fallback,
+  } satisfies ScreenshotOkPayload, target)
+}
+
+/** 会话正常结束：仅当它仍是当前会话时清空（可能已被新会话顶替） */
+function releaseSession(session: CaptureSession): void {
+  if (currentSession === session)
+    currentSession = null
+}
+
+/** 作废指定会话并向其发起方定向发 cancel 事件 */
+async function cancelSession(session: CaptureSession): Promise<void> {
+  releaseSession(session)
+  const target = resolveSessionWindow(session)
+  if (!target)
+    return
+
+  const service = await getScreenshotService()
+  service.emit('cancel', {
+    captureId: session.captureId,
+  } satisfies ScreenshotCancelPayload, target)
+}
+
+/** 作废当前会话（用户取消 / 新申请顶替） */
+async function cancelCurrentSession(): Promise<void> {
+  if (currentSession)
+    await cancelSession(currentSession)
 }
 
 function createOverlayWindow(bounds: Electron.Rectangle): BrowserWindow {
