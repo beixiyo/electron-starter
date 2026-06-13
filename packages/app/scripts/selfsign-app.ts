@@ -39,6 +39,10 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 
 /** 生成证书 + 建独立钥匙串 + 加搜索列表（一次性） */
 async function setup() {
+  if (process.platform !== 'darwin') {
+    console.log('⏭  非 macOS，跳过签名环境初始化（codesign / security 仅 macOS 可用）')
+    return
+  }
   await $`rm -rf ${WORK}`.nothrow()
   await $`mkdir -p ${WORK}`
   const key = join(WORK, 'key.pem')
@@ -145,6 +149,10 @@ async function install(appArg?: string) {
 
 /** 清理：还原搜索列表 + 删钥匙串 */
 async function cleanup() {
+  if (process.platform !== 'darwin') {
+    console.log('⏭  非 macOS，跳过清理（无 macOS 钥匙串可清）')
+    return
+  }
   console.log('==> 从搜索列表移除 build 钥匙串')
   await $`security list-keychains -d user -s ${await otherKeychains()}`
   console.log('==> 删除钥匙串')
