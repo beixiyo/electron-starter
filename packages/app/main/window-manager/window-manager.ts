@@ -181,7 +181,9 @@ class WindowManager {
   }
 
   /**
-   * 调整窗口尺寸，水平居中、底边锚定（向上扩展）
+   * 调整窗口尺寸并按锚点重定位：
+   * - `top-right` 窗口（如 RECORDING）：固定右上角，仅向左下伸缩，保持原位（避免居中重算导致窗口跳动）
+   * - 其它窗口：水平居中、底边锚定（向上扩展）
    * animate 仅在 macOS 有原生过渡效果
    */
   resizeTo(type: WindowType, width: number, height: number, animate = false): boolean {
@@ -190,14 +192,24 @@ class WindowManager {
       return false
 
     const current = win.getBounds()
-    const display = screen.getDisplayNearestPoint({
-      x: current.x + current.width / 2,
-      y: current.y + current.height / 2,
-    })
-    const workArea = display.workArea
+    const position = this.metadata.get(type)?.config.position
 
-    const x = Math.round(workArea.x + (workArea.width - width) / 2)
-    const y = current.y + current.height - height
+    let x: number
+    let y: number
+    if (position === 'top-right') {
+      /** 右上角锚点：右边与上边固定，仅向左下伸缩 */
+      x = current.x + current.width - width
+      y = current.y
+    }
+    else {
+      const display = screen.getDisplayNearestPoint({
+        x: current.x + current.width / 2,
+        y: current.y + current.height / 2,
+      })
+      const workArea = display.workArea
+      x = Math.round(workArea.x + (workArea.width - width) / 2)
+      y = current.y + current.height - height
+    }
 
     win.setBounds({ x, y, width, height }, animate)
     return true
