@@ -3,13 +3,13 @@
  * selfsign-app.ts —— 用「自签名证书」给打包后的 .app 一个稳定代码签名身份
  *
  * 为什么需要它：打包默认是 ad-hoc 签名，签名 DR 仅为 cdhash（每次构建都变），
- *   macOS TCC 把「辅助功能」等授权按 DR 记账 → ad-hoc 绑不住 → 授权了也不生效。
- *   自签名证书给 app 一个稳定 DR（identifier + 证书根）→ 授权一次跨重建复用、双击即用。
+ *   macOS TCC 把「辅助功能」等授权按 DR 记账 → ad-hoc 绑不住 → 授权了也不生效
+ *   自签名证书给 app 一个稳定 DR（identifier + 证书根）→ 授权一次跨重建复用、双击即用
  *
- * 关键：只要【证书】和【bundle id】不变，DR 就一字不差 → 已授的权自动沿用，重建后不用重新授权。
+ * 关键：只要【证书】和【bundle id】不变，DR 就一字不差 → 已授的权自动沿用，重建后不用重新授权
  *
  * 边界：自签名【过不了】Gatekeeper / 公证，只适合「本机」。分发到别人电脑必须换正规
- *   Developer ID 证书 + 公证（见 docs/mac-code-signing.md 第四节）。
+ *   Developer ID 证书 + 公证（见 docs/mac-official-signing.md）
  *
  * 用法（bun 执行）：
  *   bun scripts/selfsign-app.ts setup          # 一次性：生成证书 + 建钥匙串 + 加搜索列表
