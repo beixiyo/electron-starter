@@ -16,7 +16,7 @@
     "dev:web": "vite --config vite.config.web.ts",
     "build:native": "bash scripts/build-native.sh",
     "build": "electron-vite build",
-    "postinstall": "npx install-electron --no && electron-builder install-app-deps",
+    "postinstall": "node node_modules/electron/install.js && electron-builder install-app-deps",
     "build:win": "node ./scripts/build-for.mjs --platform=win",
     "build:win:test": "node ./scripts/build-for.mjs --platform=win --mode=test",
     "build:win:prod": "node ./scripts/build-for.mjs --platform=win --mode=production",
