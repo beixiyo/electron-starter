@@ -31,7 +31,8 @@
     "build:unpack:prod": "node ./scripts/build-for.mjs --platform=dir --mode=production && bun scripts/selfsign-app.ts install",
     "sign:setup": "bun scripts/selfsign-app.ts setup",
     "sign:install": "bun scripts/selfsign-app.ts install",
-    "sign:cleanup": "bun scripts/selfsign-app.ts cleanup"
+    "sign:cleanup": "bun scripts/selfsign-app.ts cleanup",
+    "diagnose:mac-permissions": "bash scripts/diagnose-mac-permissions.sh"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "4.2.6",
