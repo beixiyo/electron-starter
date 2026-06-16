@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { access, mkdir, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -9,6 +10,7 @@ import { parseArgs } from 'node:util'
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(__dirname, '../../..')
 const deployDir = resolve(__dirname, '../dist')
+const electronBuilderBin = resolve(__dirname, '../node_modules/.bin/electron-builder')
 const execOpts = {
   cwd: repoRoot,
   stdio: 'inherit',
@@ -42,6 +44,10 @@ const { values: args } = parseArgs({ options, strict: true })
 console.log(`Building for platform: ${args.platform}, mode: ${args.mode}`)
 
 try {
+  if (args.platform === 'mac') {
+    await verifyAppleTimestampService()
+  }
+
   // 1. 清理部署目录
   console.log('Cleaning deployment directory...')
   if (existsSync(deployDir)) {
@@ -87,10 +93,11 @@ try {
   const platformFlag = args.platform === 'dir'
     ? '--dir'
     : `--${args.platform}`
+  const configOverrides = getElectronBuilderConfigOverrides()
 
   execSync(
-    `pnpm exec electron-builder --projectDir "${deployDir}" ${platformFlag}`,
-    execOpts,
+    `"${electronBuilderBin}" --projectDir "${deployDir}" ${platformFlag} ${configOverrides.join(' ')}`,
+    { ...execOpts, cwd: deployDir },
   )
 
   console.log('✅ Build completed successfully')
@@ -98,4 +105,62 @@ try {
 catch (error) {
   console.error('❌ Build failed:', error.message)
   process.exit(1)
+}
+
+async function verifyAppleTimestampService() {
+  if (process.platform !== 'darwin') {
+    return
+  }
+
+  const identity = findDeveloperIdIdentity()
+  if (!identity) {
+    return
+  }
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'electron-codesign-check-'))
+  const tempBin = join(tempDir, 'echo')
+
+  try {
+    await copyFile('/bin/echo', tempBin)
+    execSync(
+      `codesign --sign "${identity}" --force --timestamp --options runtime "${tempBin}"`,
+      { ...execOpts, stdio: 'pipe' },
+    )
+  }
+  catch (error) {
+    const output = `${error.stdout ?? ''}${error.stderr ?? ''}`.trim()
+    throw new Error([
+      'Apple timestamp service is unavailable, macOS notarization builds cannot continue.',
+      output,
+      'This is a network issue before notarization upload. Check DNS first: public DNS such as 8.8.8.8 may bypass a company gateway fake-ip DNS for timestamp.apple.com.',
+    ].filter(Boolean).join('\n'))
+  }
+  finally {
+    await rm(tempDir, { recursive: true, force: true })
+  }
+}
+
+function findDeveloperIdIdentity() {
+  const output = execSync('security find-identity -v -p codesigning', {
+    ...execOpts,
+    stdio: 'pipe',
+    encoding: 'utf8',
+  })
+
+  return output
+    .split('\n')
+    .map(line => line.match(/"([^"]*Developer ID Application:[^"]+)"/)?.[1])
+    .find(Boolean)
+}
+
+function getElectronBuilderConfigOverrides() {
+  if (args.platform !== 'dir' || process.platform !== 'darwin') {
+    return []
+  }
+
+  return [
+    '-c.mac.identity=null',
+    '-c.mac.notarize=false',
+    '-c.mac.forceCodeSigning=false',
+  ]
 }

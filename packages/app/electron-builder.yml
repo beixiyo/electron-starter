@@ -20,7 +20,19 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # 不在模板里写 identity，避免把公司证书名提交到仓库
+  # 正式发布时用 CSC_NAME 指定证书名；不设置时 electron-builder 会从钥匙串自动寻找可用身份
+  entitlements: build/entitlements.mac.plist
+  # Helper / Framework 子进程继承主 app 的签名权限
   entitlementsInherit: build/entitlements.mac.plist
+  # Apple 公证要求启用 hardened runtime
+  hardenedRuntime: true
+  # extraResources 里的 Mach-O helper 需要显式签名
+  binaries:
+    - Contents/Resources/fn-listener
+    - Contents/Resources/focus-check
+    - Contents/Resources/audio-monitor
+    - Contents/Resources/audio-recorder
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
@@ -37,7 +49,8 @@ mac:
       to: audio-monitor
     - from: resources/audio-recorder
       to: audio-recorder
-  notarize: false
+  # 正式分发默认使用 electron-builder 内置公证
+  notarize: true
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

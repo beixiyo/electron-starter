@@ -46,7 +46,39 @@ pnpm -F app build:unpack:prod
 4. `codesign --deep` 重签整个 `.app`
 5. 校验签名
 
+`build:unpack*` 只用于本机假签名。脚本会在 `electron-builder --dir` 阶段显式关闭官方 Developer ID 签名和 Apple 公证：
+
+```text
+-c.mac.identity=null
+-c.mac.notarize=false
+-c.mac.forceCodeSigning=false
+```
+
+因此它不会上传 Apple 公证，也不应该出现 `notarization successful`。正式发布请使用 `build:mac:*`
+
 第一次运行后，到 **系统设置 → 隐私与安全性 → 辅助功能** 给 app 授权。授权后退出并重新打开 app
+
+如果只想手动验证 `electron-builder --dir` 打包结构，不执行后续 `selfsign-app.ts install`，可以运行：
+
+```bash
+cd packages/app
+
+pnpm exec electron-builder \
+  --projectDir "$PWD/dist" \
+  --mac \
+  --dir \
+  --publish never \
+  -c.mac.identity=null \
+  -c.mac.notarize=false \
+  -c.mac.timestamp=none \
+  -c.mac.forceCodeSigning=false
+```
+
+预期看到：
+
+```text
+skipped macOS code signing  reason=identity explicitly is set to null
+```
 
 ## 手动重签已有 app
 

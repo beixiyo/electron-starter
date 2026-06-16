@@ -24,6 +24,8 @@ pnpm -F app build:mac:prod
 
 正式流程需要提前准备 `Developer ID Application` 证书和公证凭证。不要把 `.p12`、`.p8`、证书密码或 Apple ID 应用专用密码提交到仓库
 
+如果正式打包时报 `The timestamp service is not available`，优先检查 macOS Wi-Fi DNS。公共 DNS 可能绕过公司网关的 fake-ip / 透明代理 DNS，导致 Apple timestamp 直连失败；具体排查见正式签名文档的网络章节
+
 ## 核心区别
 
 | 项 | 本机假证书 | 正式 Developer ID |
