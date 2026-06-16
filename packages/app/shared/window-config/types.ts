@@ -61,6 +61,13 @@ export interface WindowConfig extends BrowserWindowConstructorOptions {
    */
   setAlwaysOnTopOnShow?: boolean
   /**
+   * macOS 原生全屏 Space 辅助窗口。
+   * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗。
+   *
+   * @default false
+   */
+  macFullscreenAuxiliary?: boolean
+  /**
    * 是否持久化窗口尺寸/位置
    * 为 true 时：创建时回填上次保存的 bounds（已做屏幕内裁剪），
    * resize / move 时防抖落盘到 userData

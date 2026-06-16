@@ -99,6 +99,134 @@ export const VIEW_SIZE = {
 | `hasShadow: true` 产生方角边框 | 原生阴影沿窗口矩形绘制，不跟 DOM 圆角走 |
 | DevTools 影响透明 | 内嵌 DevTools 会破坏透明度，用 `{ mode: 'detach' }` 分离到独立窗口 |
 
+## macOS 全屏 Space 上的辅助浮窗
+
+### 问题现象
+
+用户点击 macOS 红绿灯最右侧按钮进入原生全屏后，主窗口会被系统放进独立的 fullscreen Space。此时如果长按 Fn 打开 Voice IME 这类独立 Electron 浮窗，可能出现：
+
+- 系统切到一个新的黑屏 Space
+- 浮窗像是被系统另开了一个窗口，而不是贴在全屏主窗口上
+- 主窗口仍在全屏，但 Voice IME 不在同一个 Space 内
+
+这不是 React 渲染问题，也不是 `alwaysOnTop` 不够高。macOS 原生全屏不是普通最大化；普通窗口默认不能加入另一个 fullscreen Space
+
+### 根因
+
+`alwaysOnTop: true` 只影响窗口层级，不会让窗口加入 fullscreen Space。要让同一个 app 的辅助浮窗显示在全屏主窗口上，窗口必须具备 macOS 的 full-screen auxiliary / panel 语义
+
+Apple 对应能力是 `NSWindow.CollectionBehavior.fullScreenAuxiliary`，Electron 对应能力是：
+
+- `BrowserWindow` 使用 `type: 'panel'`
+- 创建后调用 `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`
+- 再调用 `setFullScreenable(false)`，避免辅助窗自己参与原生全屏
+
+### 推荐配置
+
+在窗口配置里给需要覆盖全屏主窗口的浮窗加一个显式开关：
+
+```ts
+// shared/window-config/types.ts
+export interface WindowConfig extends BrowserWindowConstructorOptions {
+  /**
+   * macOS 原生全屏 Space 辅助窗口。
+   * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗。
+   *
+   * @default false
+   */
+  macFullscreenAuxiliary?: boolean
+}
+```
+
+Voice IME 这类窗口启用它：
+
+```ts
+// shared/window-config/constants.ts
+[WindowType.VOICE_IME]: {
+  width: 220,
+  height: 64,
+  position: 'bottom-center',
+  frame: false,
+  transparent: true,
+  backgroundColor: '#00000000',
+  alwaysOnTop: true,
+  skipTaskbar: true,
+  resizable: false,
+  movable: false,
+  focusable: true,
+  hasShadow: false,
+  htmlPath: 'windows/voice-ime/index.html',
+  show: false,
+  macFullscreenAuxiliary: true,
+}
+```
+
+在窗口工厂统一落地 macOS 行为：
+
+```ts
+// main/window-manager/window-factory.ts
+const {
+  position,
+  htmlPath,
+  initialUrl,
+  width: rawWidth,
+  height: rawHeight,
+  macFullscreenAuxiliary,
+  ...browserWindowConfig
+} = config
+
+const browserWindowOptions: BrowserWindowConstructorOptions = {
+  width,
+  height,
+  x,
+  y,
+  frame: browserWindowConfig.frame ?? true,
+  transparent: browserWindowConfig.transparent ?? false,
+  alwaysOnTop: browserWindowConfig.alwaysOnTop ?? true,
+  skipTaskbar: browserWindowConfig.skipTaskbar ?? false,
+  resizable: browserWindowConfig.resizable ?? true,
+  movable: browserWindowConfig.movable ?? true,
+  focusable: browserWindowConfig.focusable ?? true,
+  hasShadow: browserWindowConfig.hasShadow ?? true,
+  ...browserWindowConfig,
+}
+
+if (macFullscreenAuxiliary && process.platform === 'darwin') {
+  browserWindowOptions.type = 'panel'
+}
+
+const window = new BrowserWindow(browserWindowOptions)
+applyMacFullscreenAuxiliary(window, macFullscreenAuxiliary)
+
+function applyMacFullscreenAuxiliary(window: BrowserWindow, enabled?: boolean): void {
+  if (!enabled || process.platform !== 'darwin') {
+    return
+  }
+
+  window.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  })
+  window.setFullScreenable(false)
+}
+```
+
+### 验证方式
+
+1. 完整重启 Electron 主进程。窗口创建参数只在创建时生效，渲染层热更新不够
+2. 点击主窗口绿灯进入 macOS 原生全屏
+3. 长按 Fn 打开 Voice IME
+4. 预期：Voice IME 出现在同一个 fullscreen Space 内，不切到黑屏 Space
+
+### 常见误区
+
+| 误区 | 正确认知 |
+|------|----------|
+| 提高 `alwaysOnTop` level 即可 | `alwaysOnTop` 不负责 Space 归属，仍可能被系统放到别的 Space |
+| 这是透明窗口 CSS 问题 | 黑屏/切 Space 通常发生在 AppKit 窗口管理层，和 DOM 背景透明不是一类问题 |
+| 所有窗口都该开 `visibleOnFullScreen` | 只给 Voice IME、截图蒙层这类确实需要盖在全屏主窗上的辅助浮窗开启 |
+| 创建时设置 `fullscreenable: false` 一定等价 | Electron/macOS 上更稳的顺序是先 `setVisibleOnAllWorkspaces(... visibleOnFullScreen ...)`，再 `setFullScreenable(false)` |
+
 ## 窗口拖拽
 
 无边框窗口没有系统标题栏，需要用 CSS `-webkit-app-region: drag` 手动指定可拖拽区域

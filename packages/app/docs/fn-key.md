@@ -103,6 +103,10 @@ window.$ipc.fn.onDown(() => console.log('fn pressed'))
 window.$ipc.fn.onUp(() => console.log('fn released'))
 ```
 
+### Voice IME 与 macOS 原生全屏
+
+长按 Fn 打开 Voice IME 时，如果主窗口已通过红绿灯进入 macOS 原生全屏，Voice IME 必须按 **full-screen auxiliary / panel** 方式创建，否则可能被系统切到新的黑屏 Space。窗口配置与修复方式见 [`custom-window.md`](./custom-window.md#macos-全屏-space-上的辅助浮窗)
+
 ## 核心文件
 
 | 文件 | 职责 |

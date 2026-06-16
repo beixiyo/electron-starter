@@ -16,6 +16,7 @@ export function createBrowserWindow(
     initialUrl,
     width: rawWidth,
     height: rawHeight,
+    macFullscreenAuxiliary,
     ...browserWindowConfig
   } = config
 
@@ -38,6 +39,10 @@ export function createBrowserWindow(
     ...browserWindowConfig,
   }
 
+  if (macFullscreenAuxiliary && process.platform === 'darwin') {
+    browserWindowOptions.type = 'panel'
+  }
+
   /** 如果是模态窗口，设置父窗口 */
   if (browserWindowOptions.modal && parent) {
     browserWindowOptions.parent = parent
@@ -55,6 +60,7 @@ export function createBrowserWindow(
   }
 
   const window = new BrowserWindow(browserWindowOptions)
+  applyMacFullscreenAuxiliary(window, macFullscreenAuxiliary)
 
   /**
    * blur 时重新置顶，防止部分平台失焦后置顶失效
@@ -120,6 +126,18 @@ export function createBrowserWindow(
   }
 
   return window
+}
+
+function applyMacFullscreenAuxiliary(window: BrowserWindow, enabled?: boolean): void {
+  if (!enabled || process.platform !== 'darwin') {
+    return
+  }
+
+  window.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  })
+  window.setFullScreenable(false)
 }
 
 function clampWindowSize(

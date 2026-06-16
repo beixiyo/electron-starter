@@ -86,6 +86,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     hasShadow: false,
     htmlPath: 'windows/voice-ime/index.html',
     show: false,
+    macFullscreenAuxiliary: true,
     openDevTools: false,
   },
 
