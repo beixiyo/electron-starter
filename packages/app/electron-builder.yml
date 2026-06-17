@@ -34,12 +34,12 @@ mac:
     - Contents/Resources/audio-monitor
     - Contents/Resources/audio-recorder
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSAudioCaptureUsageDescription: Application requests access to system audio for screen recording.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-    - NSAccessibilityUsageDescription: Application requests Accessibility access to detect the focused text field and insert dictated text.
+    NSCameraUsageDescription: Application requests access to the device's camera.
+    NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    NSAudioCaptureUsageDescription: Application requests access to system audio for screen recording.
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSAccessibilityUsageDescription: Application requests Accessibility access to detect the focused text field and insert dictated text.
   extraResources:
     - from: resources/fn-listener
       to: fn-listener

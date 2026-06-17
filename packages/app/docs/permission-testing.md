@@ -112,7 +112,7 @@ DMG="$HOME/Downloads/YourApp.dmg"
 xattr -p com.apple.quarantine "$DMG" 2>/dev/null || echo "no quarantine"
 ```
 
-正常浏览器下载通常会显示 `Safari` 或 `Google Chrome`；如果显示 `Feishu`、`WeChat`、`AppSandbox` 等，不要用这份文件做首次安装验收。
+正常浏览器下载通常会显示 `Safari` 或 `Google Chrome`；如果显示 `Feishu`、`WeChat`、`AppSandbox` 等，不要用这份文件做首次安装验收
 
 完整验收命令：
 
@@ -151,7 +151,7 @@ accepted
 source=Notarized Developer ID
 ```
 
-如果测试机已经执行过 `xattr -cr /Applications/YourApp.app`，这份已安装 App 不能再用于“首次打开是否会被 Gatekeeper 拦截”的测试。需要删除 App，重新从正确渠道下载 `.dmg` 后再测。
+如果测试机已经执行过 `xattr -cr /Applications/YourApp.app`，这份已安装 App 不能再用于“首次打开是否会被 Gatekeeper 拦截”的测试。需要删除 App，重新从正确渠道下载 `.dmg` 后再测
 
 ### 常见现象
 
