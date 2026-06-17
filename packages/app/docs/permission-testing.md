@@ -41,7 +41,7 @@ pnpm -F app diagnose:mac-permissions /Applications/YourApp.app
 重置某个 app id 的全部 TCC 记录：
 
 ```bash
-tccutil reset all "com.example.app"
+tccutil reset All "com.example.app"
 ```
 
 这会清空当前用户下 `com.example.app` 的麦克风、屏幕录制、辅助功能等权限记录；不会卸载 App，不会删除 App 数据，也不会影响终端、Electron 或其他 bundle id
@@ -71,7 +71,7 @@ osascript -e 'id of app "iTerm"'
 重置对应终端：
 
 ```bash
-tccutil reset all "net.kovidgoyal.kitty"
+tccutil reset All "net.kovidgoyal.kitty"
 ```
 
 然后完全退出终端，重新打开并启动：
