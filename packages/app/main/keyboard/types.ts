@@ -22,6 +22,8 @@ export type HoldGlobalShortcutConfig = {
   windowType?: WindowType
   /** 是否显示窗口，默认为 true。如果 windowType 未提供，此选项无效 */
   showWindow?: boolean
+  /** 长按开始前的门禁，例如权限检查；返回 false 时不进入长按态 */
+  canStart?: () => boolean | Promise<boolean>
   /** 松开时的回调函数，接收结果数据 */
   onRelease?: (result: unknown) => void
 }
@@ -40,6 +42,7 @@ export type ShortcutConfig = {
 export type HoldShortcutConfig = {
   windowType?: WindowType
   showWindow?: boolean
+  canStart?: () => boolean | Promise<boolean>
   onRelease?: (result: unknown) => void
 }
 

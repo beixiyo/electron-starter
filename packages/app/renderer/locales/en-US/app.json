@@ -87,6 +87,10 @@
     "granted": "Granted",
     "recordingTitle": "Allow this app to record your meetings",
     "recordingSubtitle": "Grant the permissions below to record properly",
+    "recordingMicrophoneTitle": "Allow recording to use the microphone",
+    "recordingMicrophoneSubtitle": "Microphone access is required before recording. Click the button below, then confirm the macOS permission prompt.",
+    "voiceImeMicrophoneTitle": "Allow voice input to use the microphone",
+    "voiceImeMicrophoneSubtitle": "Voice input needs microphone access to render the live waveform and transcribe audio.",
     "accessibilityTitle": "Allow this app to use Accessibility",
     "accessibilitySubtitle": "Long-press Fn / text selection need Accessibility permission",
     "microphone": {

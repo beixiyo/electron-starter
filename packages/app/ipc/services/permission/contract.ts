@@ -8,4 +8,14 @@ export type PermissionContract = IpcContract<{
   request: (kind: PermissionKind) => PermissionStatus
   /** 打开 macOS 系统隐私设置对应面板 */
   openSettings: (kind: PermissionKind) => boolean
+}, {
+  /** 主进程要求主窗展示应用内权限说明，用户确认后再触发系统授权 */
+  required: PermissionRequiredPayload
 }>
+
+export type PermissionRequiredPayload = {
+  kinds: PermissionKind[]
+  reason: PermissionRequiredReason
+}
+
+export type PermissionRequiredReason = 'recording' | 'voice-ime'

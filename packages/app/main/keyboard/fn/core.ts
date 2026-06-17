@@ -30,6 +30,8 @@ const bridge = new NativeBridge<FnEvents>({
 
 export const startFnKeyListener = () => bridge.start()
 export const stopFnKeyListener = () => bridge.stop()
+export const restartFnKeyListener = () => bridge.restart()
+export const isFnKeyListenerRunning = () => bridge.running
 
 export function addFnKeyListener(listener: (event: FnKeyEvent) => void): () => void {
   return bridge.events.on('key', listener)

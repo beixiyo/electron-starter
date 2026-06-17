@@ -87,6 +87,10 @@
     "granted": "已授权",
     "recordingTitle": "允许应用录制你的会议",
     "recordingSubtitle": "为正常录制，请授予以下权限",
+    "recordingMicrophoneTitle": "允许录音使用麦克风",
+    "recordingMicrophoneSubtitle": "开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。",
+    "voiceImeMicrophoneTitle": "允许语音输入使用麦克风",
+    "voiceImeMicrophoneSubtitle": "唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。",
     "accessibilityTitle": "允许应用使用辅助功能",
     "accessibilitySubtitle": "Fn 长按 / 划词等功能需要辅助功能权限",
     "microphone": {

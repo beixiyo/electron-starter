@@ -111,6 +111,7 @@ export type FnShortcutsConfig = {
   hold?: {
     windowType?: WindowType
     showWindow?: boolean
+    canStart?: () => boolean | Promise<boolean>
     onRelease?: (result: any) => void
   }
   doublePress?: {

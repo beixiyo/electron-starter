@@ -1,15 +1,17 @@
 import { NavLink, Outlet, useLocation } from '@jl-org/react-router'
 import { CollapsibleSidebar } from 'comps'
 import { Bell, Camera, Keyboard } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AccessibilityGate } from '../components/permission'
+import { AccessibilityGate, PermissionModal, usePermissions } from '../components/permission'
 
 /**
  * 主布局组件，包含侧边栏导航
  */
 export default function Layout() {
   const { t } = useTranslation('layout')
+  const { t: tApp } = useTranslation('app')
+  const permissionGate = usePermissions()
   const [isCollapsed, setIsCollapsed] = useState(false)
   const location = useLocation()
 
@@ -18,6 +20,21 @@ export default function Layout() {
     { key: 'shortcuts', path: '/shortcuts', icon: <Keyboard size={ 18 } />, label: t('menu.shortcuts') },
     { key: 'notify-test', path: '/notify-test', icon: <Bell size={ 18 } />, label: t('menu.notifyTest') },
   ]
+
+  useEffect(() => $ipc.permission.on('required', ({ kinds, reason }) => {
+    const title = reason === 'voice-ime'
+      ? tApp('permission.voiceImeMicrophoneTitle', '允许语音输入使用麦克风')
+      : tApp('permission.recordingMicrophoneTitle', '允许录音使用麦克风')
+
+    const subtitle = reason === 'voice-ime'
+      ? tApp('permission.voiceImeMicrophoneSubtitle', '唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。')
+      : tApp('permission.recordingMicrophoneSubtitle', '开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。')
+
+    permissionGate.ensure(kinds, {
+      title,
+      subtitle,
+    })
+  }), [permissionGate.ensure, tApp])
 
   return (
     <main className="h-screen bg-white dark:bg-zinc-950">
@@ -70,6 +87,18 @@ export default function Layout() {
 
       {/* 启动时检查辅助功能权限（Fn 长按 / 划词），缺失则引导开启 */ }
       <AccessibilityGate />
+
+      <PermissionModal
+        isOpen={ permissionGate.open }
+        onClose={ permissionGate.close }
+        kinds={ permissionGate.kinds }
+        statuses={ permissionGate.statuses }
+        title={ permissionGate.title }
+        subtitle={ permissionGate.subtitle }
+        canContinue={ permissionGate.canContinue }
+        onRequest={ permissionGate.requestOne }
+        onContinue={ permissionGate.close }
+      />
     </main>
   )
 }

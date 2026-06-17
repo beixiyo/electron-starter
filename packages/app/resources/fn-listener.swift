@@ -54,6 +54,32 @@ func output(_ msg: String) {
   }
 }
 
+func isAccessibilityTrusted(prompt: Bool) -> Bool {
+  let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+  let options = [key: prompt] as CFDictionary
+  return AXIsProcessTrustedWithOptions(options)
+}
+
+if CommandLine.arguments.contains("--check-accessibility") {
+  if isAccessibilityTrusted(prompt: false) {
+    output("ACCESSIBILITY_TRUSTED")
+    exit(0)
+  }
+
+  fputs("ACCESSIBILITY_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
+
+if CommandLine.arguments.contains("--prompt-accessibility") {
+  if isAccessibilityTrusted(prompt: true) {
+    output("ACCESSIBILITY_TRUSTED")
+    exit(0)
+  }
+
+  fputs("ACCESSIBILITY_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
+
 // 从事件 flags 中提取修饰符，排除 fn/secondaryFn 本身
 func modifierSuffix(from event: CGEvent) -> String {
   var mods: [String] = []
@@ -131,9 +157,9 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   return Unmanaged.passUnretained(event)  // 始终透传，不拦截任何按键
 }
 
-// 需要「辅助功能」权限（主进程已为 focus-check / 自动打字申请）
+// 需要「辅助功能」权限（主进程会同时为 app 与 helper 申请）
 // 未授权时仅告警，仍尝试建 tap —— 建失败会走下面 TAP_CREATE_FAILED 分支退出
-if !AXIsProcessTrusted() {
+if !isAccessibilityTrusted(prompt: true) {
   fputs("ACCESSIBILITY_NOT_TRUSTED\n", stderr)
 }
 

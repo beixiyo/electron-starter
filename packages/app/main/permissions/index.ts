@@ -1,7 +1,9 @@
 import type { PermissionKind, PermissionStatus } from '@shared'
+import { execFileSync } from 'node:child_process'
 import { ensureMediaAccess, getMediaAccessStatus } from '@main/media'
 import { logWarn } from '@main/utils/logger'
 import { desktopCapturer, shell, systemPreferences } from 'electron'
+import { getNativeBinaryPath } from '../native-bridge'
 
 /** macOS 各权限对应的隐私设置面板 URL */
 const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
@@ -21,7 +23,7 @@ export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
     if (process.platform !== 'darwin') {
       return 'granted'
     }
-    return systemPreferences.isTrustedAccessibilityClient(false)
+    return systemPreferences.isTrustedAccessibilityClient(false) && isFnListenerAccessibilityTrusted()
       ? 'granted'
       : 'denied'
   }
@@ -44,10 +46,11 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     }
     /** 传 true 会触发系统授权弹窗（首次）；非首次需用户去设置勾选 */
     const trusted = systemPreferences.isTrustedAccessibilityClient(true)
-    if (!trusted) {
+    const helperTrusted = requestFnListenerAccessibility()
+    if (!trusted || !helperTrusted) {
       openPrivacySettings('accessibility')
     }
-    return trusted
+    return trusted && helperTrusted
       ? 'granted'
       : 'denied'
   }
@@ -86,6 +89,30 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     openPrivacySettings(kind)
   }
   return result
+}
+
+function isFnListenerAccessibilityTrusted(): boolean {
+  try {
+    execFileSync(getNativeBinaryPath('fn-listener'), ['--check-accessibility'], {
+      stdio: 'ignore',
+    })
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
+function requestFnListenerAccessibility(): boolean {
+  try {
+    execFileSync(getNativeBinaryPath('fn-listener'), ['--prompt-accessibility'], {
+      stdio: 'ignore',
+    })
+    return true
+  }
+  catch {
+    return false
+  }
 }
 
 /**

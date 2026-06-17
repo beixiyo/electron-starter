@@ -91,6 +91,11 @@ export class NativeBridge<T extends Record<string, any>> {
     this.child.kill()
     this.child = null
   }
+
+  restart(): void {
+    this.stop()
+    this.start()
+  }
 }
 
 type NativeBridgeConfig<T extends Record<string, any>> = {

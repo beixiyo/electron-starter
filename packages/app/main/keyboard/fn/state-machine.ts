@@ -28,6 +28,7 @@ const DECIDING_MS = FN_DOUBLE_PRESS_INTERVAL_MS
 type State
   = | 'IDLE'
     | 'DECIDING'
+    | 'HOLD_PENDING'
     | 'WAIT_DOUBLE'
     | 'HOLD_ACTIVE'
     | 'DOUBLE_DONE'
@@ -88,15 +89,26 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
     shortcutCleanupFns.push(unsubCombo)
   }
 
-  const enterHoldActive = () => {
+  const enterHoldActive = async () => {
     if (suspended) {
       state = 'IDLE'
       return
     }
 
-    state = 'HOLD_ACTIVE'
-
     if (hold) {
+      state = 'HOLD_PENDING'
+
+      if (hold.canStart && !(await hold.canStart())) {
+        state = 'IDLE'
+        return
+      }
+
+      if (state !== 'HOLD_PENDING') {
+        return
+      }
+
+      state = 'HOLD_ACTIVE'
+
       const { windowType, showWindow = true } = hold
       holdStateManager.startHold({
         type: windowType,
@@ -110,7 +122,10 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
         }
       }
       sendHoldStartEvent(windowType)
+      return
     }
+
+    state = 'HOLD_ACTIVE'
   }
 
   const exitHoldActive = () => {
@@ -129,7 +144,7 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
           decidingTimer = setTimeout(() => {
             decidingTimer = null
             if (state === 'DECIDING') {
-              enterHoldActive()
+              void enterHoldActive()
             }
           }, DECIDING_MS)
           break
@@ -181,6 +196,11 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
           else {
             state = 'IDLE'
           }
+          break
+        }
+
+        case 'HOLD_PENDING': {
+          state = 'IDLE'
           break
         }
 

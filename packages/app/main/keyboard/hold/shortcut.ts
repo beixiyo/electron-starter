@@ -23,6 +23,7 @@ function handleHoldPress(
   windowType: WindowType | undefined,
   onRelease: ((result: unknown) => void) | undefined,
   showWindow: boolean,
+  canStart: (() => boolean | Promise<boolean>) | undefined,
 ): void {
   if (activeHoldAccelerators.has(accelerator)) {
     return
@@ -30,7 +31,22 @@ function handleHoldPress(
 
   activeHoldAccelerators.add(accelerator)
 
+  void startHoldPress(accelerator, windowType, onRelease, showWindow, canStart)
+}
+
+async function startHoldPress(
+  accelerator: string,
+  windowType: WindowType | undefined,
+  onRelease: ((result: unknown) => void) | undefined,
+  showWindow: boolean,
+  canStart: (() => boolean | Promise<boolean>) | undefined,
+): Promise<void> {
   try {
+    if (canStart && !(await canStart())) {
+      activeHoldAccelerators.delete(accelerator)
+      return
+    }
+
     holdStateManager.startHold({ type: windowType, onRelease, showWindow })
 
     if (showWindow && windowType) {
@@ -74,7 +90,7 @@ function handleHoldPress(
 }
 
 export function registerHoldGlobalShortcut(config: HoldGlobalShortcutConfig): boolean {
-  const { accelerator, windowType, onRelease, showWindow = true } = config
+  const { accelerator, windowType, onRelease, showWindow = true, canStart } = config
 
   try {
     registerHoldReleaseDetector(accelerator)
@@ -96,7 +112,7 @@ export function registerHoldGlobalShortcut(config: HoldGlobalShortcutConfig): bo
   }
 
   const success = globalShortcut.register(accelerator, () => {
-    handleHoldPress(accelerator, windowType, onRelease, showWindow)
+    handleHoldPress(accelerator, windowType, onRelease, showWindow, canStart)
   })
 
   if (success) {
@@ -104,6 +120,7 @@ export function registerHoldGlobalShortcut(config: HoldGlobalShortcutConfig): bo
       windowType,
       onRelease,
       showWindow,
+      canStart,
     })
     const logInfo = formatShortcutLogInfo({
       shortcutType: '长按全局快捷键',

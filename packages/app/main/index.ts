@@ -22,6 +22,7 @@ import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { setupOAuthInterceptor } from './oauth-interceptor'
+import { ensureMicrophonePermissionOrExplain } from './permission-required'
 import { registerScreenshotShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import { readShortcutBindings } from './store/shortcut-bindings'
@@ -152,6 +153,7 @@ function setupVoiceImeHoldShortcut(): void {
   registerHoldGlobalShortcut({
     accelerator: SHORTCUTS.HOLD_VOICE_IME.accelerator,
     windowType: SHORTCUTS.HOLD_VOICE_IME.windowType,
+    canStart: () => ensureMicrophonePermissionOrExplain('voice-ime'),
     onRelease: handleVoiceImeRelease,
   })
 }
@@ -330,7 +332,11 @@ function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
 
   registerFnShortcuts({
     hold: bindings.voiceDictation?.type === 'hold'
-      ? { windowType: WindowType.VOICE_IME, onRelease: handleVoiceImeRelease }
+      ? {
+          windowType: WindowType.VOICE_IME,
+          canStart: () => ensureMicrophonePermissionOrExplain('voice-ime'),
+          onRelease: handleVoiceImeRelease,
+        }
       : undefined,
 
     doublePress: bindings.askFlowtica?.type === 'doublePress'
