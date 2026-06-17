@@ -7,7 +7,7 @@
 以 Swift 子进程监听 Fn/Globe 键，通过 **`CGEvent.tapCreate(tap: .cghidEventTap, options: .defaultTap)`**（HID 层的主动事件 tap）读取，**只需「辅助功能」权限，不需要「输入监控」**
 
 - Fn 键在 `flagsChanged` 事件里以 `keyCode == 63`（kVK_Function）出现，配合 `maskSecondaryFn` 标志判断按下/松开
-- Fn+Key 组合：Fn 按住期间带 `maskSecondaryFn` 的 `keyDown` → 输出 `FN_COMBO_<key>`
+- Fn+Key 组合：先收到 Fn 自身的 `flagsChanged` 按下边沿，再在 Fn 按住期间处理 `keyDown` → 输出 `FN_COMBO_<key>`
 - 选 **HID 层**（而非 session 层 / NSEvent）的原因：HID 层在「Karabiner 虚拟键盘剥标志」和「系统按🌐键消费 Globe」之前，所以即便开着 Karabiner 也能稳读、标志也完好
 
 ## 首次配置（开发者）
@@ -54,7 +54,7 @@ Swift 子进程 (CGEventTap .cghidEventTap)
 ### Fn 判定与防误判
 
 - **按下/松开**：`flagsChanged` 中 `keyCode == 63`，优先用 `maskSecondaryFn` 标志判定；标志缺失（如被 Karabiner 剥掉）时退回翻转
-- **组合键**：带 `maskSecondaryFn` 的 `keyDown` → `FN_COMBO_<key>`；另设 0.6s 时间窗，兼容 Karabiner 下标志被剥的场景
+- **组合键**：`keyDown` 不能单靠 `maskSecondaryFn` 推导 Fn 按下，因为方向键、Home/End、PageUp/PageDown 等 navigation key 自身也可能携带 function 类标志；必须先由 `keyCode == 63` 的 `flagsChanged` 确认 Fn 已按下，再输出 `FN_COMBO_<key>`。另设 0.6s 时间窗，兼容 Karabiner 下标志被剥的场景
 - **防污染**：无 `maskSecondaryFn` 的普通打字会强制清零 Fn 按下态并补发 `FN_UP`，杜绝掉边沿后把正常输入误判成组合键
 
 ### 支持的 combo 键

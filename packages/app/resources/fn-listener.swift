@@ -12,7 +12,7 @@ import CoreGraphics
 // Fn 键判定：
 //   - 在 Karabiner 等环境下 CGEventFlags.maskSecondaryFn 会被剥掉（恒为 0），不可靠
 //   - 可靠信号是 flagsChanged 事件里的 keyCode == 63 (kVK_Function)
-//   - flagsChanged 按下发一次、松开发一次，用一个布尔翻转(toggle)即可得到 down/up
+//   - flagsChanged 按下发一次、松开发一次，用一个布尔翻转(toggle) 即可得到 down/up
 //
 // 对外协议（与旧 IOHID 版完全一致，主进程零改动）：
 //   FN_DOWN / FN_UP / FN_COMBO_<key>
@@ -65,11 +65,12 @@ func modifierSuffix(from event: CGEvent) -> String {
   return mods.isEmpty ? "" : ":" + mods.joined(separator: ",")
 }
 
-// Fn 按下态。优先信任 maskSecondaryFn 标志（非 Karabiner 机器可靠）；标志被剥时退回 keyCode==63 翻转。
+// Fn 按下态。只由 keyCode==63 的 flagsChanged 更新；keyDown 上的 maskSecondaryFn 不能单独推导 Fn 按下
+// 原因：方向键、Home/End、PageUp/PageDown 等 function/navigation key 自身也可能带类似标志
 // 组合键识别：
-//   - 有标志的 keydown → 直接判组合（非 Karabiner，零误判）
+//   - 已确认 Fn 按下 + 有标志的 keydown → 直接判组合（非 Karabiner，零误判）
 //   - 无标志的 keydown：仅在「Fn 刚按下 FN_COMBO_WINDOW_SEC 内」才判组合（兼容 Karabiner），
-//     超窗即清零并补 FN_UP，杜绝把正常打字误判成组合键、并自愈掉边沿后的卡死态。
+//     超窗即清零并补 FN_UP，杜绝把正常打字误判成组合键、并自愈掉边沿后的卡死态
 let FN_COMBO_WINDOW_SEC = 0.6
 var fnDown = false
 var fnDownAt = 0.0
@@ -104,12 +105,12 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   // 普通按键 keydown
   if type == .keyDown {
     if hasFnFlag {
-      // 带 Fn 标志 = 真实 Fn+组合键（非 Karabiner）。确认按下态并识别组合
-      if !fnDown {
-        fnDown = true
-        fnDownAt = nowSec()
-        output("FN_DOWN")
+      // 带 Fn 标志不等于物理 Fn 已按下：方向键等 navigation key 自身也可能带该标志
+      // 因此必须先收到 keyCode==63 的 flagsChanged，才能把 keydown 视为 Fn+ 组合键
+      guard fnDown else {
+        return Unmanaged.passUnretained(event)
       }
+
       if let keyName = COMBO_KEYS[keyCode] {
         output("FN_COMBO_\(keyName)\(modifierSuffix(from: event))")
       }
@@ -130,7 +131,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   return Unmanaged.passUnretained(event)  // 始终透传，不拦截任何按键
 }
 
-// 需要「辅助功能」权限（主进程已为 focus-check / 自动打字申请）。
+// 需要「辅助功能」权限（主进程已为 focus-check / 自动打字申请）
 // 未授权时仅告警，仍尝试建 tap —— 建失败会走下面 TAP_CREATE_FAILED 分支退出
 if !AXIsProcessTrusted() {
   fputs("ACCESSIBILITY_NOT_TRUSTED\n", stderr)

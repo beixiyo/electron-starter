@@ -102,7 +102,7 @@ CGEvent.tapCreate(
 ```
 
 - **Fn 判定**：`flagsChanged` 中 `keyCode == 63`（kVK_Function）。优先用 `maskSecondaryFn` 标志判 down/up（HID 层标志可靠）；标志缺失时退回翻转（兜底极端情况）
-- **组合键**：带 `maskSecondaryFn` 的 `keyDown` → `FN_COMBO_<key>`；**无标志的普通打字强制清零 `fnDown` 并补 `FN_UP`** —— 杜绝掉边沿后把正常打字误判成组合键（这是早期翻转法的污染 bug，已修）。另加 0.6s 时间窗，让 Karabiner 下的 Fn+Space 也能识别
+- **组合键**：必须先由 `keyCode == 63` 的 `flagsChanged` 确认 Fn 已按下，再把 `keyDown` 识别为 `FN_COMBO_<key>`；不能单靠 `keyDown` 上的 `maskSecondaryFn`，因为方向键等 function/navigation key 自身也可能携带这类标志。**无标志的普通打字强制清零 `fnDown` 并补 `FN_UP`** —— 杜绝掉边沿后把正常打字误判成组合键（这是早期翻转法的污染 bug，已修）。另加 0.6s 时间窗，让 Karabiner 下的 Fn+Space 也能识别
 - **键名映射**：回调里用 **虚拟键码 `kVK_*`**（如 `Space=49`），不是 HID usage —— 这是从 IOHID 迁到 CGEvent 时最容易踩的坑
 - **健壮性**：处理 `tapDisabledByTimeout/UserInput` 自动重启 tap；回调始终 `return Unmanaged.passUnretained(event)` 透传不拦截；每 5s 检测父进程存活（`getppid()==1` 退出）
 - **对外协议不变**：`FN_DOWN` / `FN_UP` / `FN_COMBO_<key>`，`core.ts` 与 `shortcuts.ts` 无需改动
