@@ -2,6 +2,8 @@
 
 本文档说明 Electron macOS 包的两条签名路径：本机假证书和正式 Apple 证书
 
+权限测试、`tccutil` 重置和开发模式终端授权说明见 [permission-testing.md](./permission-testing.md)
+
 | 场景 | 用途 | 能否分发给别人 | 文档 |
 |---|---|---|---|
 | 本机假证书 / 自签名 | 让 TCC 权限稳定，解决打包后辅助功能、Fn 监听等授权反复失效 | 否 | [mac-local-self-signing.md](./mac-local-self-signing.md) |
