@@ -3,6 +3,7 @@ import { createServiceClient } from '@ipc/core'
 
 export const windowClient = createServiceClient<WindowContract>('window', [
   'create',
+  'openOAuth',
   'show',
   'hide',
   'toggle',

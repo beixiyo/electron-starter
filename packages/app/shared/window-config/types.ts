@@ -46,6 +46,12 @@ export type WindowPosition
 export interface WindowConfig extends BrowserWindowConstructorOptions {
   position?: WindowPosition
   /**
+   * 是否挂载应用预加载脚本
+   *
+   * @default true
+   */
+  useAppPreload?: boolean
+  /**
    * 本地 HTML 入口。若提供 initialUrl，则可以省略
    */
   htmlPath?: string
@@ -61,8 +67,8 @@ export interface WindowConfig extends BrowserWindowConstructorOptions {
    */
   setAlwaysOnTopOnShow?: boolean
   /**
-   * macOS 原生全屏 Space 辅助窗口。
-   * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗。
+   * macOS 原生全屏 Space 辅助窗口
+   * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗
    *
    * @default false
    */

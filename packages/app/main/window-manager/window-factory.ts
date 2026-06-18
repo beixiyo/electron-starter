@@ -16,6 +16,7 @@ export function createBrowserWindow(
     initialUrl,
     width: rawWidth,
     height: rawHeight,
+    useAppPreload = true,
     macFullscreenAuxiliary,
     ...browserWindowConfig
   } = config
@@ -50,12 +51,16 @@ export function createBrowserWindow(
 
   /** 设置 webPreferences */
   browserWindowOptions.webPreferences = {
-    preload: is.dev
-      ? resolve(__dirname, '../preload/index.cjs')
-      : join(app.getAppPath(), 'out', 'preload', 'index.cjs'),
+    ...(useAppPreload
+      ? {
+          preload: is.dev
+            ? resolve(__dirname, '../preload/index.cjs')
+            : join(app.getAppPath(), 'out', 'preload', 'index.cjs'),
+        }
+      : {}),
     nodeIntegration: false,
     contextIsolation: true,
-    sandbox: false, // 禁用沙箱模式，允许预加载脚本访问更多 Node.js API
+    sandbox: !useAppPreload,
     ...config?.webPreferences,
   }
 

@@ -35,10 +35,9 @@ export default function LoginPage() {
     if (isElectron()) {
       try {
         const googleUrl = buildGoogleAuthorizeUrl()
-        await $ipc.window.destroy(WindowType.OAUTH)
-        await $ipc.window.create(WindowType.OAUTH, {
-          initialUrl: googleUrl,
-        })
+        const result = await $ipc.window.openOAuth(googleUrl)
+        if (!result.success)
+          throw new Error(result.error)
       }
       catch (error) {
         Message.danger(t('messages.loginFailed'))
@@ -78,10 +77,9 @@ export default function LoginPage() {
     if (isElectron()) {
       try {
         const appleUrl = buildAppleAuthorizeUrl()
-        await $ipc.window.destroy(WindowType.OAUTH)
-        await $ipc.window.create(WindowType.OAUTH, {
-          initialUrl: appleUrl,
-        })
+        const result = await $ipc.window.openOAuth(appleUrl)
+        if (!result.success)
+          throw new Error(result.error)
       }
       catch (error) {
         Message.danger(t('messages.loginFailed'))

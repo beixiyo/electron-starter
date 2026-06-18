@@ -3,6 +3,7 @@ import type { WindowBounds, WindowConfig, WindowMetadata, WindowType } from '@sh
 
 export type WindowContract = IpcContract<{
   create: (type: WindowType, configOverride?: Partial<WindowConfig>) => { success: boolean, windowId?: number, error?: string }
+  openOAuth: (url: string) => { success: boolean, windowId?: number, error?: string }
   show: (type: WindowType) => { success: boolean }
   hide: (type: WindowType) => { success: boolean }
   toggle: (type: WindowType) => { success: boolean, visible: boolean }

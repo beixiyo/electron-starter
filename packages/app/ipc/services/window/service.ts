@@ -1,12 +1,20 @@
-import type { WindowBounds, WindowConfig, WindowType } from '@shared'
+import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { holdStateManager } from '@main/keyboard'
 import { windowManager } from '@main/window-manager'
+import { WindowType } from '@shared'
 
 export const windowService = createIpcService<WindowContract>('window', {
   create: async (_event, type: WindowType, configOverride?: Partial<WindowConfig>) => {
     try {
+      if (type === WindowType.OAUTH) {
+        return {
+          success: false,
+          error: 'OAuth windows must be opened through openOAuth',
+        }
+      }
+
       const window = windowManager.create(type, configOverride)
       return {
         success: true,
@@ -15,6 +23,36 @@ export const windowService = createIpcService<WindowContract>('window', {
     }
     catch (error) {
       console.error(`创建窗口失败 [${type}]:`, error)
+      return {
+        success: false,
+        error: error instanceof Error
+          ? error.message
+          : 'Unknown error',
+      }
+    }
+  },
+
+  openOAuth: async (_event, url: string) => {
+    try {
+      if (!isAllowedOAuthUrl(url)) {
+        return {
+          success: false,
+          error: 'Invalid OAuth URL',
+        }
+      }
+
+      windowManager.destroy(WindowType.OAUTH)
+      const window = windowManager.create(WindowType.OAUTH, {
+        initialUrl: url,
+      })
+
+      return {
+        success: true,
+        windowId: window?.id,
+      }
+    }
+    catch (error) {
+      console.error('打开 OAuth 窗口失败:', error)
       return {
         success: false,
         error: error instanceof Error
@@ -97,3 +135,21 @@ export const windowService = createIpcService<WindowContract>('window', {
     return { bounds }
   },
 })
+
+function isAllowedOAuthUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    if (url.protocol !== 'https:')
+      return false
+
+    return OAUTH_ALLOWED_HOSTS.has(url.hostname)
+  }
+  catch {
+    return false
+  }
+}
+
+const OAUTH_ALLOWED_HOSTS = new Set([
+  'accounts.google.com',
+  'appleid.apple.com',
+])

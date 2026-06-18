@@ -103,6 +103,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     focusable: true,
     show: true,
     initialUrl: 'about:blank',
+    useAppPreload: false,
   },
 
   [WindowType.SELECTION]: {
