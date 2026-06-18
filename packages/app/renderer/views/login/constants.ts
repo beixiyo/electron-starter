@@ -1,4 +1,4 @@
-import { APPLE_OAUTH_URL, buildOAuthUrl } from '@jl-org/auth'
+import { APPLE_OAUTH_URL, buildOAuthUrl, GOOGLE_OAUTH_URL } from '@jl-org/auth'
 import { isElectron } from '@/utils/env'
 
 export const GOOGLE_CLIENT_ID = isElectron()
@@ -21,6 +21,7 @@ export const APPLE_SCOPE = isElectron()
 export const APPLE_STATE = isElectron()
   ? import.meta.env.VITE_ELECTRON_APPLE_STATE
   : import.meta.env.VITE_WEB_APPLE_STATE
+export const GOOGLE_SCOPE = 'openid email profile'
 
 export function buildClientContext() {
   const clientName = isElectron()
@@ -52,5 +53,17 @@ export function buildAppleAuthorizeUrl() {
     redirect_uri: APPLE_REDIRECT_URI,
     scope: APPLE_SCOPE,
     response_mode: 'form_post',
+  })
+}
+
+export function buildGoogleAuthorizeUrl() {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
+    throw new Error('Google OAuth 配置缺失')
+  }
+
+  return buildOAuthUrl(GOOGLE_OAUTH_URL, {
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    scope: GOOGLE_SCOPE,
   })
 }

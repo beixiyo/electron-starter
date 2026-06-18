@@ -1,5 +1,6 @@
 import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
 import { useNavigate } from '@jl-org/react-router'
+import type { OAuthCallbackParams } from '@shared'
 import { WindowType } from '@shared'
 import { Button, Message } from 'comps'
 import { ClientType } from 'http-api'
@@ -13,7 +14,7 @@ import { UserActions } from '@/store/user'
 import { isElectron } from '@/utils/env'
 import AppleIcon from '../../assets/svg/apple.svg?react'
 import { EmailModal } from './components/EmailModal'
-import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI, APPLE_SCOPE, APPLE_STATE, buildAppleAuthorizeUrl, buildClientContext, GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from './constants'
+import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI, APPLE_SCOPE, APPLE_STATE, buildAppleAuthorizeUrl, buildClientContext, buildGoogleAuthorizeUrl, GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from './constants'
 
 export default function LoginPage() {
   const { t } = useTranslation('login')
@@ -31,6 +32,21 @@ export default function LoginPage() {
   }, [navigate, t])
 
   const handleGoogleLogin = async () => {
+    if (isElectron()) {
+      try {
+        const googleUrl = buildGoogleAuthorizeUrl()
+        await $ipc.window.destroy(WindowType.OAUTH)
+        await $ipc.window.create(WindowType.OAUTH, {
+          initialUrl: googleUrl,
+        })
+      }
+      catch (error) {
+        Message.danger(t('messages.loginFailed'))
+        console.error(error)
+      }
+      return
+    }
+
     try {
       const clientContext = buildClientContext()
       const data = await googlePopupCodeLogin({
@@ -132,21 +148,27 @@ export default function LoginPage() {
       return
     }
 
-    const cleanup = $ipc.oauth.on('callback', async (params: { code?: string, provider?: string }) => {
-      if (params.provider !== 'apple' || !params.code) {
+    const cleanup = $ipc.oauth.on('callback', async (params: OAuthCallbackParams) => {
+      if (params.provider !== 'apple' && params.provider !== 'google') {
+        return
+      }
+
+      if (params.error || !params.code) {
+        Message.danger(t('messages.loginFailed'))
+        console.error('OAuth callback failed:', params)
+        await $ipc.window.destroy(WindowType.OAUTH)
         return
       }
 
       try {
-        setAppleLoading(true)
+        setAppleLoading(params.provider === 'apple')
         const clientContext = buildClientContext()
         const userData = await api.user.oauthLogin({
           authorization_code: params.code,
           ...clientContext,
-          platform: 'apple',
-          client_type: isElectron()
-            ? ClientType.Desktop
-            : ClientType.Web,
+          platform: params.provider,
+          /** 该回调仅在 Electron 端注册（上方已 isElectron 守卫），固定为 Desktop */
+          client_type: ClientType.Desktop,
         })
 
         if (userData?.id) {
@@ -213,7 +235,6 @@ export default function LoginPage() {
               variant="default"
               size="lg"
               block
-              disabled
               onClick={ handleGoogleLogin }
               leftIcon={ <Chrome size={ 22 } /> }
               className="gap-4"

@@ -45,7 +45,7 @@ export function setupOAuthInterceptor(mainWindow: BrowserWindow): void {
         const data = getUrlQuery(`${url.href}?${str}`, url.href)
         console.log(data)
 
-        const provider = detectProvider(details.url, appleRedirectOrigin, googleRedirectOrigin)
+        const provider = detectProvider(details.url, rawApple, rawGoogle)
 
         sendOAuthCallback(mainWindow, {
           ...data,
@@ -66,16 +66,24 @@ export function setupOAuthInterceptor(mainWindow: BrowserWindow): void {
 
 function detectProvider(
   url: string,
-  appleOrigin: string | null,
-  googleOrigin: string | null,
+  appleRedirectUri: string | null,
+  googleRedirectUri: string | null,
 ): OAuthCallbackParams['provider'] {
-  if (appleOrigin && url.startsWith(appleOrigin)) {
+  if (appleRedirectUri && isCallbackUrl(url, appleRedirectUri)) {
     return 'apple'
   }
-  if (googleOrigin && url.startsWith(googleOrigin)) {
+  if (googleRedirectUri && isCallbackUrl(url, googleRedirectUri)) {
     return 'google'
   }
   return undefined
+}
+
+function isCallbackUrl(url: string, redirectUri: string) {
+  const callbackUrl = new URL(url)
+  const targetUrl = new URL(redirectUri)
+
+  return callbackUrl.origin === targetUrl.origin
+    && callbackUrl.pathname === targetUrl.pathname
 }
 
 function closeOAuthWindowIfNeeded(provider: OAuthCallbackParams['provider']) {
