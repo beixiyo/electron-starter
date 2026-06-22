@@ -2,8 +2,8 @@ import type { WindowConfig } from './types'
 import { WindowType } from '../types/window'
 
 /**
- * 透明窗口留给 CSS shadow 的单侧边距。
- * 阴影远层 blur=24px + offset-y=8px，最远扩散 32px，取 30 作为安全值。
+ * 透明窗口留给 CSS shadow 的单侧边距
+ * 阴影远层 blur=24px + offset-y=8px，最远扩散 32px，取 30 作为安全值
  */
 export const SHADOW_INSET = 30
 
@@ -97,7 +97,13 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     title: 'OAuth Login',
     frame: true,
     transparent: false,
-    modal: true,
+    /**
+     * 必须为非模态：macOS 上「parent + modal」会被渲染成贴在主窗上的
+     * sheet 面板，没有标题栏和红绿灯，用户无法关闭/最小化
+     * 非模态独立窗口自带系统标题栏三键；OAuth 回调走 session 级
+     * webRequest 拦截（main/oauth-interceptor.ts），与窗口形态无关
+     */
+    modal: false,
     alwaysOnTop: false,
     movable: true,
     focusable: true,
