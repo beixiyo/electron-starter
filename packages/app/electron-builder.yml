@@ -14,6 +14,9 @@ asarUnpack:
 
 win:
   executableName: electron-app
+  # 安装包签名后，electron-updater 会用 publisherName 校验下载包的 Authenticode 证书
+  # 用了代码签名证书时需设为证书的 CN，否则正版签名包也可能被拒：
+  # publisherName: "Your Company, Inc."
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -54,6 +57,8 @@ mac:
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
+  # 自动更新支持差异：AppImage 支持增量自动更新；deb 仅全量自动更新（且需运行时有 dpkg/apt）；
+  # snap 不走 electron-updater，由 snap store 自行刷新——别把 snap 包传到上面的 publish 服务器
   target:
     - AppImage
     - snap
@@ -63,6 +68,13 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
+# ── 自动更新发布配置 ───────────────────────────────────────────────
+# 只要存在 publish 配置，构建时就会在 dist/ 生成 latest*.yml 与 .blockmap（增量下载所需）
+# generic provider 不会自动上传，需把 dist/ 下「安装包 + latest*.yml + .blockmap」一并传到 url
+# 要求：托管服务器必须支持 HTTP Range（响应 Accept-Ranges: bytes），否则增量下载回退为全量
+# 详见 docs/update/。下面是兜底默认值；打包时若 env 设了 UPDATE_PUBLISH_URL
+# 或 GCS_PUBLIC_BASE_URL，build-for.mjs 会用 `-c.publish.url` 覆盖它注入安装包，
+# 不必手改这里（推荐用 env，避免把地址写死/写错进仓库）
 publish:
   provider: generic
   url: https://example.com/auto-updates

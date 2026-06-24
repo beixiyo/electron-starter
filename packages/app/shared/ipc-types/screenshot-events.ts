@@ -17,7 +17,7 @@ export type ScreenshotInitPayload = {
  * 全局快捷键截图（无渲染端申请方）的兜底消费方角色
  *
  * 主进程在快捷键触发时按当前活跃功能裁决投递目标，并在完成事件 payload 上携带该角色；
- * 渲染端无人持有该 captureId，由声明了对应 `fallbackRole` 的消费者接收。
+ * 渲染端无人持有该 captureId，由声明了对应 `fallbackRole` 的消费者接收
  *
  * 模板内置 `main`（投递给主窗），下游项目按需扩展为联合类型（如 `'recorderNote' | 'askWindow'`）
  */

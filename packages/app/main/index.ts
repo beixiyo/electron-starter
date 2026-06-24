@@ -6,6 +6,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { focusDemoService } from '@ipc/services/focus-demo/service'
 import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
 import { shortcutTestService } from '@ipc/services/shortcut-test/service'
+import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
   APP_PROTOCOL,
@@ -66,6 +67,12 @@ initDeeplink(() => {
 
   initSelectionHook()
   registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
+
+  /**
+   * 初始化自动更新（仅桥接 autoUpdater 事件 → IPC，不自动检查）
+   * 配好正式更新服务器后，可改为 initAutoUpdater({ checkOnStart: true }) 启动即检查
+   */
+  initAutoUpdater()
 
   if (process.platform === 'darwin') {
     startFocusCheckPolling()

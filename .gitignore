@@ -10,7 +10,9 @@ lerna-debug.log*
 
 node_modules
 dist
+.env
 .env.*
+!.env.example
 out
 dist-ssr
 *.local
@@ -27,10 +29,10 @@ dist-ssr
 *.sw?
 
 # compiled binaries
-packages/app/resources/fn-listener
-packages/app/resources/focus-check
 packages/app/resources/audio-monitor
 packages/app/resources/audio-recorder
+packages/app/resources/fn-listener
+packages/app/resources/focus-check
 
 # build
 *.tsbuildinfo

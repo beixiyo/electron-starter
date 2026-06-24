@@ -32,6 +32,16 @@
     "sign:setup": "bun scripts/selfsign-app.ts setup",
     "sign:install": "bun scripts/selfsign-app.ts install",
     "sign:cleanup": "bun scripts/selfsign-app.ts cleanup",
+    "update:build:mac": "node ./scripts/build-for.mjs --platform=mac --mode=test --localUpdate --localUpdatePayloadKb=4096",
+    "update:build:mac:next": "bun scripts/create-local-update-feed.ts --buildOnly",
+    "update:serve": "bun scripts/serve-update-feed.ts",
+    "update:serve:slow": "bun scripts/serve-update-feed.ts --rateKbps=512",
+    "update:feed:mac": "bun scripts/create-local-update-feed.ts",
+    "update:feed:mac:current": "pnpm run update:build:mac && pnpm run update:serve:slow",
+    "update:upload:gcs": "bun scripts/upload-gcs-update-feed.ts",
+    "update:feed:mac:gcs": "bun scripts/create-local-update-feed.ts --upload",
+    "update:feed:mac:selfsign": "bun scripts/create-local-update-feed.ts --selfSign",
+    "update:feed:mac:selfsign:gcs": "bun scripts/create-local-update-feed.ts --selfSign --upload",
     "diagnose:mac-permissions": "bash scripts/diagnose-mac-permissions.sh"
   },
   "dependencies": {

@@ -68,9 +68,11 @@ packages/app/
 │
 ├── docs/              # 功能文档（必读）
 │   ├── fn-key.md      # Fn 键监听原理与 API
-│   └── focus-check.md # 文本焦点检测原理与 API
+│   ├── focus-check.md # 文本焦点检测原理与 API
+│   └── update/        # 应用自动更新（electron-updater）：机制、三档测试、发布托管
 │
 └── env/               # 环境变量
+    ├── .env.example   # 模板（含更新发布 GCS 配置），复制为 .env 使用
     ├── .env.development
     └── .env.production
 ```
@@ -156,13 +158,13 @@ pnpm build:focus-check   # → resources/focus-check
 4. 在主进程入口或使用处导入 `service.ts`（核心服务加到 `ipc/services/index.ts`，按需服务在使用处导入）
 5. 在 `preload/index.ts` 通过 Context Bridge 暴露客户端（`window.$ipc`）
 
-**渲染进程通过 `window.$ipc.xxx` 调用，不要直接使用 `ipcRenderer`。**
+**渲染进程通过 `window.$ipc.xxx` 调用，不要直接使用 `ipcRenderer`**
 
 ---
 
 ## 广播通信（Broadcast）
 
-> 仅限 **renderer 进程**使用，基于浏览器原生 `BroadcastChannel` API，**不经过主进程**，适合多渲染进程间的轻量状态同步。
+> 仅限 **renderer 进程**使用，基于浏览器原生 `BroadcastChannel` API，**不经过主进程**，适合多渲染进程间的轻量状态同步
 > 代码位置：`renderer/broadcast/`（不在 `shared/`，因为含浏览器专属 API）
 
 ### 核心 API
@@ -269,7 +271,7 @@ pnpm build:unpack
 - `env/.env.development` — 开发环境（API 地址、WS 地址）
 - `env/.env.production` — 生产环境
 
-**私密配置（API Key、认证信息）不得硬编码，放入 env 文件并加入 .gitignore。**
+**私密配置（API Key、认证信息）不得硬编码，放入 env 文件并加入 .gitignore**
 
 ---
 

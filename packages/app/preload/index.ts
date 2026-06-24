@@ -11,6 +11,7 @@ import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
 import { shortcutTestClient } from '@ipc/services/shortcut-test/client'
+import { updateClient } from '@ipc/services/update/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
 import { contextBridge } from 'electron'
@@ -30,6 +31,7 @@ export const ipc = {
   screenshot: screenshotClient,
   meetingDetection: meetingDetectionClient,
   notification: notificationClient,
+  update: updateClient,
 }
 
 if (process.contextIsolated) {

@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from '@jl-org/react-router'
 import { CollapsibleSidebar } from 'comps'
-import { Bell, Camera, Keyboard } from 'lucide-react'
+import { Bell, Camera, DownloadCloud, Keyboard } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccessibilityGate, PermissionModal, usePermissions } from '../components/permission'
@@ -19,6 +19,7 @@ export default function Layout() {
     { key: 'recorder', path: '/recorder', icon: <Camera size={ 18 } />, label: t('menu.recorder') },
     { key: 'shortcuts', path: '/shortcuts', icon: <Keyboard size={ 18 } />, label: t('menu.shortcuts') },
     { key: 'notify-test', path: '/notify-test', icon: <Bell size={ 18 } />, label: t('menu.notifyTest') },
+    { key: 'update', path: '/update', icon: <DownloadCloud size={ 18 } />, label: t('menu.update') },
   ]
 
   useEffect(() => $ipc.permission.on('required', ({ kinds, reason }) => {

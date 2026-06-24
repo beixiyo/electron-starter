@@ -1,3 +1,9 @@
+# 开发环境（electron-vite dev）联调更新用的 feed 配置（回退用）
+# initAutoUpdater 在 is.dev 下置 forceDevUpdateConfig=true 激活 updater
+#
+# 更新源优先从 env 取（env/.env 里的 UPDATE_PUBLISH_URL / GCS_PUBLIC_BASE_URL / UPDATE_BUCKET…），
+# 由 service.ts 用 setFeedURL 设入；只有 env 全空时才回退读本文件
+# 所以联调 GCS 直接填 env 即可；这里默认指向本地静态服务器（update:serve:slow）
 provider: generic
-url: https://example.com/auto-updates
+url: http://127.0.0.1:8788
 updaterCacheDirName: electron-app-updater

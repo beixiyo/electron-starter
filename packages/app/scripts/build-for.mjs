@@ -1,18 +1,24 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { access, copyFile, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { loadEnv } from '@jl-org/tool/node'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(__dirname, '../../..')
+const appDir = resolve(__dirname, '..')
 const deployDir = resolve(__dirname, '../dist')
 const electronBuilderBin = resolve(__dirname, '../node_modules/.bin/electron-builder')
 const packageFilter = process.env.PACKAGE_FILTER || 'app'
 const timestampCheckTempPrefix = process.env.TIMESTAMP_CHECK_TEMP_PREFIX || 'electron-codesign-check-'
+
+/** 从 packages/app/env 读取 .env，让打包时能注入 publish.url（未设 NODE_ENV 时读 .env） */
+loadEnv({ envDir: resolve(appDir, 'env') })
 
 const execOpts = {
   cwd: repoRoot,
@@ -40,14 +46,35 @@ const options = {
     short: 's',
     description: 'Skip build and prepare steps',
   },
+  localUpdate: {
+    type: 'boolean',
+    default: false,
+    description: 'Build a local auto-update feed without macOS notarization',
+  },
+  localUpdatePayloadKb: {
+    type: 'string',
+    default: '0',
+    description: 'Write a random payload into local update builds so differential progress is visible',
+  },
+  selfSign: {
+    type: 'boolean',
+    default: false,
+    description: 'Sign the macOS feed with the local self-signed identity (sign:setup) instead of Apple notarization — same-machine restart-and-install test',
+  },
 }
 
 const { values: args } = parseArgs({ options, strict: true })
 
-console.log(`Building for platform: ${args.platform}, mode: ${args.mode}`)
+/** 自签证书名，与 selfsign-app.ts 保持一致 */
+const SELF_SIGN_IDENTITY = process.env.SIGN_CERT_NAME || 'Local CodeSign'
+
+/** localUpdate 与 selfSign 都属于「免 Apple 公证」的本地更新构建 */
+const isLocalFeedBuild = args.localUpdate || args.selfSign
+
+console.log(`Building for platform: ${args.platform}, mode: ${args.mode}, localUpdate: ${args.localUpdate}, selfSign: ${args.selfSign}`)
 
 try {
-  if (args.platform === 'mac') {
+  if (args.platform === 'mac' && !isLocalFeedBuild) {
     verifyMacNotarizationCredentials()
     await verifyAppleTimestampService()
   }
@@ -71,6 +98,7 @@ try {
 
     console.log('Running build...')
     execSync(`pnpm -F ${packageFilter} build --mode ${args.mode}`, execOpts)
+    await writeLocalUpdatePayload()
 
     console.log('Preparing deployment...')
     /** 部署包 */
@@ -97,7 +125,7 @@ try {
   const platformFlag = args.platform === 'dir'
     ? '--dir'
     : `--${args.platform}`
-  const configOverrides = getElectronBuilderConfigOverrides()
+  const configOverrides = [...getPublishOverrides(), ...getElectronBuilderConfigOverrides()]
 
   execSync(
     `"${electronBuilderBin}" --projectDir "${deployDir}" ${platformFlag} ${configOverrides.join(' ')}`,
@@ -112,6 +140,20 @@ try {
 catch (error) {
   console.error('❌ Build failed:', error.message)
   process.exit(1)
+}
+
+async function writeLocalUpdatePayload() {
+  // 与 --localUpdate 解耦：只要显式传了正数 payloadKb 就写随机内容，
+  // 这样签名公证的真实更新包也能制造相邻版本差异，模拟增量下载
+  const payloadKb = Number(args.localUpdatePayloadKb)
+  if (!Number.isFinite(payloadKb) || payloadKb <= 0)
+    return
+
+  const payloadBytes = Math.round(payloadKb * 1024)
+  const payloadPath = join(appDir, 'out', 'local-update-payload.bin')
+
+  console.log(`Writing local update payload: ${payloadKb} KB`)
+  await writeFile(payloadPath, randomBytes(payloadBytes))
 }
 
 async function verifyAppleTimestampService() {
@@ -160,16 +202,63 @@ function findDeveloperIdIdentity() {
     .find(Boolean)
 }
 
+/**
+ * 把更新发布地址注入安装包：electron-builder 会据此生成 app-update.yml，
+ * 客户端只认这个烧进去的地址。取值优先级（与 upload-gcs 脚本保持一致）：
+ *   UPDATE_PUBLISH_URL > GCS_PUBLIC_BASE_URL > 由 UPDATE_BUCKET/UPDATE_PREFIX 推导
+ * 都没有则沿用 electron-builder.yml 里的 publish.url（CLI -c 覆盖优先级高于 yml）
+ */
+function getPublishOverrides() {
+  const publishUrl = process.env.UPDATE_PUBLISH_URL
+    || process.env.GCS_PUBLIC_BASE_URL
+    || deriveGcsBaseUrl()
+  if (!publishUrl)
+    return []
+
+  console.log(`Overriding publish.url -> ${publishUrl}`)
+  return [`-c.publish.url=${publishUrl}`]
+}
+
+/** 仅有 UPDATE_BUCKET（+可选 UPDATE_PREFIX）时，推导出 GCS 公开地址 */
+function deriveGcsBaseUrl() {
+  const bucket = process.env.UPDATE_BUCKET
+  if (!bucket)
+    return ''
+
+  const prefix = (process.env.UPDATE_PREFIX || 'desktop').replace(/^\/+|\/+$/g, '')
+  return prefix
+    ? `https://storage.googleapis.com/${bucket}/${prefix}`
+    : `https://storage.googleapis.com/${bucket}`
+}
+
 function getElectronBuilderConfigOverrides() {
-  if (args.platform !== 'dir' || process.platform !== 'darwin') {
+  if (process.platform !== 'darwin') {
     return []
   }
 
-  return [
-    '-c.mac.identity=null',
-    '-c.mac.notarize=false',
-    '-c.mac.forceCodeSigning=false',
-  ]
+  /**
+   * 自签 feed：用本地自签证书（sign:setup 生成）在构建期签进 zip，跳过 Apple 公证
+   * 新旧版本用同一证书 → Squirrel 校验签名连续性通过 → 本机可测「重启并安装」
+   * 证书名含空格，必须加引号，否则拼进命令行会被拆成两个参数
+   */
+  if (args.platform === 'mac' && args.selfSign) {
+    return [
+      `-c.mac.identity="${SELF_SIGN_IDENTITY}"`,
+      '-c.mac.notarize=false',
+      '-c.mac.forceCodeSigning=true',
+    ]
+  }
+
+  /** dir 解包 / 本地 ad-hoc feed：不签名（仅下载联调，或交给 selfsign-app.ts 事后签） */
+  if (args.platform === 'dir' || (args.platform === 'mac' && args.localUpdate)) {
+    return [
+      '-c.mac.identity=null',
+      '-c.mac.notarize=false',
+      '-c.mac.forceCodeSigning=false',
+    ]
+  }
+
+  return []
 }
 
 function verifyMacNotarizationCredentials() {
@@ -214,7 +303,7 @@ async function cleanupMacIntermediateApps() {
 }
 
 async function notarizeMacDistributionArtifacts() {
-  if (args.platform !== 'mac') {
+  if (args.platform !== 'mac' || isLocalFeedBuild) {
     return
   }
 

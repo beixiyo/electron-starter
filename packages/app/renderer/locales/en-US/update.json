@@ -1,0 +1,24 @@
+{
+  "title": "App Updates",
+  "pageHint": "Demonstrates the auto-update flow: check, download and restart to install",
+  "currentVersion": "Current version v{{version}}",
+  "webUnsupported": "Updating is only available in the desktop app",
+  "newVersion": "New version v{{version}} available",
+  "upToDate": "You are on the latest version",
+  "errorHint": "Update failed. Check the update feed or try again later.",
+  "status": {
+    "idle": "Not checked",
+    "checking": "Checking",
+    "available": "Update available",
+    "not-available": "Up to date",
+    "downloading": "Downloading",
+    "downloaded": "Ready to install",
+    "error": "Error"
+  },
+  "actions": {
+    "check": "Check for updates",
+    "download": "Download update",
+    "install": "Restart & install",
+    "retry": "Retry"
+  }
+}
