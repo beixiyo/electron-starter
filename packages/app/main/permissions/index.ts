@@ -56,32 +56,36 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
   }
 
   if (kind === 'screen') {
+    if (getMediaAccessStatus('screen') === 'granted') {
+      return 'granted'
+    }
+
+    /**
+     * 屏幕录制权限没有真正的 not-determined 态：从未授权的机器上
+     * `getMediaAccessStatus('screen')` 直接返回 'denied'（Electron #36722 / #35039）
+     * 因此不能用 status 区分「从未询问」与「已拒绝」，只要未授予就主动发起一次真实捕获，
+     * 让系统把 App 注册进「屏幕录制」列表（首次会弹窗，已拒绝则静默但条目已落入列表）
+     */
+    try {
+      await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 64, height: 64 },
+      })
+    }
+    catch (error) {
+      logWarn('触发屏幕录制授权时发生错误', {
+        module: 'permissions',
+        operation: 'requestPermission',
+        context: { error: String(error) },
+      })
+    }
+
     const status = getMediaAccessStatus('screen')
-    if (status === 'granted') {
-      return status
+    if (status !== 'granted') {
+      /** 此时 App 已在列表中，用户只需拨动开关，无需手动搜索添加 */
+      openPrivacySettings('screen')
     }
-
-    if (status === 'not-determined') {
-      /** 触发系统屏幕录制授权弹窗 */
-      try {
-        await desktopCapturer.getSources({
-          types: ['screen'],
-          thumbnailSize: { width: 1, height: 1 },
-        })
-      }
-      catch (error) {
-        logWarn('触发屏幕录制授权时发生错误', {
-          module: 'permissions',
-          operation: 'requestPermission',
-          context: { error: String(error) },
-        })
-      }
-      return getMediaAccessStatus('screen')
-    }
-
-    /** denied / restricted：打开系统隐私设置 */
-    openPrivacySettings('screen')
-    return getMediaAccessStatus('screen')
+    return status
   }
 
   const result = await ensureMediaAccess(kind)
