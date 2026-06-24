@@ -39,6 +39,8 @@
     "update:feed:mac": "bun scripts/create-local-update-feed.ts",
     "update:feed:mac:current": "pnpm run update:build:mac && pnpm run update:serve:slow",
     "update:upload:gcs": "bun scripts/upload-gcs-update-feed.ts",
+    "update:upload:gcs:test": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.test",
+    "update:upload:gcs:prod": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.production",
     "update:feed:mac:gcs": "bun scripts/create-local-update-feed.ts --upload",
     "update:feed:mac:selfsign": "bun scripts/create-local-update-feed.ts --selfSign",
     "update:feed:mac:selfsign:gcs": "bun scripts/create-local-update-feed.ts --selfSign --upload",
@@ -47,7 +49,7 @@
   "dependencies": {
     "@nut-tree-fork/nut-js": "4.2.6",
     "electron-screenshots": "^0.6.1",
-    "electron-updater": "^6.3.9",
+    "electron-updater": "^6.8.9",
     "node-screenshots": "^0.2.8",
     "selection-hook": "^1.0.13",
     "uiohook-napi": "^1.5.4"

@@ -17,9 +17,6 @@ const electronBuilderBin = resolve(__dirname, '../node_modules/.bin/electron-bui
 const packageFilter = process.env.PACKAGE_FILTER || 'app'
 const timestampCheckTempPrefix = process.env.TIMESTAMP_CHECK_TEMP_PREFIX || 'electron-codesign-check-'
 
-/** 从 packages/app/env 读取 .env，让打包时能注入 publish.url（未设 NODE_ENV 时读 .env） */
-loadEnv({ envDir: resolve(appDir, 'env') })
-
 const execOpts = {
   cwd: repoRoot,
   stdio: 'inherit',
@@ -64,6 +61,13 @@ const options = {
 }
 
 const { values: args } = parseArgs({ options, strict: true })
+
+/**
+ * 按构建模式加载更新发布环境变量（注入 publish.url 用）：
+ * build:mac:test 读 env/.env.test、build:mac:prod 读 env/.env.production。
+ * 缺对应文件时静默跳过，回退到 electron-builder.yml 的兜底 url
+ */
+loadEnv({ envDir: resolve(appDir, 'env'), envPath: `.env.${args.mode}` })
 
 /** 自签证书名，与 selfsign-app.ts 保持一致 */
 const SELF_SIGN_IDENTITY = process.env.SIGN_CERT_NAME || 'Local CodeSign'

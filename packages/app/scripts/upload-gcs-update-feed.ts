@@ -48,6 +48,10 @@ const { values } = parseArgs({
   strict: true,
 })
 
+/**
+ * 按 --envPath 指定的环境文件加载（如 .env.test / .env.production），与构建注入的地址同一服；
+ * 不传时按 loadEnv 默认规则（NODE_ENV → .env.<NODE_ENV>，否则 .env）
+ */
 loadEnv({
   envDir: resolve(String(values.envDir)),
   envPath: values.envPath

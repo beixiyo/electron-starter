@@ -1,10 +1,10 @@
 import type { UpdateContract, UpdateInfoLite, UpdateStatus, UpdateStatusEvent } from './contract'
-import { readFileSync } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { createIpcService } from '@ipc/core'
+import { loadEnv } from '@jl-org/tool/node'
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
 
@@ -14,7 +14,12 @@ import electronUpdater from 'electron-updater'
  * 按官方建议从 default 导出解构（electron-builder#7976）
  */
 const { autoUpdater } = electronUpdater
-const UPDATER_CACHE_DIR_NAME = 'electron-app-updater'
+/**
+ * electron-updater 的本地缓存目录名，pending 安装包落在 `<cache>/<此目录>/pending/`
+ * 默认由 electron-builder 按 package.json 的 `name` 推导为 `<name>-updater`（本项目 name=`app` → `app-updater`），
+ * 仅用于「原生 download-progress 不触发时」的落盘进度兜底；必须与打包产物 app-update.yml 里的 `updaterCacheDirName` 一致
+ */
+const UPDATER_CACHE_DIR_NAME = 'app-updater'
 
 /**
  * 应用更新 IPC 服务（主进程实现）
@@ -171,52 +176,22 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
 }
 
 /**
- * dev 模式下从 `env/.env` 解析更新源地址，取值优先级与 `build-for.mjs` 注入 publish.url 一致：
+ * dev 模式下从 `env/.env.development` 解析更新源地址，取值优先级与 `build-for.mjs` 注入 publish.url 一致：
  *   UPDATE_PUBLISH_URL > GCS_PUBLIC_BASE_URL > 由 UPDATE_BUCKET/UPDATE_PREFIX 推导
  * 读不到任何一项时返回 undefined，调用方回退到 `dev-app-update.yml`
  */
 function resolveDevFeedUrlFromEnv(): string | undefined {
-  const env = { ...process.env, ...readEnvFile(join(process.cwd(), 'env', '.env')) }
+  loadEnv({ envDir: join(process.cwd(), 'env'), envPath: '.env.development' })
 
-  const bucket = env.UPDATE_BUCKET
-  const prefix = (env.UPDATE_PREFIX || 'desktop').replace(/^\/+|\/+$/g, '')
+  const bucket = process.env.UPDATE_BUCKET
+  const prefix = (process.env.UPDATE_PREFIX || 'desktop').replace(/^\/+|\/+$/g, '')
   const derived = bucket
     ? `https://storage.googleapis.com/${bucket}${prefix
       ? `/${prefix}`
       : ''}`
     : ''
 
-  return env.UPDATE_PUBLISH_URL || env.GCS_PUBLIC_BASE_URL || derived || undefined
-}
-
-/** 极简 .env 解析（仅 dev 用，避免为此引入运行时依赖）；文件不存在或出错返回空对象 */
-function readEnvFile(path: string): Record<string, string> {
-  try {
-    const result: Record<string, string> = {}
-
-    for (const line of readFileSync(path, 'utf8').split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#'))
-        continue
-
-      const eq = trimmed.indexOf('=')
-      if (eq === -1)
-        continue
-
-      const key = trimmed.slice(0, eq).trim()
-      let value = trimmed.slice(eq + 1).split('#')[0].trim()
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\'')))
-        value = value.slice(1, -1)
-
-      if (key)
-        result[key] = value
-    }
-
-    return result
-  }
-  catch {
-    return {}
-  }
+  return process.env.UPDATE_PUBLISH_URL || process.env.GCS_PUBLIC_BASE_URL || derived || undefined
 }
 
 function getFallbackBytesPerSecond(

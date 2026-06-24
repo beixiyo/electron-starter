@@ -128,8 +128,8 @@ finally {
 assertGeneratedFeed(targetVersion)
 
 if (values.upload) {
-  /** 上传到 GCS，地址与凭据来自 env/.env（GCP_PROJECT / UPDATE_BUCKET / ...） */
-  run('bun', ['./scripts/upload-gcs-update-feed.ts'])
+  /** 上传到 GCS，按构建 mode 选环境文件（与 build-for 注入的 publish.url 同一服），缺则回退 env/.env */
+  run('bun', ['./scripts/upload-gcs-update-feed.ts', `--envPath=.env.${values.mode}`])
 }
 else if (!values.buildOnly) {
   run('bun', [
