@@ -69,8 +69,8 @@ initDeeplink(() => {
   registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
 
   /**
-   * 初始化自动更新（仅桥接 autoUpdater 事件 → IPC，不自动检查）
-   * 配好正式更新服务器后，可改为 initAutoUpdater({ checkOnStart: true }) 启动即检查
+   * 初始化自动更新：桥接 autoUpdater 事件 → IPC，并默认启动后 ~10s 首检、每 4h 轮询
+   * 发现新版本会通过 status 事件让渲染端自动弹出更新窗。可传 { pollIntervalMs: 0 } 关闭轮询
    */
   initAutoUpdater()
 

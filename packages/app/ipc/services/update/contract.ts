@@ -31,6 +31,8 @@ export interface UpdateInfoLite {
   releaseDate?: string
   /** 更新说明，仅当元数据里是纯字符串时透传 */
   releaseNotes?: string
+  /** 安装包字节数，下载前即可展示「约 xx MB」；元数据缺失时为 undefined */
+  size?: number
 }
 
 /**

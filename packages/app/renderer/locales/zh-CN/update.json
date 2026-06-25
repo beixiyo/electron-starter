@@ -6,6 +6,15 @@
   "newVersion": "发现新版本 v{{version}}",
   "upToDate": "已经是最新版本",
   "errorHint": "更新失败，请检查更新源配置或稍后重试",
+  "modal": {
+    "title": "应用更新",
+    "checking": "正在检查更新…",
+    "upToDate": "已经是最新版本",
+    "restartHint": "重启应用即可完成安装。",
+    "size": "大小",
+    "releaseDate": "发布于",
+    "changelog": "更新内容"
+  },
   "status": {
     "idle": "未检查",
     "checking": "检查中",
@@ -19,6 +28,9 @@
     "check": "检查更新",
     "download": "下载更新",
     "install": "重启并安装",
-    "retry": "重试"
+    "retry": "重试",
+    "later": "稍后",
+    "background": "后台下载",
+    "close": "关闭"
   }
 }

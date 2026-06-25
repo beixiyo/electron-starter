@@ -103,6 +103,8 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
     autoInstallOnAppQuit = true,
     checkOnStart = false,
     disableDifferentialDownload = false,
+    initialCheckDelayMs = 10_000,
+    pollIntervalMs = 4 * 60 * 60 * 1000,
   } = options
 
   /** 默认关闭自动下载，交由 UI 让用户确认后再 `download()`，避免静默占用带宽 */
@@ -169,10 +171,21 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
     emitStatus('error', { error: normalizeError(error) })
   })
 
-  if (checkOnStart) {
-    /** 首检失败（如离线 / 占位 URL）只记录，不抛到顶层 */
+  /** 静默检查：失败（如离线 / 占位 URL）只忽略，不抛到顶层；结果通过 status 事件驱动 UI（含自动弹窗） */
+  const silentCheck = (): void => {
     void autoUpdater.checkForUpdates().catch(() => {})
   }
+
+  if (checkOnStart)
+    silentCheck()
+
+  /** 启动后延迟首检：避开启动高峰，不阻塞窗口呈现 */
+  if (initialCheckDelayMs > 0)
+    setTimeout(silentCheck, initialCheckDelayMs)
+
+  /** 周期轮询：长驻应用期间定时探测新版本（设 0 关闭） */
+  if (pollIntervalMs > 0)
+    setInterval(silentCheck, pollIntervalMs)
 }
 
 /**
@@ -359,12 +372,16 @@ function emitStatus(status: UpdateStatus, extra?: Omit<UpdateStatusEvent, 'statu
 }
 
 /** 把 electron-updater 的 UpdateInfo 归一化为可序列化的精简结构 */
-function toLite(info: { version: string, releaseDate?: string, releaseNotes?: unknown }): UpdateInfoLite {
+function toLite(info: UpdateInfoWithFiles & { version: string, releaseDate?: string, releaseNotes?: unknown }): UpdateInfoLite {
+  const size = getPendingDownloadTarget(info)?.total
   return {
     version: info.version,
     releaseDate: info.releaseDate,
     releaseNotes: typeof info.releaseNotes === 'string'
       ? info.releaseNotes
+      : undefined,
+    size: size && size > 0
+      ? size
       : undefined,
   }
 }
@@ -410,6 +427,16 @@ export interface InitAutoUpdaterOptions {
    * @default false
    */
   disableDifferentialDownload?: boolean
+  /**
+   * 启动后延迟多少毫秒做首次检查（避开启动高峰）；设 0 关闭
+   * @default 10000
+   */
+  initialCheckDelayMs?: number
+  /**
+   * 周期轮询检查的间隔毫秒数；设 0 关闭周期轮询
+   * @default 14400000 （4 小时）
+   */
+  pollIntervalMs?: number
 }
 
 type ProgressSnapshot = {

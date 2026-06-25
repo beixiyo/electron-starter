@@ -6,6 +6,15 @@
   "newVersion": "New version v{{version}} available",
   "upToDate": "You are on the latest version",
   "errorHint": "Update failed. Check the update feed or try again later.",
+  "modal": {
+    "title": "App update",
+    "checking": "Checking for updates…",
+    "upToDate": "You're on the latest version",
+    "restartHint": "Restart the app to finish installing.",
+    "size": "Size",
+    "releaseDate": "Released",
+    "changelog": "What's new"
+  },
   "status": {
     "idle": "Not checked",
     "checking": "Checking",
@@ -19,6 +28,9 @@
     "check": "Check for updates",
     "download": "Download update",
     "install": "Restart & install",
-    "retry": "Retry"
+    "retry": "Retry",
+    "later": "Later",
+    "background": "Download in background",
+    "close": "Close"
   }
 }

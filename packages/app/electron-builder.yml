@@ -1,6 +1,10 @@
 appId: com.flowtica.electronstarter
 productName: electron-app
 electronVersion: 42.2.0
+# 更新日志：打包时把该文件内容嵌入 latest*.yml，electron-updater 读作 UpdateInfo.releaseNotes，
+# 渲染端更新弹窗据此展示「更新内容」。每次发版前更新；文件为空则弹窗自动隐藏该区块
+releaseInfo:
+  releaseNotesFile: build/release-notes.md
 directories:
   buildResources: build
 files:
