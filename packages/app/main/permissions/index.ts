@@ -5,6 +5,9 @@ import { logWarn } from '@main/utils/logger'
 import { desktopCapturer, shell, systemPreferences } from 'electron'
 import { getNativeBinaryPath } from '../native-bridge'
 
+const SCREEN_SETTINGS_OPEN_DELAY_MS = 500
+const nativePromptRequestedKinds = new Set<PermissionKind>()
+
 /** macOS 各权限对应的隐私设置面板 URL */
 const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
@@ -34,31 +37,52 @@ export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
 /**
  * 主动申请权限
  * - microphone / camera：弹系统授权框；未授予则打开隐私设置
- * - screen：not-determined 触发系统弹窗；denied 打开隐私设置（macOS 无法编程式授予）
- * - accessibility：触发系统授权弹窗并打开隐私设置（macOS 需用户手动勾选，通常需重启）
+ * - screen：先触发系统屏幕录制请求，把 App / helper 注册进 TCC 列表；仍未授权时下次点击再打开隐私设置
+ * - accessibility：先触发系统授权弹窗；仍未授权时下次点击再打开隐私设置
  *
- * 共同特性：**即使此前被拒绝，再次调用也会打开系统设置引导用户开启**
+ * 原则：同一次点击只走一种系统入口，避免“原生权限弹窗”和“手动打开设置页”同时出现
  */
 export async function requestPermission(kind: PermissionKind): Promise<PermissionStatus> {
   if (kind === 'accessibility') {
     if (process.platform !== 'darwin') {
       return 'granted'
     }
+
+    if (getPermissionStatus('accessibility') === 'granted') {
+      clearSettingsFallback('accessibility')
+      return 'granted'
+    }
+
+    if (shouldOpenSettingsFallback('accessibility')) {
+      openPrivacySettings('accessibility')
+      return 'denied'
+    }
+
+    markNativePromptRequested('accessibility')
+
     /** 传 true 会触发系统授权弹窗（首次）；非首次需用户去设置勾选 */
     const trusted = systemPreferences.isTrustedAccessibilityClient(true)
     const helperTrusted = requestFnListenerAccessibility()
     if (!trusted || !helperTrusted) {
-      openPrivacySettings('accessibility')
+      return 'denied'
     }
-    return trusted && helperTrusted
-      ? 'granted'
-      : 'denied'
+    clearSettingsFallback('accessibility')
+    return 'granted'
   }
 
   if (kind === 'screen') {
     if (getMediaAccessStatus('screen') === 'granted') {
+      clearSettingsFallback('screen')
       return 'granted'
     }
+
+    if (shouldOpenSettingsFallback('screen')) {
+      await sleep(SCREEN_SETTINGS_OPEN_DELAY_MS)
+      openPrivacySettings('screen')
+      return getMediaAccessStatus('screen')
+    }
+
+    markNativePromptRequested('screen')
 
     /**
      * 屏幕录制权限没有真正的 not-determined 态：从未授权的机器上
@@ -66,26 +90,17 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
      * 因此不能用 status 区分「从未询问」与「已拒绝」，只要未授予就主动发起一次真实捕获，
      * 让系统把 App 注册进「屏幕录制」列表（首次会弹窗，已拒绝则静默但条目已落入列表）
      */
-    try {
-      await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 64, height: 64 },
-      })
-    }
-    catch (error) {
-      logWarn('触发屏幕录制授权时发生错误', {
-        module: 'permissions',
-        operation: 'requestPermission',
-        context: { error: String(error) },
-      })
-    }
+    const nativeStatus = requestAudioRecorderScreenCaptureAccess()
+    await requestElectronScreenCaptureAccess()
 
     const status = getMediaAccessStatus('screen')
-    if (status !== 'granted') {
-      /** 此时 App 已在列表中，用户只需拨动开关，无需手动搜索添加 */
-      openPrivacySettings('screen')
+    const granted = status === 'granted' || nativeStatus === 'granted'
+    if (granted) {
+      clearSettingsFallback('screen')
     }
-    return status
+    return granted
+      ? 'granted'
+      : status
   }
 
   const result = await ensureMediaAccess(kind)
@@ -93,6 +108,18 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     openPrivacySettings(kind)
   }
   return result
+}
+
+function shouldOpenSettingsFallback(kind: PermissionKind): boolean {
+  return nativePromptRequestedKinds.has(kind)
+}
+
+function markNativePromptRequested(kind: PermissionKind): void {
+  nativePromptRequestedKinds.add(kind)
+}
+
+function clearSettingsFallback(kind: PermissionKind): void {
+  nativePromptRequestedKinds.delete(kind)
 }
 
 function isFnListenerAccessibilityTrusted(): boolean {
@@ -117,6 +144,50 @@ function requestFnListenerAccessibility(): boolean {
   catch {
     return false
   }
+}
+
+function requestAudioRecorderScreenCaptureAccess(): PermissionStatus {
+  if (process.platform !== 'darwin') {
+    return 'granted'
+  }
+
+  try {
+    execFileSync(getNativeBinaryPath('audio-recorder'), ['--prompt-screen-capture'], {
+      stdio: 'ignore',
+    })
+    return 'granted'
+  }
+  catch (error) {
+    const status = (error as { status?: number })?.status
+    if (status !== 1) {
+      logWarn('触发 audio-recorder 屏幕录制授权时发生错误', {
+        module: 'permissions',
+        operation: 'requestAudioRecorderScreenCaptureAccess',
+        context: { error: String(error) },
+      })
+    }
+    return 'denied'
+  }
+}
+
+async function requestElectronScreenCaptureAccess(): Promise<void> {
+  try {
+    await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: 64, height: 64 },
+    })
+  }
+  catch (error) {
+    logWarn('触发 Electron 屏幕录制授权时发生错误', {
+      module: 'permissions',
+      operation: 'requestElectronScreenCaptureAccess',
+      context: { error: String(error) },
+    })
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**

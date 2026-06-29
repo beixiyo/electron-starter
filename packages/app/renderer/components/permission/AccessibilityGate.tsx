@@ -1,8 +1,11 @@
+import type { PermissionKind } from '@shared'
 import { onMounted } from 'hooks'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PermissionModal } from './PermissionModal'
 import { usePermissions } from './usePermissions'
+
+const REQUIRED_KINDS: PermissionKind[] = ['accessibility']
 
 /**
  * 辅助功能权限启动守卫
@@ -30,8 +33,10 @@ export const AccessibilityGate = memo(() => {
       title={ permissions.title }
       subtitle={ permissions.subtitle }
       canContinue={ permissions.canContinue }
+      requiredKinds={ REQUIRED_KINDS }
       onRequest={ permissions.requestOne }
       onContinue={ permissions.close }
+      dismissable={ false }
     />
   )
 })

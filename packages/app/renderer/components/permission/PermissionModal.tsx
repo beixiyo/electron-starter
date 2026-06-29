@@ -23,6 +23,8 @@ export const PermissionModal = memo<PermissionModalProps>((props) => {
     canContinue,
     onRequest,
     onContinue,
+    requiredKinds,
+    dismissable = true,
   } = props
 
   const { t } = useTranslation('app')
@@ -32,8 +34,9 @@ export const PermissionModal = memo<PermissionModalProps>((props) => {
       isOpen={ isOpen }
       onClose={ onClose }
       width={ 520 }
-      showCloseBtn
+      showCloseBtn={ dismissable }
       clickOutsideClose={ false }
+      escToClose={ dismissable }
       header={ null }
       footer={ null }
     >
@@ -53,6 +56,7 @@ export const PermissionModal = memo<PermissionModalProps>((props) => {
               key={ kind }
               kind={ kind }
               status={ statuses[kind] }
+              required={ requiredKinds?.includes(kind) }
               onAction={ () => onRequest(kind) }
             />
           )) }
@@ -78,6 +82,7 @@ const PermissionRow = memo<PermissionRowProps>((props) => {
   const {
     kind,
     status,
+    required = false,
     onAction,
   } = props
 
@@ -95,7 +100,14 @@ const PermissionRow = memo<PermissionRowProps>((props) => {
           <span className="flex size-8 items-center justify-center rounded-full bg-background3 text-text">
             <Icon className="size-4" />
           </span>
-          <p className="text-sm font-medium text-text">{ t(meta.labelKey) }</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-text">{ t(meta.labelKey) }</p>
+            { required && (
+              <span className="rounded-md bg-systemOrange/10 px-2 py-0.5 text-xs font-medium text-systemOrange">
+                { t('permission.required', '必填') }
+              </span>
+            ) }
+          </div>
         </div>
 
         { granted
@@ -147,10 +159,18 @@ export type PermissionModalProps = {
   onRequest: (kind: PermissionKind) => void
   /** 点击继续 */
   onContinue: () => void
+  /** 需要明确标记为必填的权限项 */
+  requiredKinds?: PermissionKind[]
+  /**
+   * 是否可关闭
+   * @default true
+   */
+  dismissable?: boolean
 }
 
 type PermissionRowProps = {
   kind: PermissionKind
   status?: PermissionStatus
+  required?: boolean
   onAction: () => void
 }

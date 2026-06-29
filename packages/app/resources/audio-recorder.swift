@@ -1,4 +1,5 @@
 import Cocoa
+import CoreGraphics
 import ScreenCaptureKit
 import AVFoundation
 
@@ -9,6 +10,40 @@ import AVFoundation
 //             ← {"error":"..."}
 
 signal(SIGPIPE, SIG_IGN)
+
+func isScreenCaptureTrusted() -> Bool {
+  if #available(macOS 10.15, *) {
+    return CGPreflightScreenCaptureAccess()
+  }
+  return true
+}
+
+func requestScreenCaptureAccess() -> Bool {
+  if #available(macOS 10.15, *) {
+    return CGRequestScreenCaptureAccess()
+  }
+  return true
+}
+
+if CommandLine.arguments.contains("--check-screen-capture") {
+  if isScreenCaptureTrusted() {
+    print("SCREEN_CAPTURE_TRUSTED")
+    exit(0)
+  }
+
+  fputs("SCREEN_CAPTURE_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
+
+if CommandLine.arguments.contains("--prompt-screen-capture") {
+  if requestScreenCaptureAccess() {
+    print("SCREEN_CAPTURE_TRUSTED")
+    exit(0)
+  }
+
+  fputs("SCREEN_CAPTURE_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
 
 class Recorder: NSObject, SCStreamOutput {
   private var stream: SCStream?

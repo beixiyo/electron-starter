@@ -157,10 +157,12 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   return Unmanaged.passUnretained(event)  // 始终透传，不拦截任何按键
 }
 
-// 需要「辅助功能」权限（主进程会同时为 app 与 helper 申请）
-// 未授权时仅告警，仍尝试建 tap —— 建失败会走下面 TAP_CREATE_FAILED 分支退出
-if !isAccessibilityTrusted(prompt: true) {
+// 需要「辅助功能」权限。正常启动只检查、不弹系统授权框；
+// 未授权时直接退出，避免创建 event tap 时触发 macOS 原生辅助功能弹窗。
+// 显式申请由 --prompt-accessibility 负责。
+if !isAccessibilityTrusted(prompt: false) {
   fputs("ACCESSIBILITY_NOT_TRUSTED\n", stderr)
+  exit(1)
 }
 
 let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)

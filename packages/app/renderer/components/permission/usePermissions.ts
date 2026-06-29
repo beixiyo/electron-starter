@@ -8,7 +8,7 @@ import { isPermissionSatisfied } from './constants'
  * 统一权限网关
  *
  * - {@link ensure} 在使用某功能前校验所需权限，未满足则弹出统一权限窗
- * - 权限窗内逐项主动申请；**即使此前被拒绝，再次申请也会打开系统设置引导开启**
+ * - 权限窗内逐项主动申请；首次优先走系统原生弹窗，仍未授权时后续请求再打开系统设置
  * - 适用于录制（麦克风 / 屏幕录制）、辅助功能（Fn 长按 / 划词）等场景
  */
 export function usePermissions(): PermissionGate {
