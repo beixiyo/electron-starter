@@ -98,13 +98,36 @@ class WindowManager {
       window.setAlwaysOnTop(true)
     }
 
-    if (window.isVisible() && autoFocus) {
+    this.restoreIfMinimized(window)
+
+    if (!autoFocus) {
+      window.showInactive()
+      return true
+    }
+
+    if (window.isVisible()) {
       window.focus()
     }
     else {
       window.show()
-      autoFocus && window.focus()
+      window.focus()
     }
+    return true
+  }
+
+  showInactive(type: WindowType): boolean {
+    const window = this.windows.get(type)
+    if (!window) {
+      return false
+    }
+
+    const meta = this.metadata.get(type)
+    if (meta?.config.setAlwaysOnTopOnShow) {
+      window.setAlwaysOnTop(true)
+    }
+
+    this.restoreIfMinimized(window)
+    window.showInactive()
     return true
   }
 
@@ -251,6 +274,12 @@ class WindowManager {
     const y = Math.min(Math.max(bounds.y, area.y), area.y + area.height - height)
 
     return { x, y, width, height }
+  }
+
+  private restoreIfMinimized(window: BrowserWindow): void {
+    if (window.isMinimized()) {
+      window.restore()
+    }
   }
 }
 

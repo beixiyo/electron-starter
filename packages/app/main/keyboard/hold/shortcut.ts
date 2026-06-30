@@ -54,11 +54,10 @@ async function startHoldPress(
       if (window && !window.isVisible()) {
         const config = WINDOW_CONFIGS[windowType]
         if (config?.focusable) {
-          window.show()
-          window.focus()
+          windowManager.show(windowType)
         }
         else {
-          window.showInactive()
+          windowManager.showInactive(windowType)
         }
       }
     }

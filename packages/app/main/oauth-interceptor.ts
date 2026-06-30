@@ -94,7 +94,5 @@ function closeOAuthWindowIfNeeded(provider: OAuthCallbackParams['provider']) {
   if (oauthWindow && !oauthWindow.isDestroyed()) {
     oauthWindow.close()
   }
-  const mainWindow = windowManager.get(WindowType.MAIN)
-  mainWindow?.show()
-  mainWindow?.focus()
+  windowManager.show(WindowType.MAIN)
 }
