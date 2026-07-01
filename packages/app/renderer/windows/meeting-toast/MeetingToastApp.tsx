@@ -7,6 +7,7 @@ import { Loader2, Pause, Play, Square, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo } from 'react'
 import { cn } from 'utils'
+import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
 import { useMeetingToast } from './useMeetingToast'
 
 const CONTENT_SIZE = {
@@ -55,6 +56,18 @@ export const MeetingToastApp = memo(() => {
 
   const contentSize = useMemo(() => CONTENT_SIZE[viewKey], [viewKey])
 
+  useRoundedWindowHitTest(WindowType.MEETING_TOAST, () => {
+    if (!visible)
+      return []
+
+    return [
+      getInsetWindowHitTestRegion(SHADOW_INSET, 16, {
+        width: contentSize.width + SHADOW_INSET * 2,
+        height: contentSize.height + SHADOW_INSET * 2,
+      }),
+    ]
+  })
+
   useEffect(() => {
     if (visible)
       resizeWindow(contentSize)
@@ -70,7 +83,6 @@ export const MeetingToastApp = memo(() => {
               'relative overflow-hidden',
               'bg-background rounded-2xl',
               'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
-              '[-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]',
             ) }
             initial={ { opacity: 0, y: -12, scale: 0.96 } }
             animate={ {

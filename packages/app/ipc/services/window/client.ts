@@ -18,4 +18,5 @@ export const windowClient = createServiceClient<WindowContract>('window', [
   'resizeTo',
   'setBounds',
   'getBounds',
+  'setIgnoreMouseEvents',
 ])

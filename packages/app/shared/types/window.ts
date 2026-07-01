@@ -42,8 +42,8 @@ export enum WindowType {
   SELECTION = 'selection',
   /** 快捷键测试窗口 */
   SHORTCUT_TEST = 'shortcut-test',
-  /** 焦点检测演示窗口 */
-  FOCUS_DEMO = 'focus-demo',
+  /** 单窗口点击穿透焦点检测窗口 */
+  FOCUS_NATIVE = 'focus-native',
   /** MenuBar 托盘面板窗口 */
   MENUBAR = 'menubar',
   /** 会议检测提醒浮窗 */

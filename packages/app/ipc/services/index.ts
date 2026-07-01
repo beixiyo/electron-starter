@@ -5,7 +5,7 @@
  * 例外：shortcut-config 是工厂函数（createShortcutConfigService），由 main/index.ts 显式创建
  */
 import './fn/service'
-import './focus-demo/service'
+import './focus/service'
 import './hold/service'
 import './media/service'
 import './meeting-detection/service'

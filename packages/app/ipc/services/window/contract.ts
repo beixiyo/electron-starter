@@ -18,4 +18,14 @@ export type WindowContract = IpcContract<{
   resizeTo: (type: WindowType, width: number, height: number, animate?: boolean) => { success: boolean }
   setBounds: (type: WindowType, bounds: Partial<WindowBounds>, animate?: boolean) => { success: boolean }
   getBounds: (type: WindowType) => { bounds: WindowBounds | null }
+  setIgnoreMouseEvents: (type: WindowType, ignore: boolean, options?: WindowIgnoreMouseEventsOptions) => { success: boolean }
 }>
+
+export type WindowIgnoreMouseEventsOptions = {
+  /**
+   * 忽略鼠标事件时继续把 mousemove 转发给 WebContents
+   *
+   * @default false
+   */
+  forward?: boolean
+}

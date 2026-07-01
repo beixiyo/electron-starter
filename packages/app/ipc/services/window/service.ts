@@ -134,6 +134,16 @@ export const windowService = createIpcService<WindowContract>('window', {
     const bounds = windowManager.getBounds(type)
     return { bounds }
   },
+
+  setIgnoreMouseEvents: async (_event, type: WindowType, ignore: boolean, options) => {
+    const win = windowManager.get(type)
+    if (!win || win.isDestroyed()) {
+      return { success: false }
+    }
+
+    win.setIgnoreMouseEvents(ignore, options)
+    return { success: true }
+  },
 })
 
 function isAllowedOAuthUrl(rawUrl: string): boolean {

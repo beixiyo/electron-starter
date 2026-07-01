@@ -1,20 +1,22 @@
+import type { FocusPayload } from '@ipc/services/focus/contract'
 import type { ShortcutBindings } from '@ipc/services/shortcut-config/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { focusDemoService } from '@ipc/services/focus-demo/service'
+import { focusService } from '@ipc/services/focus/service'
 import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
 import { shortcutTestService } from '@ipc/services/shortcut-test/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
   APP_PROTOCOL,
+  FOCUS_NATIVE_WINDOW_SIZE,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUTS,
   WindowType,
 } from '@shared'
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { checkFocusedTextInput } from './focus-check'
@@ -273,7 +275,7 @@ function createMainWindow(): void {
     createWindowsSequentially([
       { type: WindowType.VOICE_IME },
       { type: WindowType.MENUBAR, onLoaded: () => initTray({ onOpenMain: showOrCreateMainWindow }) },
-      { type: WindowType.FOCUS_DEMO, onLoaded: win => win.showInactive() },
+      { type: WindowType.FOCUS_NATIVE, onLoaded: showFocusNativeDemoWindow },
     ])
   })
 
@@ -371,13 +373,16 @@ function startFocusCheckPolling(): void {
       return
     prevKey = key
 
-    focusDemoService.emit('update', {
+    const payload: FocusPayload = {
       focused: result.focused,
       role: result.role,
       app: result.app,
       bundleId: result.bundleId,
       isSelf,
-    }, windowManager.get(WindowType.FOCUS_DEMO)!)
+    }
+
+    layoutFocusNativeDemoWindow(result.focused)
+    emitFocusUpdate(payload)
 
     if (isSelf) {
       console.log(`[focus-check] 🏠 self  focused=${result.focused}  role=${result.role}`)
@@ -387,3 +392,57 @@ function startFocusCheckPolling(): void {
     }
   }, 1500)
 }
+
+function emitFocusUpdate(payload: FocusPayload): void {
+  for (const type of FOCUS_UPDATE_TARGETS) {
+    const win = windowManager.get(type)
+    if (win && !win.isDestroyed()) {
+      focusService.emit('update', payload, win)
+    }
+  }
+}
+
+function showFocusNativeDemoWindow(): void {
+  layoutFocusNativeDemoWindow(false, false, true)
+  windowManager.showInactive(WindowType.FOCUS_NATIVE)
+}
+
+function layoutFocusNativeDemoWindow(focused: boolean, animate = true, resetPosition = false): void {
+  const win = windowManager.get(WindowType.FOCUS_NATIVE)
+  if (!win || win.isDestroyed()) {
+    return
+  }
+
+  const state = focused
+    ? 'focused'
+    : 'idle'
+  const previousState = focusNativeLastFocused
+    ? 'focused'
+    : 'idle'
+  const windowSize = FOCUS_NATIVE_WINDOW_SIZE[state]
+  const previousWindowSize = FOCUS_NATIVE_WINDOW_SIZE[previousState]
+  const displayArea = screen.getPrimaryDisplay().workArea
+  const currentBounds = win.getBounds()
+  const right = resetPosition
+    ? displayArea.x + displayArea.width - FOCUS_NATIVE_MARGIN
+    : currentBounds.x + previousWindowSize.width
+  const bottom = resetPosition
+    ? displayArea.y + displayArea.height - FOCUS_NATIVE_MARGIN
+    : currentBounds.y + previousWindowSize.height
+
+  windowManager.setBounds(WindowType.FOCUS_NATIVE, {
+    x: Math.round(right - windowSize.width),
+    y: Math.round(bottom - windowSize.height),
+    width: windowSize.width,
+    height: windowSize.height,
+  }, animate)
+
+  focusNativeLastFocused = focused
+}
+
+const FOCUS_UPDATE_TARGETS = [
+  WindowType.FOCUS_NATIVE,
+] as const
+
+const FOCUS_NATIVE_MARGIN = 20
+let focusNativeLastFocused = false

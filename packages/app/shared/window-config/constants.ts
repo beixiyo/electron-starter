@@ -27,16 +27,40 @@ export const VOICE_IME_WINDOW_SIZE = {
   processing: { width: VOICE_IME_CONTENT_SIZE.processing.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.processing.height + SHADOW_INSET * 2 },
 } as const
 
-/** FOCUS_DEMO 各状态内容尺寸（不含 shadow inset） */
-export const FOCUS_DEMO_CONTENT_SIZE = {
-  idle: { width: 260, height: 40 },
-  focused: { width: 260, height: 120 },
+/** 焦点浮窗左右实体卡片之间的真实点击穿透空隙 */
+export const FOCUS_NATIVE_GAP = 12
+
+/** 焦点浮窗 CSS 阴影单侧安全边距 */
+export const FOCUS_NATIVE_SHADOW_INSET = 30
+
+/** 焦点浮窗左侧信息内容尺寸 */
+export const FOCUS_NATIVE_PANEL_CONTENT_SIZE = {
+  idle: { width: 220, height: 44 },
+  focused: { width: 280, height: 96 },
 } as const
 
-/** FOCUS_DEMO 各状态窗口尺寸（内容 + 2×SHADOW_INSET） */
-export const FOCUS_DEMO_WINDOW_SIZE = {
-  idle: { width: 260 + SHADOW_INSET * 2, height: 40 + SHADOW_INSET * 2 },
-  focused: { width: 260 + SHADOW_INSET * 2, height: 120 + SHADOW_INSET * 2 },
+/** 焦点浮窗右侧动作内容尺寸 */
+export const FOCUS_NATIVE_ACTIONS_CONTENT_SIZE = {
+  idle: { width: 128, height: 44 },
+  focused: { width: 128, height: 96 },
+} as const
+
+/** 焦点浮窗整体内容尺寸（不含 shadow inset） */
+export const FOCUS_NATIVE_CONTENT_SIZE = {
+  idle: {
+    width: FOCUS_NATIVE_PANEL_CONTENT_SIZE.idle.width + FOCUS_NATIVE_GAP + FOCUS_NATIVE_ACTIONS_CONTENT_SIZE.idle.width,
+    height: Math.max(FOCUS_NATIVE_PANEL_CONTENT_SIZE.idle.height, FOCUS_NATIVE_ACTIONS_CONTENT_SIZE.idle.height),
+  },
+  focused: {
+    width: FOCUS_NATIVE_PANEL_CONTENT_SIZE.focused.width + FOCUS_NATIVE_GAP + FOCUS_NATIVE_ACTIONS_CONTENT_SIZE.focused.width,
+    height: Math.max(FOCUS_NATIVE_PANEL_CONTENT_SIZE.focused.height, FOCUS_NATIVE_ACTIONS_CONTENT_SIZE.focused.height),
+  },
+} as const
+
+/** 焦点浮窗整体窗口尺寸（内容 + shadow inset） */
+export const FOCUS_NATIVE_WINDOW_SIZE = {
+  idle: { width: FOCUS_NATIVE_CONTENT_SIZE.idle.width + FOCUS_NATIVE_SHADOW_INSET * 2, height: FOCUS_NATIVE_CONTENT_SIZE.idle.height + FOCUS_NATIVE_SHADOW_INSET * 2 },
+  focused: { width: FOCUS_NATIVE_CONTENT_SIZE.focused.width + FOCUS_NATIVE_SHADOW_INSET * 2, height: FOCUS_NATIVE_CONTENT_SIZE.focused.height + FOCUS_NATIVE_SHADOW_INSET * 2 },
 } as const
 
 /** MEETING_TOAST 内容尺寸（不含 shadow inset） */
@@ -49,6 +73,18 @@ export const MEETING_TOAST_CONTENT_SIZE = {
 export const MEETING_TOAST_WINDOW_SIZE = {
   width: MEETING_TOAST_CONTENT_SIZE.width + SHADOW_INSET * 2,
   height: MEETING_TOAST_CONTENT_SIZE.height + SHADOW_INSET * 2,
+} as const
+
+/** MENUBAR 内容尺寸（不含 shadow inset） */
+export const MENUBAR_CONTENT_SIZE = {
+  width: 280,
+  height: 160,
+} as const
+
+/** MENUBAR 窗口尺寸（内容 + 2×SHADOW_INSET） */
+export const MENUBAR_WINDOW_SIZE = {
+  width: MENUBAR_CONTENT_SIZE.width + SHADOW_INSET * 2,
+  height: MENUBAR_CONTENT_SIZE.height + SHADOW_INSET * 2,
 } as const
 
 export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
@@ -64,7 +100,7 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     resizable: true,
     movable: true,
     focusable: true,
-    hasShadow: true,
+    hasShadow: false,
     htmlPath: 'index.html',
     autoHideMenuBar: true,
     show: false,
@@ -131,20 +167,22 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
     setAlwaysOnTopOnShow: true,
   },
 
-  [WindowType.FOCUS_DEMO]: {
-    width: FOCUS_DEMO_WINDOW_SIZE.idle.width,
-    height: FOCUS_DEMO_WINDOW_SIZE.idle.height,
+  [WindowType.FOCUS_NATIVE]: {
+    width: FOCUS_NATIVE_WINDOW_SIZE.idle.width,
+    height: FOCUS_NATIVE_WINDOW_SIZE.idle.height,
     position: 'bottom-right',
-    title: 'Focus Demo',
+    title: 'Focus Native',
     frame: false,
     transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     movable: true,
     focusable: true,
     hasShadow: false,
-    htmlPath: 'windows/focus-demo/index.html',
+    htmlPath: 'windows/focus-native/index.html',
     show: false,
     openDevTools: false,
   },
@@ -171,18 +209,20 @@ export const WINDOW_CONFIGS: Record<WindowType, WindowConfig> = {
   },
 
   [WindowType.MENUBAR]: {
-    width: 280,
-    height: 160,
+    width: MENUBAR_WINDOW_SIZE.width,
+    height: MENUBAR_WINDOW_SIZE.height,
     position: 'center',
     title: 'MenuBar',
     frame: false,
-    transparent: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     movable: false,
     focusable: true,
-    hasShadow: true,
+    hasShadow: false,
     htmlPath: 'windows/menubar/index.html',
     show: false,
     openDevTools: false,

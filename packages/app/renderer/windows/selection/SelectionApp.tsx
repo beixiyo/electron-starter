@@ -5,10 +5,23 @@ import { CloseBtn } from 'comps'
 import { useTheme } from 'hooks'
 import { useEffect, useState } from 'react'
 import { cn } from 'utils'
+import {
+  getInsetWindowHitTestRegion,
+  getResizeHandleHitTestRegions,
+  ResizeHandles,
+  useRoundedWindowHitTest,
+  useWindowDrag,
+} from '../shared'
 
 export default function SelectionApp(): React.JSX.Element {
   useTheme()
   const [selectionData, setSelectionData] = useState<SelectionData | null>(null)
+  const dragHandlers = useWindowDrag(WindowType.SELECTION)
+
+  useRoundedWindowHitTest(WindowType.SELECTION, () => [
+    getInsetWindowHitTestRegion(SHADOW_INSET, 16),
+    ...getResizeHandleHitTestRegions(SHADOW_INSET),
+  ])
 
   useEffect(() => {
     return $ipc.selection.on('data', (data) => {
@@ -21,7 +34,7 @@ export default function SelectionApp(): React.JSX.Element {
 
   return (
     <div
-      className="w-screen h-screen flex items-stretch"
+      className="relative w-screen h-screen flex items-stretch"
       style={ { padding: SHADOW_INSET } }
     >
       <div
@@ -32,13 +45,18 @@ export default function SelectionApp(): React.JSX.Element {
         ) }
       >
         {/* 标题栏 — 可拖拽区域 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0 [-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]">
+        <div
+          { ...dragHandlers }
+          className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0 cursor-grab active:cursor-grabbing"
+        >
           <span className="text-sm font-medium text-textPrimary select-none">选中文本</span>
-          <CloseBtn
-            mode="static"
-            size="md"
-            onClick={ handleClose }
-          />
+          <div data-no-window-drag="true">
+            <CloseBtn
+              mode="static"
+              size="md"
+              onClick={ handleClose }
+            />
+          </div>
         </div>
 
         {/* 内容区 */}
@@ -74,9 +92,14 @@ export default function SelectionApp(): React.JSX.Element {
                 <div className="h-full flex items-center justify-center">
                   <span className="text-xs text-muted-foreground/50">等待选中文本…</span>
                 </div>
-              ) }
+          ) }
         </div>
       </div>
+
+      <ResizeHandles
+        windowType={ WindowType.SELECTION }
+        inset={ SHADOW_INSET }
+      />
     </div>
   )
 }

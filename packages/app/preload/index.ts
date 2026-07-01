@@ -1,6 +1,6 @@
 import { electronAPI } from '@electron-toolkit/preload'
+import { focusClient } from '@ipc/services/focus/client'
 import { fnClient } from '@ipc/services/fn/client'
-import { focusDemoClient } from '@ipc/services/focus-demo/client'
 import { holdClient } from '@ipc/services/hold/client'
 import { mediaClient } from '@ipc/services/media/client'
 import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
@@ -19,7 +19,7 @@ import { contextBridge } from 'electron'
 export const ipc = {
   media: mediaClient,
   window: windowClient,
-  focusDemo: focusDemoClient,
+  focus: focusClient,
   hold: holdClient,
   voiceIme: voiceImeClient,
   selection: selectionClient,

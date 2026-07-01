@@ -7,6 +7,7 @@ import { Mic } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
+import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
 import { useVoiceIme } from './useVoiceIme'
 
 type DisplayState = 'idle' | 'recording' | 'processing'
@@ -30,6 +31,10 @@ export function VoiceImeApp(): React.JSX.Element {
   const windowSize = displayState === 'recording'
     ? VOICE_IME_WINDOW_SIZE.recording
     : VOICE_IME_WINDOW_SIZE.idle
+
+  useRoundedWindowHitTest(WindowType.VOICE_IME, () => [
+    getInsetWindowHitTestRegion(SHADOW_INSET, 16, windowSize),
+  ])
 
   useUpdateEffect(() => {
     $ipc.window.resizeTo(WindowType.VOICE_IME, windowSize.width, windowSize.height, true)

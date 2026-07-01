@@ -1,4 +1,5 @@
 import { WindowType } from '@shared'
+import { SHADOW_INSET } from '@shared/window-config/constants'
 import { app, Menu, nativeImage, screen, Tray } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { windowManager } from './window-manager'
@@ -41,7 +42,7 @@ export function initTray(options: TrayOptions = {}): void {
     const workArea = display.workArea
 
     let x = Math.round(bounds.x + bounds.width / 2 - winBounds.width / 2)
-    const y = bounds.y + bounds.height + 4
+    const y = bounds.y + bounds.height + 4 - SHADOW_INSET
 
     x = Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - winBounds.width))
 

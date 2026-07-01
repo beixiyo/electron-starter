@@ -56,7 +56,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           shortcutTest: resolve(__dirname, './renderer/windows/shortcut-test/index.html'),
           selection: resolve(__dirname, './renderer/windows/selection/index.html'),
           screenshot: resolve(__dirname, './renderer/windows/screenshot/index.html'),
-          focusDemo: resolve(__dirname, './renderer/windows/focus-demo/index.html'),
+          focusNative: resolve(__dirname, './renderer/windows/focus-native/index.html'),
           menubar: resolve(__dirname, './renderer/windows/menubar/index.html'),
           meetingToast: resolve(__dirname, './renderer/windows/meeting-toast/index.html'),
         },

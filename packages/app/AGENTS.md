@@ -148,7 +148,7 @@ pnpm build:focus-check   # → resources/focus-check
 **服务加载方式：**
 
 - **核心服务**（window / media / screenshot / selection）通过 `ipc/services/index.ts` 统一导入，在 `main/index.ts` 中 `import '@ipc/services'` 始终加载
-- **按需服务**（fn / hold / oauth / voice-ime / focus-demo / shortcut-test）在使用处直接导入 `service.ts`，按需注册
+- **按需服务**（fn / hold / oauth / voice-ime / focus / shortcut-test）在使用处直接导入 `service.ts`，按需注册
 
 **新增 IPC 能力的步骤：**
 

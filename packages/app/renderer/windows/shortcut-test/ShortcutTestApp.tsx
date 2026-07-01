@@ -6,7 +6,13 @@ import { useTheme } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useState } from 'react'
 import { cn } from 'utils'
-import { ResizeHandles } from '../shared'
+import {
+  getInsetWindowHitTestRegion,
+  getResizeHandleHitTestRegions,
+  ResizeHandles,
+  useRoundedWindowHitTest,
+  useWindowDrag,
+} from '../shared'
 
 /** 缩放尺寸下限（含阴影留白），与窗口 config 的 minWidth/minHeight 对齐 */
 const MIN_WIDTH = 280 + SHADOW_INSET * 2
@@ -29,6 +35,12 @@ const TRIGGER_DOT: Record<ShortcutTestPayload['triggerType'], string> = {
 export const ShortcutTestApp = memo(() => {
   useTheme()
   const [trigger, setTrigger] = useState<ShortcutTestPayload | null>(null)
+  const dragHandlers = useWindowDrag(WindowType.SHORTCUT_TEST)
+
+  useRoundedWindowHitTest(WindowType.SHORTCUT_TEST, () => [
+    getInsetWindowHitTestRegion(SHADOW_INSET, 16),
+    ...getResizeHandleHitTestRegions(SHADOW_INSET),
+  ])
 
   useEffect(() => {
     return $ipc.shortcutTest.on('trigger', (payload) => {
@@ -48,11 +60,12 @@ export const ShortcutTestApp = memo(() => {
     >
       {/* 实际可见的自绘容器，relative 作为 CloseBtn absolute 定位基准 */}
       <div
+        { ...dragHandlers }
         className={ cn(
           'relative w-full h-full',
           'bg-background rounded-2xl',
           'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
-          '[-webkit-app-region:drag] [&_button]:[-webkit-app-region:no-drag]',
+          'cursor-grab active:cursor-grabbing',
         ) }
       >
         {/* 内容居中层 */}
@@ -96,13 +109,13 @@ export const ShortcutTestApp = memo(() => {
           </AnimatePresence>
         </div>
 
-        <CloseBtn
-          mode="absolute"
-          corner="top-right"
-          size="md"
-          className="top-4 right-4"
-          onClick={ handleClose }
-        />
+        <div data-no-window-drag="true" className="absolute right-4 top-4">
+          <CloseBtn
+            mode="static"
+            size="md"
+            onClick={ handleClose }
+          />
+        </div>
       </div>
 
       {/* 四角 + 四边拖拽缩放（透明手柄，对齐可见内容边角；尺寸经主进程持久化） */}
