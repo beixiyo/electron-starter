@@ -1,9 +1,10 @@
-import type { SelectionHookConstructor, SelectionHookInstance, TextSelectionData } from 'selection-hook'
-import { windowManager } from '@main/window-manager'
-import { selectionService } from '@ipc/services/selection/service'
-import { WindowType } from '@shared'
-import { screen, shell, systemPreferences } from 'electron'
+import type { WindowBounds } from '@shared'
+import type { SelectionHookInstance, TextSelectionData } from 'selection-hook'
 import { isPureNum } from '@jl-org/tool'
+import { logicalWindowManager } from '@main/window-manager'
+import { SELECTION_WINDOW_SIZE, WindowType } from '@shared'
+import { screen, shell, systemPreferences } from 'electron'
+import SelectionHook from 'selection-hook'
 
 /**
  * Selection Hook 管理器
@@ -39,9 +40,6 @@ class SelectionManager {
         return
       }
     }
-
-    /** 导入 SelectionHook（CommonJS 方式） */
-    const SelectionHook: SelectionHookConstructor = require('selection-hook')
 
     /** 创建实例（使用单例模式避免资源消耗） */
     this.selectionHook = new SelectionHook()
@@ -83,43 +81,25 @@ class SelectionManager {
       /** 获取鼠标位置（优先使用 selection-hook 提供的位置，否则使用 Electron API） */
       const mousePosition = this.getMousePosition(data)
 
-      /** 使用 windowManager 直接创建和显示窗口 */
-      const window = windowManager.create(WindowType.SELECTION)
-      if (!window || window.isDestroyed()) {
-        return
+      const selectionData = {
+        text: data.text,
+        programName: data.programName,
+        method: data.method != null
+          ? String(data.method)
+          : undefined,
+        mousePosStart: data.mousePosStart,
+        mousePosEnd: data.mousePosEnd,
       }
 
-      /** 如果获取到了鼠标位置，设置窗口位置 */
-      if (mousePosition) {
-        this.positionWindowNearMouse(window, mousePosition)
-      }
+      const bounds = mousePosition
+        ? this.getWindowBoundsNearMouse(mousePosition)
+        : undefined
 
-      /** 等待窗口加载完成后再发送数据，避免窗口空白 */
-      const sendData = () => {
-        if (window.isDestroyed()) {
-          return
-        }
-        /** 发送完整的数据对象到渲染进程（包含鼠标位置） */
-        const selectionData = {
-          text: data.text,
-          programName: data.programName,
-          method: data.method != null ? String(data.method) : undefined,
-          mousePosStart: data.mousePosStart,
-          mousePosEnd: data.mousePosEnd,
-        }
-        selectionService.emit('data', selectionData, window)
-      }
-
-      /** 如果窗口已经加载完成，直接发送 */
-      if (window.webContents.isLoading()) {
-        window.webContents.once('did-finish-load', sendData)
-      }
-      else {
-        sendData()
-      }
-
-      windowManager.show(WindowType.SELECTION)
-      window.focus()
+      const window = logicalWindowManager.show(WindowType.SELECTION, {
+        bounds,
+        payload: selectionData,
+      })
+      window?.focus()
     }
     catch (error) {
       console.error('处理文本选择失败:', error)
@@ -155,11 +135,11 @@ class SelectionManager {
   }
 
   /**
-   * 将窗口定位到鼠标位置附近
+   * 获取鼠标附近的窗口边界
    */
-  private positionWindowNearMouse(window: Electron.BrowserWindow, mousePos: { x: number, y: number }): void {
+  private getWindowBoundsNearMouse(mousePos: { x: number, y: number }): WindowBounds | undefined {
     try {
-      const [width, height] = window.getSize()
+      const { width, height } = SELECTION_WINDOW_SIZE
       const displays = screen.getAllDisplays()
 
       /** 找到鼠标所在的显示器 */
@@ -199,10 +179,16 @@ class SelectionManager {
         windowY = Math.max(displayY, windowY)
       }
 
-      window.setPosition(Math.floor(windowX), Math.floor(windowY))
+      return {
+        x: Math.floor(windowX),
+        y: Math.floor(windowY),
+        width,
+        height,
+      }
     }
     catch (error) {
       console.warn('设置窗口位置失败:', error)
+      return undefined
     }
   }
 

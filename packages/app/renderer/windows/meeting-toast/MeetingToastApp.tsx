@@ -3,12 +3,12 @@ import { formatDuration } from '@jl-org/tool'
 import { WindowType } from '@shared'
 import { MEETING_TOAST_CONTENT_SIZE, SHADOW_INSET } from '@shared/window-config/constants'
 import { useTheme } from 'hooks'
-import { Loader2, Pause, Play, Square, X } from 'lucide-react'
+import { Loader2, Pause, Play, Square, Video, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo } from 'react'
 import { cn } from 'utils'
 import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
-import { useMeetingToast } from './useMeetingToast'
+import { useMeetingToast, type MeetingToastInitialEvent } from './useMeetingToast'
 
 const CONTENT_SIZE = {
   detection: MEETING_TOAST_CONTENT_SIZE,
@@ -27,7 +27,8 @@ function resizeWindow(size: { width: number, height: number }) {
   )
 }
 
-export const MeetingToastApp = memo(() => {
+export const MeetingToastApp = memo<MeetingToastAppProps>((props) => {
+  const { initialEvent = null } = props
   useTheme()
   const {
     meeting,
@@ -39,7 +40,7 @@ export const MeetingToastApp = memo(() => {
     handlePause,
     handleResume,
     handleStop,
-  } = useMeetingToast()
+  } = useMeetingToast(initialEvent)
 
   const isRecording = recordingState?.status === 'recording'
   const isPaused = recordingState?.status === 'paused'
@@ -153,7 +154,7 @@ const DetectionView = memo<DetectionViewProps>((props) => {
         <X size={ 10 } strokeWidth={ 2.5 } />
       </button>
 
-      <div className="flex size-9 shrink-0 items-center justify-center">
+      <div className="flex size-9 shrink-0 translate-y-px items-center justify-center">
         <div className="relative flex size-8 items-center justify-center">
           <svg viewBox="0 0 32 32" className="absolute inset-0 size-full">
             <circle
@@ -162,7 +163,7 @@ const DetectionView = memo<DetectionViewProps>((props) => {
               r="13"
               fill="none"
               strokeWidth="2.5"
-              className="stroke-sky-100 dark:stroke-sky-900/40"
+              className="stroke-black/10"
             />
             <motion.circle
               cx="16"
@@ -171,7 +172,7 @@ const DetectionView = memo<DetectionViewProps>((props) => {
               fill="none"
               strokeWidth="2.5"
               strokeLinecap="round"
-              className="stroke-sky-500"
+              className="stroke-black"
               style={ {
                 transformOrigin: 'center',
                 rotate: -90,
@@ -179,7 +180,7 @@ const DetectionView = memo<DetectionViewProps>((props) => {
               } }
             />
           </svg>
-          <div className="size-3.5 rounded-full bg-sky-500/15" />
+          <Video size={ 14 } strokeWidth={ 2.2 } className="text-black" />
         </div>
       </div>
 
@@ -314,4 +315,11 @@ type RecordingViewProps = {
   onPause: () => void
   onResume: () => void
   onStop: () => void
+}
+
+/**
+ * Meeting Toast 首帧初始化数据
+ */
+export type MeetingToastAppProps = {
+  initialEvent?: MeetingToastInitialEvent | null
 }

@@ -48,6 +48,10 @@ export enum WindowType {
   MENUBAR = 'menubar',
   /** 会议检测提醒浮窗 */
   MEETING_TOAST = 'meeting-toast',
+  /** 状态类浮窗池 */
+  FLOATING_STATUS_POOL = 'floating-status-pool',
+  /** 工具面板浮窗池 */
+  UTILITY_PANEL_POOL = 'utility-panel-pool',
 }
 
 /**

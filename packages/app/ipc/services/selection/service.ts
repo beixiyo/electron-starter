@@ -1,6 +1,6 @@
 import type { SelectionContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { windowManager } from '@main/window-manager'
+import { logicalWindowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 
 export const selectionService = createIpcService<SelectionContract>('selection', {
@@ -9,20 +9,15 @@ export const selectionService = createIpcService<SelectionContract>('selection',
    */
   async showSelectionWindow(_event, text: string) {
     try {
-      /** 创建或获取窗口 */
-      const window = windowManager.create(WindowType.SELECTION)
+      const window = logicalWindowManager.show(WindowType.SELECTION, {
+        payload: { text },
+      })
       if (!window) {
         return {
           success: false,
           error: '无法创建选中文本窗口',
         }
       }
-
-      /** 发送文本数据到渲染进程 */
-      selectionService.emit('data', { text }, window)
-
-      /** 显示窗口 */
-      windowManager.show(WindowType.SELECTION)
       window.focus()
 
       return {
@@ -45,7 +40,7 @@ export const selectionService = createIpcService<SelectionContract>('selection',
    */
   async closeSelectionWindow() {
     try {
-      const success = windowManager.hide(WindowType.SELECTION)
+      const success = logicalWindowManager.hide(WindowType.SELECTION)
       return { success }
     }
     catch (error) {

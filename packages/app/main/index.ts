@@ -6,7 +6,6 @@ import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { focusService } from '@ipc/services/focus/service'
 import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
-import { shortcutTestService } from '@ipc/services/shortcut-test/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
@@ -31,7 +30,7 @@ import { initSelectionHook } from './selection'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
-import { createWindowsSequentially, windowManager } from './window-manager'
+import { createWindowsSequentially, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
 // Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃
@@ -272,11 +271,10 @@ function createMainWindow(): void {
 
     /** 主窗口显示后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
     // SELECTION / SHORTCUT_TEST 按需懒创建，不在此列
-    createWindowsSequentially([
+    initTray({ onOpenMain: showOrCreateMainWindow })
+    void createWindowsSequentially([
       { type: WindowType.VOICE_IME },
-      { type: WindowType.MENUBAR, onLoaded: () => initTray({ onOpenMain: showOrCreateMainWindow }) },
-      { type: WindowType.FOCUS_NATIVE, onLoaded: showFocusNativeDemoWindow },
-    ])
+    ]).then(showFocusNativeDemoWindow)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -303,14 +301,9 @@ function showShortcutTestWindow(
   label: string,
   triggerType: 'combo' | 'doublePress' | 'hold' | 'hotkey',
 ): void {
-  if (!windowManager.exists(WindowType.SHORTCUT_TEST))
-    windowManager.create(WindowType.SHORTCUT_TEST)
-  windowManager.show(WindowType.SHORTCUT_TEST)
-  shortcutTestService.emit(
-    'trigger',
-    { triggerType, label },
-    windowManager.get(WindowType.SHORTCUT_TEST)!,
-  )
+  logicalWindowManager.show(WindowType.SHORTCUT_TEST, {
+    payload: { triggerType, label },
+  })
 }
 
 /** hotkey 绑定的触发处理器，按 action id 索引 */
@@ -395,7 +388,7 @@ function startFocusCheckPolling(): void {
 
 function emitFocusUpdate(payload: FocusPayload): void {
   for (const type of FOCUS_UPDATE_TARGETS) {
-    const win = windowManager.get(type)
+    const win = logicalWindowManager.getTargetWindow(type)
     if (win && !win.isDestroyed()) {
       focusService.emit('update', payload, win)
     }
@@ -403,12 +396,15 @@ function emitFocusUpdate(payload: FocusPayload): void {
 }
 
 function showFocusNativeDemoWindow(): void {
+  logicalWindowManager.showInactive(WindowType.FOCUS_NATIVE)
   layoutFocusNativeDemoWindow(false, false, true)
-  windowManager.showInactive(WindowType.FOCUS_NATIVE)
 }
 
 function layoutFocusNativeDemoWindow(focused: boolean, animate = true, resetPosition = false): void {
-  const win = windowManager.get(WindowType.FOCUS_NATIVE)
+  if (!logicalWindowManager.isActive(WindowType.FOCUS_NATIVE))
+    return
+
+  const win = logicalWindowManager.getTargetWindow(WindowType.FOCUS_NATIVE)
   if (!win || win.isDestroyed()) {
     return
   }
@@ -430,7 +426,7 @@ function layoutFocusNativeDemoWindow(focused: boolean, animate = true, resetPosi
     ? displayArea.y + displayArea.height - FOCUS_NATIVE_MARGIN
     : currentBounds.y + previousWindowSize.height
 
-  windowManager.setBounds(WindowType.FOCUS_NATIVE, {
+  logicalWindowManager.setBounds(WindowType.FOCUS_NATIVE, {
     x: Math.round(right - windowSize.width),
     y: Math.round(bottom - windowSize.height),
     width: windowSize.width,

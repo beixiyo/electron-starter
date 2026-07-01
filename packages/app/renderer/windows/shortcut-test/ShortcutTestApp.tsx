@@ -32,9 +32,10 @@ const TRIGGER_DOT: Record<ShortcutTestPayload['triggerType'], string> = {
   hotkey: 'bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.7)]',
 }
 
-export const ShortcutTestApp = memo(() => {
+export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
+  const { initialTrigger = null } = props
   useTheme()
-  const [trigger, setTrigger] = useState<ShortcutTestPayload | null>(null)
+  const [trigger, setTrigger] = useState<ShortcutTestPayload | null>(initialTrigger)
   const dragHandlers = useWindowDrag(WindowType.SHORTCUT_TEST)
 
   useRoundedWindowHitTest(WindowType.SHORTCUT_TEST, () => [
@@ -130,3 +131,10 @@ export const ShortcutTestApp = memo(() => {
 })
 
 ShortcutTestApp.displayName = 'ShortcutTestApp'
+
+/**
+ * Shortcut Test 窗口初始触发数据
+ */
+export type ShortcutTestAppProps = {
+  initialTrigger?: ShortcutTestPayload | null
+}

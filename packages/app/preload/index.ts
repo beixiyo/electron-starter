@@ -2,6 +2,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { focusClient } from '@ipc/services/focus/client'
 import { fnClient } from '@ipc/services/fn/client'
 import { holdClient } from '@ipc/services/hold/client'
+import { logicalWindowClient } from '@ipc/services/logical-window/client'
 import { mediaClient } from '@ipc/services/media/client'
 import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
 import { notificationClient } from '@ipc/services/notification/client'
@@ -21,6 +22,7 @@ export const ipc = {
   window: windowClient,
   focus: focusClient,
   hold: holdClient,
+  logicalWindow: logicalWindowClient,
   voiceIme: voiceImeClient,
   selection: selectionClient,
   shortcutConfig: shortcutConfigClient,

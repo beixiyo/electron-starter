@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react'
 
 const TOAST_DURATION_MS = 8000
 
-export function useMeetingToast() {
+export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) {
   const [meeting, setMeeting] = useState<MeetingDetectedPayload | null>(null)
   const [recordingState, setRecordingState] = useState<RecordingStatePayload | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -105,11 +105,44 @@ export function useMeetingToast() {
     $ipc.meetingDetection.stopRecording()
   })
 
+  const applyDetected = useLatestCallback((payload: MeetingDetectedPayload) => {
+    setMeeting(payload)
+    setRecordingState(null)
+    startCountdown()
+  })
+
+  const applyRecordingState = useLatestCallback((payload: RecordingStatePayload) => {
+    setRecordingState(payload)
+
+    if (payload.status === 'recording' && !timerRef.current) {
+      startElapsedTimer()
+    }
+    else if (payload.status === 'mixing') {
+      clearElapsedTimer()
+    }
+    else if (payload.status === 'stopped') {
+      clearElapsedTimer()
+      setMeeting(null)
+      setRecordingState(null)
+      hideWindow()
+    }
+  })
+
+  useEffect(() => {
+    if (!initialEvent)
+      return
+
+    if (initialEvent.type === 'detected') {
+      applyDetected(initialEvent.payload)
+      return
+    }
+
+    applyRecordingState(initialEvent.payload)
+  }, [initialEvent])
+
   useEffect(() => {
     const unsubDetected = $ipc.meetingDetection.on('detected', (payload) => {
-      setMeeting(payload)
-      setRecordingState(null)
-      startCountdown()
+      applyDetected(payload)
     })
 
     const unsubEnded = $ipc.meetingDetection.on('ended', () => {
@@ -119,20 +152,7 @@ export function useMeetingToast() {
     })
 
     const unsubRecording = $ipc.meetingDetection.on('recording-state', (payload) => {
-      setRecordingState(payload)
-
-      if (payload.status === 'recording' && !timerRef.current) {
-        startElapsedTimer()
-      }
-      else if (payload.status === 'mixing') {
-        clearElapsedTimer()
-      }
-      else if (payload.status === 'stopped') {
-        clearElapsedTimer()
-        setMeeting(null)
-        setRecordingState(null)
-        hideWindow()
-      }
+      applyRecordingState(payload)
     })
 
     return () => {
@@ -156,3 +176,16 @@ export function useMeetingToast() {
     handleStop,
   }
 }
+
+/**
+ * Meeting Toast 首次挂载时由窗口池 route 携带的初始化事件
+ */
+export type MeetingToastInitialEvent =
+  | {
+      type: 'detected'
+      payload: MeetingDetectedPayload
+    }
+  | {
+      type: 'recording-state'
+      payload: RecordingStatePayload
+    }

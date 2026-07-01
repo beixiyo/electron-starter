@@ -1,7 +1,7 @@
 import type { WindowBounds, WindowConfig, WindowMetadata } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { isObj } from '@jl-org/tool'
-import { WINDOW_CONFIGS, WindowType } from '@shared'
+import { PHYSICAL_WINDOW_CONFIGS, WindowType } from '@shared'
 import { screen } from 'electron'
 import { getSavedBounds, saveBounds } from './bounds-store'
 import { createBrowserWindow } from './window-factory'
@@ -20,7 +20,7 @@ class WindowManager {
       return existingWindow
     }
 
-    const CONFIG = WINDOW_CONFIGS[type]
+    const CONFIG = PHYSICAL_WINDOW_CONFIGS[type]
     if (!CONFIG) {
       return null
     }

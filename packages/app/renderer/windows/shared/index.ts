@@ -1,5 +1,6 @@
 export { ResizeHandles } from './ResizeHandles'
 export type { ResizeHandlesProps } from './ResizeHandles'
+export { useLogicalWindowRoute } from './useLogicalWindowRoute'
 export {
   getInsetWindowHitTestRegion,
   getResizeHandleHitTestRegions,

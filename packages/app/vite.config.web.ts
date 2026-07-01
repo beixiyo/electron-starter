@@ -59,6 +59,8 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           focusNative: resolve(__dirname, './renderer/windows/focus-native/index.html'),
           menubar: resolve(__dirname, './renderer/windows/menubar/index.html'),
           meetingToast: resolve(__dirname, './renderer/windows/meeting-toast/index.html'),
+          floatingStatusPool: resolve(__dirname, './renderer/windows/floating-status-pool/index.html'),
+          utilityPanelPool: resolve(__dirname, './renderer/windows/utility-panel-pool/index.html'),
         },
       },
     },

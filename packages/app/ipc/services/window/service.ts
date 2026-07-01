@@ -2,7 +2,7 @@ import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { holdStateManager } from '@main/keyboard'
-import { windowManager } from '@main/window-manager'
+import { logicalWindowManager, windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 
 export const windowService = createIpcService<WindowContract>('window', {
@@ -15,7 +15,9 @@ export const windowService = createIpcService<WindowContract>('window', {
         }
       }
 
-      const window = windowManager.create(type, configOverride)
+      const window = logicalWindowManager.isPooled(type)
+        ? logicalWindowManager.create(type)
+        : windowManager.create(type, configOverride)
       return {
         success: true,
         windowId: window?.id,
@@ -63,37 +65,43 @@ export const windowService = createIpcService<WindowContract>('window', {
   },
 
   show: async (_event, type: WindowType) => {
-    const success = windowManager.show(type)
+    const success = logicalWindowManager.isPooled(type)
+      ? logicalWindowManager.show(type) !== null
+      : windowManager.show(type)
     return { success }
   },
 
   hide: async (_event, type: WindowType) => {
-    const success = windowManager.hide(type)
+    const success = logicalWindowManager.hide(type)
     return { success }
   },
 
   toggle: async (_event, type: WindowType) => {
-    const visible = windowManager.toggle(type)
+    const visible = logicalWindowManager.isPooled(type)
+      ? logicalWindowManager.toggle(type)
+      : windowManager.toggle(type)
     return { success: true, visible }
   },
 
   destroy: async (_event, type: WindowType) => {
-    const success = windowManager.destroy(type)
+    const success = logicalWindowManager.isPooled(type)
+      ? logicalWindowManager.hide(type)
+      : windowManager.destroy(type)
     return { success }
   },
 
   isVisible: async (_event, type: WindowType) => {
-    const visible = windowManager.isVisible(type)
+    const visible = logicalWindowManager.isVisible(type)
     return { visible }
   },
 
   exists: async (_event, type: WindowType) => {
-    const exists = windowManager.exists(type)
+    const exists = logicalWindowManager.exists(type)
     return { exists }
   },
 
   getMetadata: async (_event, type: WindowType) => {
-    const metadata = windowManager.getMetadata(type)
+    const metadata = windowManager.getMetadata(logicalWindowManager.resolvePhysicalType(type))
     return { metadata }
   },
 
@@ -121,22 +129,22 @@ export const windowService = createIpcService<WindowContract>('window', {
   },
 
   resizeTo: async (_event, type: WindowType, width: number, height: number, animate?: boolean) => {
-    const success = windowManager.resizeTo(type, width, height, animate)
+    const success = logicalWindowManager.resizeTo(type, width, height, animate)
     return { success }
   },
 
   setBounds: async (_event, type: WindowType, bounds: Partial<WindowBounds>, animate?: boolean) => {
-    const success = windowManager.setBounds(type, bounds, animate)
+    const success = logicalWindowManager.setBounds(type, bounds, animate)
     return { success }
   },
 
   getBounds: async (_event, type: WindowType) => {
-    const bounds = windowManager.getBounds(type)
+    const bounds = logicalWindowManager.getBounds(type)
     return { bounds }
   },
 
   setIgnoreMouseEvents: async (_event, type: WindowType, ignore: boolean, options) => {
-    const win = windowManager.get(type)
+    const win = logicalWindowManager.getPhysicalWindow(type)
     if (!win || win.isDestroyed()) {
       return { success: false }
     }

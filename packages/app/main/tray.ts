@@ -5,6 +5,7 @@ import icon from '../resources/icon.png?asset'
 import { windowManager } from './window-manager'
 
 let tray: Tray | null = null
+let menubarBlurAttached = false
 
 export type TrayOptions = {
   /**
@@ -28,8 +29,8 @@ export function initTray(options: TrayOptions = {}): void {
   tray.setToolTip('Electron Starter')
 
   tray.on('click', (_event, bounds) => {
-    const win = windowManager.get(WindowType.MENUBAR)
-    if (!win || win.isDestroyed())
+    const win = ensureMenubarWindow()
+    if (!win)
       return
 
     if (win.isVisible()) {
@@ -70,10 +71,29 @@ export function initTray(options: TrayOptions = {}): void {
     tray?.popUpContextMenu(contextMenu)
   })
 
-  const menubarWin = windowManager.get(WindowType.MENUBAR)
-  if (menubarWin) {
-    menubarWin.on('blur', () => {
-      menubarWin.hide()
+  ensureMenubarWindow(false)
+}
+
+function ensureMenubarWindow(create = true): Electron.BrowserWindow | null {
+  const existing = windowManager.get(WindowType.MENUBAR)
+  const win = existing && !existing.isDestroyed()
+    ? existing
+    : create
+      ? windowManager.create(WindowType.MENUBAR)
+      : null
+
+  if (!win)
+    return null
+
+  if (!menubarBlurAttached) {
+    menubarBlurAttached = true
+    win.on('blur', () => {
+      win.hide()
+    })
+    win.on('closed', () => {
+      menubarBlurAttached = false
     })
   }
+
+  return win
 }

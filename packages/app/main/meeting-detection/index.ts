@@ -5,40 +5,70 @@ import { meetingDetectionService } from '@ipc/services/meeting-detection/service
 import { getRecorderPid, onRecorderEvent, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
 import { WindowType } from '@shared'
 import { app } from 'electron'
-import { windowManager } from '../window-manager'
+import { logicalWindowManager, windowManager } from '../window-manager'
 import { addSelfPidSource, onMeetingEvent, startMeetingDetector, stopMeetingDetector } from './meeting-detector'
 
 function emitToToast(eventName: 'detected' | 'ended', session: MeetingSession): void {
-  const win = windowManager.get(WindowType.MEETING_TOAST)
-  if (!win || win.isDestroyed())
-    return
-
-  meetingDetectionService.emit(eventName, {
+  const payload = {
     appId: session.appId,
     displayName: session.displayName,
     pid: session.pid,
-  }, win)
+  }
 
   if (eventName === 'detected') {
-    windowManager.show(WindowType.MEETING_TOAST, false)
+    const wasActive = logicalWindowManager.isActive(WindowType.MEETING_TOAST)
+    if (wasActive) {
+      const win = logicalWindowManager.getTargetWindow(WindowType.MEETING_TOAST)
+      if (win)
+        meetingDetectionService.emit(eventName, payload, win)
+      return
+    }
+
+    const win = logicalWindowManager.showInactive(WindowType.MEETING_TOAST, {
+      payload: {
+        type: 'detected',
+        payload,
+      },
+    })
+    if (!win)
+      console.warn('[meeting-detection] failed to show meeting toast')
   }
   else {
-    windowManager.hide(WindowType.MEETING_TOAST)
+    const win = logicalWindowManager.getTargetWindow(WindowType.MEETING_TOAST)
+    if (win)
+      meetingDetectionService.emit(eventName, payload, win)
+    logicalWindowManager.hide(WindowType.MEETING_TOAST)
   }
 }
 
 function emitRecordingState(payload: RecordingStatePayload): void {
-  const win = windowManager.get(WindowType.MEETING_TOAST)
-  if (!win || win.isDestroyed())
+  if (payload.status === 'stopped') {
+    const win = logicalWindowManager.getTargetWindow(WindowType.MEETING_TOAST)
+    if (win)
+      meetingDetectionService.emit('recording-state', payload, win)
+    logicalWindowManager.hide(WindowType.MEETING_TOAST)
     return
-  meetingDetectionService.emit('recording-state', payload, win)
+  }
+
+  const wasActive = logicalWindowManager.isActive(WindowType.MEETING_TOAST)
+  if (wasActive) {
+    const win = logicalWindowManager.getTargetWindow(WindowType.MEETING_TOAST)
+    if (win)
+      meetingDetectionService.emit('recording-state', payload, win)
+    return
+  }
+
+  const win = logicalWindowManager.showInactive(WindowType.MEETING_TOAST, {
+    payload: {
+      type: 'recording-state',
+      payload,
+    },
+  })
+  if (!win)
+    console.warn('[meeting-detection] failed to show recording toast')
 }
 
 export function initMeetingDetection(): void {
-  const win = windowManager.create(WindowType.MEETING_TOAST)
-  if (!win)
-    return
-
   /** 「会议录制」自身的子进程同时占麦+系统音频，会被误判为会议，排除掉 */
   addSelfPidSource(() => {
     const pid = getRecorderPid()
@@ -69,7 +99,6 @@ export function initMeetingDetection(): void {
 
   onRecorderEvent('recording', ({ path }) => {
     emitRecordingState({ status: 'recording', path })
-    windowManager.show(WindowType.MEETING_TOAST, false)
   })
   onRecorderEvent('paused', ({ path }) => {
     emitRecordingState({ status: 'paused', path })
@@ -92,9 +121,7 @@ export function initMeetingDetection(): void {
     }
   })
 
-  win.webContents.once('did-finish-load', () => {
-    startRecorder()
-    startMeetingDetector()
-    console.log('[meeting-detection] started')
-  })
+  startRecorder()
+  startMeetingDetector()
+  console.log('[meeting-detection] started')
 }

@@ -1,5 +1,6 @@
 import type { WindowType } from '@shared'
 import type { BrowserWindow } from 'electron'
+import { shouldPreloadLogicalWindow } from '@shared'
 import { windowManager } from './window-manager'
 
 export type WindowLoadTask = {
@@ -21,6 +22,11 @@ export async function createWindowsSequentially(
   timeoutMs = 2000,
 ): Promise<void> {
   for (const task of tasks) {
+    if (!shouldPreloadLogicalWindow(task.type)) {
+      console.log(`[window-loader] skip preload type=${task.type}: not a dedicated logical window`)
+      continue
+    }
+
     /**
      * 已存在的窗口直接跳过（如 macOS 关闭主窗后 Dock activate 重入）：
      * 它们早已加载完成，did-finish-load 不会再触发，

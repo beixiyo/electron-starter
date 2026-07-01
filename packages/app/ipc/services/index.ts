@@ -7,6 +7,7 @@
 import './fn/service'
 import './focus/service'
 import './hold/service'
+import './logical-window/service'
 import './media/service'
 import './meeting-detection/service'
 import './notification/service'

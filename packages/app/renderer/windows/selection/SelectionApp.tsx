@@ -13,9 +13,10 @@ import {
   useWindowDrag,
 } from '../shared'
 
-export default function SelectionApp(): React.JSX.Element {
+export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
+  const { initialData = null } = props
   useTheme()
-  const [selectionData, setSelectionData] = useState<SelectionData | null>(null)
+  const [selectionData, setSelectionData] = useState<SelectionData | null>(initialData)
   const dragHandlers = useWindowDrag(WindowType.SELECTION)
 
   useRoundedWindowHitTest(WindowType.SELECTION, () => [
@@ -102,4 +103,13 @@ export default function SelectionApp(): React.JSX.Element {
       />
     </div>
   )
+}
+
+export default SelectionApp
+
+/**
+ * Selection 窗口初始渲染数据
+ */
+export type SelectionAppProps = {
+  initialData?: SelectionData | null
 }
