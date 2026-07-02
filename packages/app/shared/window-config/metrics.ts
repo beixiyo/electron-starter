@@ -11,12 +11,6 @@ export const VOICE_IME_CONTENT_SIZE = {
   processing: { width: 280, height: 72 },
 } as const
 
-/** @deprecated 使用 VOICE_IME_CONTENT_SIZE */
-export const VOICE_IME_SIZE = {
-  WIDTH: VOICE_IME_CONTENT_SIZE.idle.width,
-  HEIGHT: VOICE_IME_CONTENT_SIZE.idle.height,
-} as const
-
 /** VOICE_IME 各状态窗口尺寸（内容 + 2×SHADOW_INSET） */
 export const VOICE_IME_WINDOW_SIZE = {
   idle: { width: VOICE_IME_CONTENT_SIZE.idle.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.idle.height + SHADOW_INSET * 2 },
@@ -70,12 +64,6 @@ export const MEETING_TOAST_CONTENT_SIZE = {
 export const MEETING_TOAST_WINDOW_SIZE = {
   width: MEETING_TOAST_CONTENT_SIZE.width + SHADOW_INSET * 2,
   height: MEETING_TOAST_CONTENT_SIZE.height + SHADOW_INSET * 2,
-} as const
-
-/** Selection 逻辑窗口默认尺寸；实际承载它的是 UTILITY_PANEL_POOL */
-export const SELECTION_WINDOW_SIZE = {
-  width: 500 + SHADOW_INSET * 2,
-  height: 300 + SHADOW_INSET * 2,
 } as const
 
 /** MENUBAR 内容尺寸（不含 shadow inset） */

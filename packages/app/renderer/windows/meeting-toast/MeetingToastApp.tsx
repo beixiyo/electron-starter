@@ -1,14 +1,15 @@
 import type { MotionValue } from 'motion/react'
+import type { MeetingToastInitialEvent } from './useMeetingToast'
 import { formatDuration } from '@jl-org/tool'
 import { WindowType } from '@shared'
-import { MEETING_TOAST_CONTENT_SIZE, SHADOW_INSET } from '@shared/window-config/constants'
+import { MEETING_TOAST_CONTENT_SIZE, SHADOW_INSET } from '@shared/window-config/metrics'
 import { useTheme } from 'hooks'
 import { Loader2, Pause, Play, Square, Video, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo } from 'react'
 import { cn } from 'utils'
 import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
-import { useMeetingToast, type MeetingToastInitialEvent } from './useMeetingToast'
+import { useMeetingToast } from './useMeetingToast'
 
 const CONTENT_SIZE = {
   detection: MEETING_TOAST_CONTENT_SIZE,

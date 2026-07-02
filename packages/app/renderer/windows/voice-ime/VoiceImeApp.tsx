@@ -1,6 +1,6 @@
 import type { VoiceRecorderStatus } from 'comps'
 import { WindowType } from '@shared'
-import { SHADOW_INSET, VOICE_IME_CONTENT_SIZE, VOICE_IME_WINDOW_SIZE } from '@shared/window-config/constants'
+import { SHADOW_INSET, VOICE_IME_CONTENT_SIZE, VOICE_IME_WINDOW_SIZE } from '@shared/window-config/metrics'
 import { LiveWaveAudio } from 'comps'
 import { useTheme, useUpdateEffect } from 'hooks'
 import { Mic } from 'lucide-react'

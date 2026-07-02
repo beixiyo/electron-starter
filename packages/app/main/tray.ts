@@ -1,5 +1,5 @@
 import { WindowType } from '@shared'
-import { SHADOW_INSET } from '@shared/window-config/constants'
+import { SHADOW_INSET } from '@shared/window-config/metrics'
 import { app, Menu, nativeImage, screen, Tray } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { windowManager } from './window-manager'

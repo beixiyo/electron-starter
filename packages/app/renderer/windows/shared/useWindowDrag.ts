@@ -13,12 +13,17 @@ export function useWindowDrag(type: WindowType): WindowDragHandlers {
   const dragRef = useRef<DragState | null>(null)
 
   const handlePointerDown = useLatestCallback((event: PointerEvent<HTMLElement>) => {
-    if (event.button !== 0 || isNoDragTarget(event.target))
+    if (event.button !== 0)
+      return
+
+    /** 先退出点击穿透再判断是否可拖拽，保证 no-drag 控件（如关闭按钮）的这次点击也稳定命中 */
+    void $ipc.window.setIgnoreMouseEvents(type, false)
+
+    if (isNoDragTarget(event.target))
       return
 
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
-    void $ipc.window.setIgnoreMouseEvents(type, false)
 
     const startScreenX = event.screenX
     const startScreenY = event.screenY
@@ -75,7 +80,8 @@ export function useWindowDrag(type: WindowType): WindowDragHandlers {
 }
 
 function isNoDragTarget(target: EventTarget): boolean {
-  return target instanceof HTMLElement && target.closest('[data-no-window-drag="true"]') !== null
+  /** 用 Element 而非 HTMLElement：点击 CloseBtn 等控件时 target 常是内部 SVG 图标 */
+  return target instanceof Element && target.closest('[data-no-window-drag="true"]') !== null
 }
 
 type WindowDragHandlers = {

@@ -1,5 +1,5 @@
 import { WindowType } from '@shared'
-import { SHADOW_INSET } from '@shared/window-config/constants'
+import { SHADOW_INSET } from '@shared/window-config/metrics'
 import { CloseBtn } from 'comps'
 import { useTheme } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
@@ -45,10 +45,6 @@ export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
   const handleClose = () => {
     setTrigger(null)
     $ipc.window.hide(WindowType.SHORTCUT_TEST)
-  }
-  const handleClosePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    void $ipc.window.setIgnoreMouseEvents(WindowType.SHORTCUT_TEST, false)
   }
 
   return (
@@ -111,7 +107,6 @@ export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
           <CloseBtn
             mode="static"
             size={ 28 }
-            onPointerDown={ handleClosePointerDown }
             onClick={ handleClose }
           />
         </div>

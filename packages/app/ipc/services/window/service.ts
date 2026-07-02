@@ -15,9 +15,7 @@ export const windowService = createIpcService<WindowContract>('window', {
         }
       }
 
-      const window = logicalWindowManager.isPooled(type)
-        ? logicalWindowManager.create(type)
-        : windowManager.create(type, configOverride)
+      const window = logicalWindowManager.create(type, { configOverride })
       return {
         success: true,
         windowId: window?.id,
@@ -64,6 +62,11 @@ export const windowService = createIpcService<WindowContract>('window', {
     }
   },
 
+  /**
+   * show/toggle 的非池分支不下沉进 logicalWindowManager：
+   * manager.show 对独占窗口会隐式 create，而这里的 IPC 语义是「仅对已存在窗口生效」，
+   * 避免 renderer 一次 show(MAIN) 就绕过 createMainWindow 的完整接线裸建主窗
+   */
   show: async (_event, type: WindowType) => {
     const success = logicalWindowManager.isPooled(type)
       ? logicalWindowManager.show(type) !== null
@@ -84,9 +87,7 @@ export const windowService = createIpcService<WindowContract>('window', {
   },
 
   destroy: async (_event, type: WindowType) => {
-    const success = logicalWindowManager.isPooled(type)
-      ? logicalWindowManager.hide(type)
-      : windowManager.destroy(type)
+    const success = logicalWindowManager.destroy(type)
     return { success }
   },
 

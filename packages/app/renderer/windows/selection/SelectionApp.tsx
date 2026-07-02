@@ -1,9 +1,8 @@
 import type { SelectionData } from '@shared'
 import { WindowType } from '@shared'
-import { SHADOW_INSET } from '@shared/window-config/constants'
+import { SHADOW_INSET } from '@shared/window-config/metrics'
 import { CloseBtn } from 'comps'
 import { useTheme } from 'hooks'
-import { useEffect, useState } from 'react'
 import { cn } from 'utils'
 import {
   getInsetWindowHitTestRegion,
@@ -14,9 +13,9 @@ import {
 } from '../shared'
 
 export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
-  const { initialData = null } = props
+  /** 数据只来自 route payload；同一逻辑窗口再次触发会换 token 重挂载，无需本地 state */
+  const { initialData: selectionData = null } = props
   useTheme()
-  const [selectionData, setSelectionData] = useState<SelectionData | null>(initialData)
   const dragHandlers = useWindowDrag(WindowType.SELECTION)
 
   useRoundedWindowHitTest(WindowType.SELECTION, () => [
@@ -24,18 +23,7 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
     ...getResizeHandleHitTestRegions(SHADOW_INSET),
   ])
 
-  useEffect(() => {
-    return $ipc.selection.on('data', (data) => {
-      if (data?.text)
-        setSelectionData(data)
-    })
-  }, [])
-
   const handleClose = () => $ipc.window.hide(WindowType.SELECTION)
-  const handleClosePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation()
-    void $ipc.window.setIgnoreMouseEvents(WindowType.SELECTION, false)
-  }
 
   return (
     <div
@@ -59,7 +47,6 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
             <CloseBtn
               mode="static"
               size={ 28 }
-              onPointerDown={ handleClosePointerDown }
               onClick={ handleClose }
             />
           </div>

@@ -30,11 +30,6 @@ export function getCurrentLogicalWindowRoute(poolType: PoolWindowType): LogicalW
 }
 
 /**
- * 获取所有池窗口当前 active route
- *
- * 主要用于调试/测试窗口池复用关系，不参与业务调度
- */
-/**
  * 清空某个池窗口的 active route
  *
  * 这只更新主进程状态；是否通知 renderer、是否隐藏真实窗口由调用方负责

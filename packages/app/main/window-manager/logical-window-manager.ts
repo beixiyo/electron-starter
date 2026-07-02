@@ -1,4 +1,4 @@
-import type { LogicalWindowRoute, PooledLogicalWindowConfig, PooledLogicalWindowType, PoolWindowType, WindowBounds, WindowType } from '@shared'
+import type { LogicalWindowRoute, PooledLogicalWindowConfig, PooledLogicalWindowType, PoolWindowType, WindowBounds, WindowConfig, WindowType } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { logicalWindowService } from '@ipc/services/logical-window/service'
 import { LOGICAL_WINDOW_REGISTRY } from '@shared'
@@ -28,9 +28,9 @@ class LogicalWindowManager {
    * - 独占窗口：直接委托给 windowManager.create(type)
    * - 池化窗口：创建对应池窗口，并把池窗口路由到指定业务窗口
    */
-  create(type: WindowType, options: LogicalWindowShowOptions = {}): BrowserWindow | null {
+  create(type: WindowType, options: LogicalWindowCreateOptions = {}): BrowserWindow | null {
     if (!this.isPooled(type))
-      return windowManager.create(type)
+      return windowManager.create(type, options.configOverride)
 
     return this.acquire(type, {
       ...options,
@@ -86,6 +86,19 @@ class LogicalWindowManager {
 
     this.clearRoute(entry.pool)
     return windowManager.hide(entry.pool)
+  }
+
+  /**
+   * 销毁逻辑窗口
+   *
+   * 池窗口是共享资源，池化窗口不允许真的销毁它，只释放占用（等价 hide）；
+   * 独占窗口直接销毁真实 BrowserWindow
+   */
+  destroy(type: WindowType): boolean {
+    if (this.isPooled(type))
+      return this.hide(type)
+
+    return windowManager.destroy(type)
   }
 
   /**
@@ -329,6 +342,17 @@ export type LogicalWindowShowOptions = {
    * 设置 bounds 时是否使用动画
    */
   animateBounds?: boolean
+}
+
+/**
+ * create 专用参数：比展示参数多一个独占窗口的配置覆盖
+ */
+export type LogicalWindowCreateOptions = LogicalWindowShowOptions & {
+  /**
+   * 独占窗口创建时的 BrowserWindow 配置覆盖；池化窗口忽略，
+   * 池窗口配置只来自 PHYSICAL_WINDOW_CONFIGS
+   */
+  configOverride?: Partial<WindowConfig>
 }
 
 /**

@@ -2,7 +2,7 @@ import type { WindowBounds } from '@shared'
 import type { SelectionHookInstance, TextSelectionData } from 'selection-hook'
 import { isPureNum } from '@jl-org/tool'
 import { logicalWindowManager } from '@main/window-manager'
-import { SELECTION_WINDOW_SIZE, WindowType } from '@shared'
+import { UTILITY_PANEL_POOL_WINDOW_SIZE, WindowType } from '@shared'
 import { screen, shell, systemPreferences } from 'electron'
 import SelectionHook from 'selection-hook'
 
@@ -139,7 +139,8 @@ class SelectionManager {
    */
   private getWindowBoundsNearMouse(mousePos: { x: number, y: number }): WindowBounds | undefined {
     try {
-      const { width, height } = SELECTION_WINDOW_SIZE
+      /** Selection 实际由 utility 池窗口承载，落点按池窗口尺寸计算 */
+      const { width, height } = UTILITY_PANEL_POOL_WINDOW_SIZE
       const displays = screen.getAllDisplays()
 
       /** 找到鼠标所在的显示器 */

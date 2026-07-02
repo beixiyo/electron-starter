@@ -147,9 +147,3 @@ export type PhysicalWindowType
     | WindowType.MENUBAR
     | WindowType.FLOATING_STATUS_POOL
     | WindowType.UTILITY_PANEL_POOL
-
-/**
- * @deprecated 使用 PHYSICAL_WINDOW_CONFIGS。这个别名只保留物理窗口配置，
- * 不再包含池化逻辑窗口
- */
-export const WINDOW_CONFIGS: Partial<Record<WindowType, WindowConfig>> = PHYSICAL_WINDOW_CONFIGS

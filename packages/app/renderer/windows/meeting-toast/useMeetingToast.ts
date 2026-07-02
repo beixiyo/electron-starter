@@ -180,12 +180,12 @@ export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) 
 /**
  * Meeting Toast 首次挂载时由窗口池 route 携带的初始化事件
  */
-export type MeetingToastInitialEvent =
+export type MeetingToastInitialEvent
+  = | {
+    type: 'detected'
+    payload: MeetingDetectedPayload
+  }
   | {
-      type: 'detected'
-      payload: MeetingDetectedPayload
-    }
-  | {
-      type: 'recording-state'
-      payload: RecordingStatePayload
-    }
+    type: 'recording-state'
+    payload: RecordingStatePayload
+  }
