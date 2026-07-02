@@ -4,6 +4,8 @@
 
 本机开发权限稳定问题请看 [mac-local-self-signing.md](./mac-local-self-signing.md)
 
+如果应用用到 `keychain-access-groups`、Associated Domains、App Groups 等受管能力，除本流程外还要内嵌 provisioning profile，见 [mac-managed-capabilities.md](./mac-managed-capabilities.md)
+
 ## 占位符
 
 | 占位符 | 含义 |
@@ -290,5 +292,6 @@ accepted
 | `The Internet connection appears to be offline` | `notarytool` 上传或等待 Apple 公证结果时网络中断。保持网络稳定后重跑；手机热点休眠、切后台、距离过远都可能导致这一步失败 |
 | 公证 401 | 检查 API Key / Issuer ID / Key ID，或 Apple ID 应用专用密码和 Team ID |
 | 公证日志提示 unsigned executable | 把对应 Mach-O helper 加进 `mac.binaries` |
+| 签名公证都正常但启动 `exit 137` / 无法打开 | 用了受管能力却没内嵌 provisioning profile，见 [mac-managed-capabilities.md](./mac-managed-capabilities.md) |
 
 如果 DNS 修正后 `codesign --timestamp` 已成功，但内置公证仍在上传阶段失败，再考虑 `notarytool submit --no-s3-acceleration`。这个参数只影响公证上传，不解决 timestamp 阶段

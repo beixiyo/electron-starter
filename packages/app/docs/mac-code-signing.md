@@ -9,6 +9,10 @@
 | 本机假证书 / 自签名 | 让 TCC 权限稳定，解决打包后辅助功能、Fn 监听等授权反复失效 | 否 | [mac-local-self-signing.md](./mac-local-self-signing.md) |
 | 正式 Developer ID 证书 | 给 `.dmg` / `.zip` 直接分发，配合 Apple 公证通过 Gatekeeper | 是 | [mac-official-signing.md](./mac-official-signing.md) |
 
+用到受管能力（`keychain-access-groups`、Associated Domains、App Groups 等）时，正式分发还需内嵌 provisioning profile，否则签名公证正常但启动被系统杀掉（`exit 137` / 无法打开），见 [mac-managed-capabilities.md](./mac-managed-capabilities.md)
+
+Passkey（Touch ID）登录的代码侧实现见 [mac-passkey.md](./mac-passkey.md)，签名侧依赖上面那份
+
 ## 先选哪条
 
 本机开发、调试权限问题，走假证书流程：
