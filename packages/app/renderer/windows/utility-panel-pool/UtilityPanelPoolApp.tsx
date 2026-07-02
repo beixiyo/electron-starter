@@ -1,5 +1,6 @@
-import type { ShortcutTestPayload } from '@ipc/services/shortcut-test/contract'
+import type { FocusPayload } from '@ipc/services/focus/contract'
 import type { SelectionData } from '@shared'
+import type { ShortcutTestPayload } from '../shortcut-test/ShortcutTestApp'
 import { WindowType } from '@shared'
 import { memo } from 'react'
 import { FocusNativeApp } from '../focus-native/FocusNativeApp'
@@ -32,7 +33,12 @@ export const UtilityPanelPoolApp = memo(() => {
   }
 
   if (route.role === 'focus-native') {
-    return <FocusNativeApp key={ route.token } />
+    return (
+      <FocusNativeApp
+        key={ route.token }
+        initialFocus={ route.payload as FocusPayload | null }
+      />
+    )
   }
 
   return null

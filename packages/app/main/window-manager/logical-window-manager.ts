@@ -1,4 +1,4 @@
-import type { LogicalWindowRoute, PooledLogicalWindowType, PoolWindowType, WindowBounds, WindowType } from '@shared'
+import type { LogicalWindowRoute, PooledLogicalWindowConfig, PooledLogicalWindowType, PoolWindowType, WindowBounds, WindowType } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { logicalWindowService } from '@ipc/services/logical-window/service'
 import { LOGICAL_WINDOW_REGISTRY } from '@shared'
@@ -43,6 +43,8 @@ class LogicalWindowManager {
    *
    * 池化窗口会先 acquire 对应的池窗口，再向 renderer 发送 route 事件，
    * renderer 根据 route.role 切换到对应业务组件
+   *
+   * 池化窗口抢占被拒绝（优先级不足或占用者不可中断）时返回 null
    */
   show(type: WindowType, options: LogicalWindowShowOptions = {}): BrowserWindow | null {
     if (!this.isPooled(type)) {
@@ -88,6 +90,8 @@ class LogicalWindowManager {
 
   /**
    * 按当前可见状态切换显示/隐藏，并返回切换后的可见状态
+   *
+   * 展示被抢占判定拒绝时返回 false
    */
   toggle(type: WindowType): boolean {
     if (this.isVisible(type)) {
@@ -95,8 +99,7 @@ class LogicalWindowManager {
       return false
     }
 
-    this.show(type)
-    return true
+    return this.show(type) !== null
   }
 
   /**
@@ -205,14 +208,20 @@ class LogicalWindowManager {
    * 占用一个池窗口来承载指定逻辑窗口
    *
    * 这里是池化切换的核心：
-   * 1. 确保池窗口已创建
-   * 2. 按需设置 bounds
-   * 3. 写入当前 route 状态
-   * 4. 把 route 发送给池窗口 renderer
-   * 5. 按需展示池窗口
+   * 1. 抢占判定：低优先级请求不能打断可见的高优先级/不可中断窗口
+   * 2. 确保池窗口已创建
+   * 3. 按需设置 bounds
+   * 4. 写入当前 route 状态
+   * 5. 把 route 发送给池窗口 renderer
+   * 6. 按需展示池窗口
+   *
+   * 抢占被拒绝时返回 null，调用方可据此判断展示失败
    */
   private acquire(type: PooledLogicalWindowType, options: LogicalWindowAcquireOptions): BrowserWindow | null {
     const entry = LOGICAL_WINDOW_REGISTRY[type]
+    if (!this.canAcquire(type, entry.pool))
+      return null
+
     const win = windowManager.create(entry.pool)
     if (!win || win.isDestroyed())
       return null
@@ -236,6 +245,31 @@ class LogicalWindowManager {
     }
 
     return win
+  }
+
+  /**
+   * 抢占判定：新的逻辑窗口能否占用池窗口
+   *
+   * - 池空闲、或当前占用者就是自己：直接放行
+   * - 池窗口实际不可见（route 残留）：直接放行
+   * - 当前占用者 interruptible: false：拒绝
+   * - 其余按 priority 比较，新请求 >= 当前占用者才放行
+   */
+  private canAcquire(type: PooledLogicalWindowType, poolType: PoolWindowType): boolean {
+    const activeRoute = getCurrentLogicalWindowRoute(poolType)
+    if (!activeRoute || activeRoute.logicalType === type)
+      return true
+
+    if (!windowManager.isVisible(poolType))
+      return true
+
+    /** 用宽化的 pool 配置类型读取，避免 registry 字面量收窄让分支被判定为恒假 */
+    const current: PooledLogicalWindowConfig = LOGICAL_WINDOW_REGISTRY[activeRoute.logicalType]
+    if (current.interruptible === false)
+      return false
+
+    const next: PooledLogicalWindowConfig = LOGICAL_WINDOW_REGISTRY[type]
+    return (next.priority ?? 0) >= (current.priority ?? 0)
   }
 
   /**

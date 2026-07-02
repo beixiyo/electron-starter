@@ -21,9 +21,10 @@ type FocusState = 'idle' | 'focused'
 const actionTransition = { type: 'spring', stiffness: 400, damping: 30 } as const
 const ACTION_ICON_SIZE = 14
 
-export const FocusNativeApp = memo(() => {
+export const FocusNativeApp = memo<FocusNativeAppProps>((props) => {
+  const { initialFocus = null } = props
   useTheme()
-  const { focus } = useFocusState()
+  const { focus } = useFocusState(initialFocus)
   const state: FocusState = focus?.focused
     ? 'focused'
     : 'idle'
@@ -155,6 +156,10 @@ export const FocusNativeApp = memo(() => {
 })
 
 FocusNativeApp.displayName = 'FocusNativeApp'
+
+export type FocusNativeAppProps = {
+  initialFocus?: FocusPayload | null
+}
 
 const FocusedContent = memo<{ focus: FocusPayload }>(({ focus }) => {
   const dotClass = focus.isSelf

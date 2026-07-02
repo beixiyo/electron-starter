@@ -32,6 +32,10 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
   }, [])
 
   const handleClose = () => $ipc.window.hide(WindowType.SELECTION)
+  const handleClosePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    void $ipc.window.setIgnoreMouseEvents(WindowType.SELECTION, false)
+  }
 
   return (
     <div
@@ -54,7 +58,8 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
           <div data-no-window-drag="true">
             <CloseBtn
               mode="static"
-              size="md"
+              size={ 28 }
+              onPointerDown={ handleClosePointerDown }
               onClick={ handleClose }
             />
           </div>
@@ -93,7 +98,7 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
                 <div className="h-full flex items-center justify-center">
                   <span className="text-xs text-muted-foreground/50">等待选中文本…</span>
                 </div>
-          ) }
+              ) }
         </div>
       </div>
 

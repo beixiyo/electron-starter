@@ -130,6 +130,12 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: false,
     htmlPath: 'windows/utility-panel-pool/index.html',
     show: false,
+    /**
+     * 必须为非激活 panel：普通 focusable 窗口被点击会激活整个 App 并成为 key window，
+     * 关闭（hide）时 AppKit 会把 key 移交给同 App 下一个可见窗口（main）并将其前置，
+     * 导致「点浮窗叉叉 → main 被拉起」。panel 全程不激活 App，从根上避免该链路
+     */
+    macFullscreenAuxiliary: true,
     openDevTools: false,
   },
 } as const satisfies Record<PhysicalWindowType, WindowConfig>

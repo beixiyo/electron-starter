@@ -1,6 +1,6 @@
 import { electronAPI } from '@electron-toolkit/preload'
-import { focusClient } from '@ipc/services/focus/client'
 import { fnClient } from '@ipc/services/fn/client'
+import { focusClient } from '@ipc/services/focus/client'
 import { holdClient } from '@ipc/services/hold/client'
 import { logicalWindowClient } from '@ipc/services/logical-window/client'
 import { mediaClient } from '@ipc/services/media/client'
@@ -11,7 +11,6 @@ import { permissionClient } from '@ipc/services/permission/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
-import { shortcutTestClient } from '@ipc/services/shortcut-test/client'
 import { updateClient } from '@ipc/services/update/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
@@ -26,7 +25,6 @@ export const ipc = {
   voiceIme: voiceImeClient,
   selection: selectionClient,
   shortcutConfig: shortcutConfigClient,
-  shortcutTest: shortcutTestClient,
   oauth: oauthClient,
   permission: permissionClient,
   fn: fnClient,

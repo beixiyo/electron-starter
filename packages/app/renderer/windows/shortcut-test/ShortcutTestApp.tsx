@@ -1,10 +1,9 @@
-import type { ShortcutTestPayload } from '@ipc/services/shortcut-test/contract'
 import { WindowType } from '@shared'
 import { SHADOW_INSET } from '@shared/window-config/constants'
 import { CloseBtn } from 'comps'
 import { useTheme } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
-import { memo, useEffect, useState } from 'react'
+import { memo, useState } from 'react'
 import { cn } from 'utils'
 import {
   getInsetWindowHitTestRegion,
@@ -43,15 +42,13 @@ export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
     ...getResizeHandleHitTestRegions(SHADOW_INSET),
   ])
 
-  useEffect(() => {
-    return $ipc.shortcutTest.on('trigger', (payload) => {
-      setTrigger(payload)
-    })
-  }, [])
-
   const handleClose = () => {
     setTrigger(null)
     $ipc.window.hide(WindowType.SHORTCUT_TEST)
+  }
+  const handleClosePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    void $ipc.window.setIgnoreMouseEvents(WindowType.SHORTCUT_TEST, false)
   }
 
   return (
@@ -113,7 +110,8 @@ export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
         <div data-no-window-drag="true" className="absolute right-4 top-4">
           <CloseBtn
             mode="static"
-            size="md"
+            size={ 28 }
+            onPointerDown={ handleClosePointerDown }
             onClick={ handleClose }
           />
         </div>
@@ -135,6 +133,13 @@ ShortcutTestApp.displayName = 'ShortcutTestApp'
 /**
  * Shortcut Test 窗口初始触发数据
  */
+export type ShortcutTestPayload = {
+  /** 触发类型 */
+  triggerType: 'hold' | 'doublePress' | 'combo' | 'hotkey'
+  /** 显示文本，如 "Hold Triggered" / "Combo: Space" */
+  label: string
+}
+
 export type ShortcutTestAppProps = {
   initialTrigger?: ShortcutTestPayload | null
 }

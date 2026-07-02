@@ -51,7 +51,7 @@ export function useRoundedWindowHitTest(
 
     window.addEventListener('mousemove', handleMove)
     window.addEventListener('mouseleave', handleLeave)
-    setIgnored(true)
+    setIgnored(false)
 
     return () => {
       window.removeEventListener('mousemove', handleMove)
@@ -137,9 +137,9 @@ function isInsideRoundedRegion(
   return dx * dx + dy * dy <= safeRadius * safeRadius
 }
 
-export type RoundedWindowHitTestRegionInput =
-  | RoundedWindowHitTestRegion[]
-  | (() => RoundedWindowHitTestRegion[])
+export type RoundedWindowHitTestRegionInput
+  = | RoundedWindowHitTestRegion[]
+    | (() => RoundedWindowHitTestRegion[])
 
 export type RoundedWindowHitTestRegion = {
   x: number

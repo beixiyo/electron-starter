@@ -67,8 +67,11 @@ export interface WindowConfig extends BrowserWindowConstructorOptions {
    */
   setAlwaysOnTopOnShow?: boolean
   /**
-   * macOS 原生全屏 Space 辅助窗口
+   * macOS 原生全屏 Space 辅助窗口（type: 'panel' 非激活面板）
    * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗
+   *
+   * panel 带 NSWindowStyleMaskNonactivatingPanel：show/focus/点击都不会激活 App，
+   * hide 时也不会触发 AppKit 把 key window 移交给同 App 的其他窗口（如 main）并前置
    *
    * @default false
    */
