@@ -215,7 +215,7 @@ verify_distribution_dmg() {
     fi
   fi
 
-  mount_dir="$(mktemp -d /tmp/flowtica-dmg.XXXXXX)"
+  mount_dir="$(mktemp -d "/tmp/${APP_DISPLAY_NAME}-dmg.XXXXXX")"
   printf '\n$ hdiutil attach "%s"\n' "$dmg"
   if ! hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount_dir" >/dev/null; then
     ARTIFACT_APP_STATUS='FAIL: DMG 无法挂载'
@@ -574,7 +574,7 @@ print_summary() {
 
   section "下一步"
   if [[ "$NOTARIZATION_STATUS" == FAIL:* ]]; then
-    status_line '正式分发' 'FAIL' '当前 app 未公证，不要拿这份 /Applications/Flowtica.app 给用户验收'
+    status_line '正式分发' 'FAIL' "当前 app 未公证，不要拿这份 $SYSTEM_APP_PATH 给用户验收"
     printf '  %s建议:%s 先跑 pnpm -F %s build:mac:test，然后检查生成的 dmg/zip。\n' "$BOLD" "$RESET" "$PACKAGE_FILTER"
   fi
 
@@ -587,7 +587,7 @@ print_summary() {
   fi
 
   if ! has_tcc_service 'kTCCServiceAccessibility'; then
-    status_line '权限测试' 'WARN' '要测 Fn / Accessibility，请运行 Flowtica.app 后在系统设置里给 Flowtica 授权'
+    status_line '权限测试' 'WARN' "要测 Fn / Accessibility，请运行 $DEFAULT_APP_NAME 后在系统设置里给 $APP_DISPLAY_NAME 授权"
   fi
 }
 

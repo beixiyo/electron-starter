@@ -1,4 +1,4 @@
-appId: com.flowtica.electronstarter
+appId: com.beixiyo.electronstarter
 productName: electron-app
 electronVersion: 42.2.0
 # 更新日志：打包时把该文件内容嵌入 latest*.yml，electron-updater 读作 UpdateInfo.releaseNotes，
