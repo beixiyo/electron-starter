@@ -2,7 +2,7 @@ import type { LogicalWindowRoute, PooledLogicalWindowConfig, PooledLogicalWindow
 import type { BrowserWindow } from 'electron'
 import { logicalWindowService } from '@ipc/services/logical-window/service'
 import { LOGICAL_WINDOW_REGISTRY } from '@shared'
-import { clearCurrentLogicalWindowRoute, getCurrentLogicalWindowRoute, setCurrentLogicalWindowRoute } from './logical-window-state'
+import { clearCurrentLogicalWindowRoute, getCurrentLogicalWindowRoute, nextLogicalWindowRouteToken, setCurrentLogicalWindowRoute } from './logical-window-state'
 import { windowManager } from './window-manager'
 
 /**
@@ -286,18 +286,17 @@ class LogicalWindowManager {
   }
 
   /**
-   * 向池窗口 renderer 发送 route
-   *
-   * 如果页面还在加载，延后到 did-finish-load，避免首帧启动时事件丢失
+   * 页面仍在加载时把 emit 延后到 did-finish-load，避免首帧启动丢事件
    */
-  private emitRoute(win: BrowserWindow, route: LogicalWindowRoute): void {
-    const emit = (): void => {
-      if (!win.isDestroyed())
-        logicalWindowService.emit('route', route, win)
-    }
+  private emitWhenReady(win: BrowserWindow, emit: () => void): void {
+    if (win.isDestroyed())
+      return
 
     if (win.webContents.isLoading()) {
-      win.webContents.once('did-finish-load', emit)
+      win.webContents.once('did-finish-load', () => {
+        if (!win.isDestroyed())
+          emit()
+      })
       return
     }
 
@@ -305,7 +304,25 @@ class LogicalWindowManager {
   }
 
   /**
+   * 向池窗口 renderer 发送 route
+   *
+   * 页面还在加载时延后到 did-finish-load；延后期间 route 可能已被 hide 清空或被
+   * 更高优先级窗口取代，故 emit 前用 token 复核当前 route，过期则丢弃这次发送
+   */
+  private emitRoute(win: BrowserWindow, route: LogicalWindowRoute): void {
+    this.emitWhenReady(win, () => {
+      if (getCurrentLogicalWindowRoute(route.poolType)?.token !== route.token)
+        return
+
+      logicalWindowService.emit('route', route, win)
+    })
+  }
+
+  /**
    * 清空某个池窗口当前 route，并通知 renderer 回到空状态
+   *
+   * clear 事件带一个与 route 同序列的单调 token，renderer 据此拒绝乱序到达的过期
+   * 更新；延后到 did-finish-load 期间若池窗口又被新逻辑窗口占用，则不再发 clear
    */
   private clearRoute(poolType: PoolWindowType): void {
     clearCurrentLogicalWindowRoute(poolType)
@@ -314,7 +331,14 @@ class LogicalWindowManager {
       return
 
     win.setIgnoreMouseEvents(false)
-    logicalWindowService.emit('clear', { poolType }, win)
+
+    const token = nextLogicalWindowRouteToken()
+    this.emitWhenReady(win, () => {
+      if (getCurrentLogicalWindowRoute(poolType))
+        return
+
+      logicalWindowService.emit('clear', { poolType, token }, win)
+    })
   }
 }
 

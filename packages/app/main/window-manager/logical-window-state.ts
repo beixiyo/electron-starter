@@ -20,6 +20,15 @@ export function setCurrentLogicalWindowRoute(route: CreateLogicalWindowRouteOpti
 }
 
 /**
+ * 取下一个单调递增 token，用于没有 route 的清空事件
+ *
+ * 让 clear 与 route 共享同一条 token 序列，renderer 据此在乱序到达时拒绝过期更新
+ */
+export function nextLogicalWindowRouteToken(): number {
+  return ++routeToken
+}
+
+/**
  * 获取某个池窗口当前 active route
  *
  * 返回 null 表示该池窗口当前没有被任何逻辑窗口占用；池窗口本身可能仍然存在，

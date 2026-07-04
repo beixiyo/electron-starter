@@ -66,8 +66,11 @@ class WindowManager {
     this.metadata.set(type, { type, config, createdAt: Date.now() })
 
     window.on('closed', () => {
-      this.windows.delete(type)
-      this.metadata.delete(type)
+      /** 身份校验：destroy 后立即 create 同类型窗口时，旧窗口延迟触发的 closed 不能误删新窗口的槽位 */
+      if (this.windows.get(type) === window) {
+        this.windows.delete(type)
+        this.metadata.delete(type)
+      }
     })
 
     return window

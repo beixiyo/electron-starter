@@ -5,5 +5,5 @@ export type LogicalWindowContract = IpcContract<{
   getCurrentRoute: (poolType: PoolWindowType) => LogicalWindowRoute | null
 }, {
   route: LogicalWindowRoute
-  clear: { poolType: PoolWindowType }
+  clear: { poolType: PoolWindowType, token: number }
 }>

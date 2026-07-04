@@ -81,9 +81,16 @@ export function createBrowserWindow(
     })
   }
 
-  window.webContents.on('did-finish-load', () => {
-    window.webContents.insertCSS('html { overflow: hidden !important; }')
-  })
+  /**
+   * 仅对加载本地 app 页面的窗口锁 html 滚动；OAUTH 一类加载三方远程页
+   * （有 initialUrl、无 htmlPath）的窗口不能强制 overflow:hidden，
+   * 否则超高的登录/同意页无法滚动、把用户卡住
+   */
+  if (htmlPath && !initialUrl) {
+    window.webContents.on('did-finish-load', () => {
+      window.webContents.insertCSS('html { overflow: hidden !important; }').catch(() => {})
+    })
+  }
 
   /** 移除窗口菜单（如果需要） */
   if (!config.frame) {
