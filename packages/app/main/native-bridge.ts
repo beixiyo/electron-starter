@@ -5,9 +5,21 @@ import { EventBus } from '@jl-org/tool'
 import { app } from 'electron'
 
 export function getNativeBinaryPath(name: string): string {
+  const resourcePath = path.join('native', getNativePlatformDir(), name)
+
   if (app.isPackaged)
-    return path.join(process.resourcesPath, name)
-  return path.join(__dirname, `../../resources/${name}`)
+    return path.join(process.resourcesPath, resourcePath)
+  return path.join(__dirname, '../../resources', resourcePath)
+}
+
+function getNativePlatformDir(): string {
+  if (process.platform === 'darwin')
+    return 'mac'
+  if (process.platform === 'win32')
+    return 'windows'
+  if (process.platform === 'linux')
+    return 'linux'
+  return process.platform
 }
 
 export class NativeBridge<T extends Record<string, any>> {

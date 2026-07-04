@@ -7,16 +7,23 @@
   "author": "example.com",
   "homepage": "https://electron-vite.org",
   "scripts": {
+    "----- quality -----": "-----",
     "lint": "eslint --fix .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+
+    "----- dev -----": "-----",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.config.web.ts",
+
+    "----- native -----": "-----",
     "build:native": "bash scripts/build-native.sh",
+    "build:native:mac": "bash scripts/build-native.sh --platform=mac",
+
+    "----- build -----": "-----",
     "build": "electron-vite build",
-    "postinstall": "node node_modules/electron/install.js && electron-builder install-app-deps",
     "build:win": "node ./scripts/build-for.mjs --platform=win",
     "build:win:test": "node ./scripts/build-for.mjs --platform=win --mode=test",
     "build:win:prod": "node ./scripts/build-for.mjs --platform=win --mode=production",
@@ -29,21 +36,32 @@
     "build:unpack": "node ./scripts/build-for.mjs --platform=dir && bun scripts/selfsign-app.ts install",
     "build:unpack:test": "node ./scripts/build-for.mjs --platform=dir --mode=test && bun scripts/selfsign-app.ts install",
     "build:unpack:prod": "node ./scripts/build-for.mjs --platform=dir --mode=production && bun scripts/selfsign-app.ts install",
+
+    "----- signing -----": "-----",
     "sign:setup": "bun scripts/selfsign-app.ts setup",
     "sign:install": "bun scripts/selfsign-app.ts install",
     "sign:cleanup": "bun scripts/selfsign-app.ts cleanup",
+
+    "----- update-local -----": "-----",
     "update:build:mac": "node ./scripts/build-for.mjs --platform=mac --mode=test --localUpdate --localUpdatePayloadKb=4096",
     "update:build:mac:next": "bun scripts/create-local-update-feed.ts --buildOnly",
     "update:serve": "bun scripts/serve-update-feed.ts",
     "update:serve:slow": "bun scripts/serve-update-feed.ts --rateKbps=512",
     "update:feed:mac": "bun scripts/create-local-update-feed.ts",
     "update:feed:mac:current": "pnpm run update:build:mac && pnpm run update:serve:slow",
+
+    "----- update-upload -----": "-----",
     "update:upload:gcs": "bun scripts/upload-gcs-update-feed.ts",
     "update:upload:gcs:test": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.test",
     "update:upload:gcs:prod": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.production",
     "update:feed:mac:gcs": "bun scripts/create-local-update-feed.ts --upload",
     "update:feed:mac:selfsign": "bun scripts/create-local-update-feed.ts --selfSign",
     "update:feed:mac:selfsign:gcs": "bun scripts/create-local-update-feed.ts --selfSign --upload",
+
+    "----- lifecycle -----": "-----",
+    "postinstall": "node node_modules/electron/install.js && electron-builder install-app-deps",
+
+    "----- diagnostics -----": "-----",
     "diagnose:mac-permissions": "bash scripts/diagnose-mac-permissions.sh"
   },
   "dependencies": {

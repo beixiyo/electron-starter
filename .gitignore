@@ -29,10 +29,10 @@ dist-ssr
 *.sw?
 
 # compiled binaries
-packages/app/resources/audio-monitor
-packages/app/resources/audio-recorder
-packages/app/resources/fn-listener
-packages/app/resources/focus-check
+packages/app/resources/native/mac/audio-monitor
+packages/app/resources/native/mac/audio-recorder
+packages/app/resources/native/mac/fn-listener
+packages/app/resources/native/mac/focus-check
 
 # build
 *.tsbuildinfo

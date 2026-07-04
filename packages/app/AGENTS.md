@@ -27,9 +27,9 @@
 packages/app/
 ├── main/              # Electron 主进程
 │   ├── index.ts       # 应用入口
-│   ├── fn-listener/   # macOS Fn 键监听（Swift 子进程管理）
+│   ├── keyboard/      # 键盘监听与快捷键（含 macOS Fn 子进程管理）
+│   ├── audio-recorder/# 原生录音子进程桥接
 │   ├── window-manager/# 窗口生命周期管理
-│   ├── shortcuts/     # 全局快捷键（普通/长按/双击）
 │   ├── media/         # 媒体捕获权限与工具
 │   ├── selection/     # 文本选区功能
 │   ├── utils/         # logger、error-handler、paste-text
@@ -56,15 +56,25 @@ packages/app/
 │   ├── types/         # TypeScript 类型（window / media / oauth）
 │   └── window-config/ # 各窗口类型的配置（WINDOW_CONFIGS）
 │
-├── resources/         # 原生二进制（Swift 编译产物，已 gitignore）
-│   ├── fn-listener    # Fn 键监听二进制
-│   ├── fn-listener.swift
-│   ├── focus-check    # 焦点检测二进制
-│   └── focus-check.swift
+├── native/            # 平台原生源码
+│   └── mac/           # macOS Swift helper 源码
+│       ├── fn-listener.swift
+│       ├── focus-check.swift
+│       ├── audio-monitor.swift
+│       └── audio-recorder.swift
+│
+├── resources/         # 运行时资源与原生编译产物
+│   ├── icon.png
+│   └── native/mac/    # macOS Swift 编译产物（已 gitignore）
+│       ├── fn-listener
+│       ├── focus-check
+│       ├── audio-monitor
+│       └── audio-recorder
 │
 ├── scripts/           # 构建脚本
-│   ├── build-fn-listener.sh
-│   └── build-focus-check.sh
+│   ├── build-native.sh       # 原生编译平台分发入口
+│   └── native/
+│       └── build-mac.sh      # macOS Swift helper 编译实现
 │
 ├── docs/              # 功能文档（必读）
 │   ├── fn-key.md      # Fn 键监听原理与 API
@@ -91,8 +101,8 @@ pnpm typecheck:node # 仅检查 main/preload
 pnpm typecheck:web  # 仅检查 renderer
 
 # 编译 macOS 原生二进制（首次 clone 或 Swift 改动后必须执行）
-pnpm build:fn-listener   # → resources/fn-listener
-pnpm build:focus-check   # → resources/focus-check
+pnpm build:native       # 默认编译 macOS native helper
+pnpm build:native:mac   # 显式编译 macOS native helper
 ```
 
 ---
@@ -210,7 +220,8 @@ type BroadcastMessage<T> = {
 - 通过 Swift 子进程（IOHIDManager）独立监听 HID 层，绕过 Electron 的按键拦截限制
 - 主进程管理子进程生命周期，通过 stdout 协议接收事件：`FN_DOWN` / `FN_UP` / `FN_COMBO_<key>`
 - 300ms 状态机支持三种模式：**Hold**（长按）/ **DoublePress**（双击）/ **Combo**（组合键）
-- 代码入口：`main/fn-listener/core.ts`（子进程管理）、`main/fn-listener/shortcuts.ts`（状态机）
+- Swift 源码：`native/mac/fn-listener.swift`
+- 代码入口：`main/keyboard/fn/core.ts`（子进程管理）、`main/keyboard/fn/state-machine.ts`（状态机）
 - **注意 50ms 缓冲**：HID 事件存在时序抖动，详见 `docs/fn-key.md`
 
 ### 文本焦点检测（focus-check）
@@ -218,13 +229,13 @@ type BroadcastMessage<T> = {
 - 通过 Swift 子进程（Accessibility API / AXUIElement）一次性检测当前是否有文本输入焦点
 - 与 fn-listener 不同，focus-check 是**一次性调用**，不常驻
 - 典型场景：Voice IME 触发时判断是否直接注入文本
+- Swift 源码：`native/mac/focus-check.swift`
 - 代码入口：`main/focus-check.ts`
 
-**两个 Swift 二进制都在 `resources/` 下，已 gitignore。** 首次 clone 必须手动编译：
+**Swift 二进制都在 `resources/native/mac/` 下，已 gitignore。** 首次 clone 必须手动编译：
 
 ```bash
-pnpm build:fn-listener
-pnpm build:focus-check
+pnpm build:native
 ```
 
 ---
@@ -287,7 +298,7 @@ pnpm build:unpack
 
 ## 常见陷阱
 
-1. **Swift 二进制未编译**：clone 后忘记运行 `pnpm build:fn-listener` / `pnpm build:focus-check`，运行时子进程启动失败
+1. **Swift 二进制未编译**：clone 后忘记运行 `pnpm build:native`，运行时子进程启动失败
 2. **窗口配置散落**：窗口参数应统一在 `shared/window-config/constants.ts` 定义，不要在多处硬编码
 3. **直接使用 ipcRenderer**：渲染进程应通过 `window.$ipc` 访问，`ipcRenderer` 未通过 Context Bridge 暴露
 4. **shared/ 引入端专属模块**：`shared/` 不得有任何运行时 `import` 引用 `electron`、`react`、`window.*` 等端专属 API；`import type` 可以例外，但仍应优先用字面量类型替代

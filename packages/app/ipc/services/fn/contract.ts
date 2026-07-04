@@ -3,7 +3,7 @@ import type { IpcContract } from '@ipc/core'
 /** Fn 组合键触发时可能附带的修饰符 */
 export type Modifier = 'Meta' | 'Control' | 'Alt' | 'Shift'
 
-/** 与 fn-listener.swift COMBO_KEYS 保持一一对应 */
+/** 与 native/mac/fn-listener.swift COMBO_KEYS 保持一一对应 */
 export type FnComboKey
   = | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'
     | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T' | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z'

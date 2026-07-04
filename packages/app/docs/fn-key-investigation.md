@@ -89,7 +89,7 @@
 
 ---
 
-## 五、最终实现要点（`resources/fn-listener.swift`）
+## 五、最终实现要点（`native/mac/fn-listener.swift`）
 
 ```swift
 CGEvent.tapCreate(

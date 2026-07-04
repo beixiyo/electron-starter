@@ -14,10 +14,11 @@ macOS Accessibility API（`AXUIElement`）可以获取任意应用的 UI 层级�
 编译 Swift 二进制：
 
 ```bash
-pnpm build:focus-check
+pnpm build:native
 ```
 
-二进制路径：`resources/focus-check`（已 gitignore，不提交）
+源码路径：`native/mac/focus-check.swift`
+二进制路径：`resources/native/mac/focus-check`（已 gitignore，不提交）
 
 ## 权限
 
@@ -67,7 +68,7 @@ stdout 输出单行 JSON：
 | `AXTextArea` | 多行文本区域（编辑器、备忘录等） |
 | `AXComboBox` | 下拉选择 + 输入框 |
 
-扩展：在 `focus-check.swift` 的 `textRoles` 集合中添加新角色即可
+扩展：在 `native/mac/focus-check.swift` 的 `textRoles` 集合中添加新角色即可
 
 ## Electron / Chromium 应用兼容性
 
@@ -146,8 +147,10 @@ Hold Fn → 录音 → 松开 Fn → ASR 转写
 
 | 文件 | 职责 |
 |------|------|
-| `resources/focus-check.swift` | Accessibility API 查询焦点元素，输出 JSON |
-| `scripts/build-focus-check.sh` | 编译为 arm64+x86_64 通用二进制 |
+| `native/mac/focus-check.swift` | Accessibility API 查询焦点元素，输出 JSON |
+| `resources/native/mac/focus-check` | 编译后的 macOS helper 二进制 |
+| `scripts/build-native.sh` | 原生编译平台分发入口 |
+| `scripts/native/build-mac.sh` | 编译为 arm64+x86_64 通用二进制 |
 | `main/focus-check.ts` | Node.js 封装，execFile 调用 + JSON 解析 |
 | `electron-builder.yml` | 打包配置，extraResources 包含二进制 |
 

@@ -15,10 +15,11 @@
 编译 Swift 二进制：
 
 ```bash
-pnpm build:fn-listener
+pnpm build:native
 ```
 
-二进制路径：`resources/fn-listener`（已 gitignore，不提交）
+源码路径：`native/mac/fn-listener.swift`
+二进制路径：`resources/native/mac/fn-listener`（已 gitignore，不提交）
 
 ## 权限
 
@@ -69,7 +70,7 @@ Swift 子进程 (CGEventTap .cghidEventTap)
 | 特殊 | `Space` `Enter` `Escape` `Tab` `Backspace` `Delete` `CapsLock` |
 | 标点 | `Minus` `Equal` `Comma` `Period` `Slash` `Backslash` `Quote` `Semicolon` `Grave` `LeftBracket` `RightBracket` |
 
-扩展：在 `fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 虚拟键码 `kVK_*` → 键名映射即可（注意是 CGEvent 虚拟键码，不是 HID usage）
+扩展：在 `native/mac/fn-listener.swift` 的 `COMBO_KEYS` 字典中添加 虚拟键码 `kVK_*` → 键名映射即可（注意是 CGEvent 虚拟键码，不是 HID usage）
 
 ## 快捷键集成
 
@@ -111,9 +112,10 @@ window.$ipc.fn.onUp(() => console.log('fn released'))
 
 | 文件 | 职责 |
 |------|------|
-| `resources/fn-listener.swift` | HID 层监听 Fn + 键盘事件，输出协议事件 |
-| `main/fn-listener/core.ts` | 管理 Swift 子进程，解析 stdout，分发 key/combo 监听器 |
-| `main/fn-listener/shortcuts.ts` | 300ms 状态机，裁决 Hold / DoublePress / Combo |
+| `native/mac/fn-listener.swift` | HID 层监听 Fn + 键盘事件，输出协议事件 |
+| `resources/native/mac/fn-listener` | 编译后的 macOS helper 二进制 |
+| `main/keyboard/fn/core.ts` | 管理 Swift 子进程，解析 stdout，分发 key/combo 监听器 |
+| `main/keyboard/fn/state-machine.ts` | 300ms 状态机，裁决 Hold / DoublePress / Combo |
 | `main/index.ts` | 注册具体业务行为 |
 
 ## 兼容性

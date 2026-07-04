@@ -77,10 +77,10 @@ mac:
   hardenedRuntime: true
   # extraResources 里的 Mach-O helper 需要显式签名
   binaries:
-    - Contents/Resources/fn-listener
-    - Contents/Resources/focus-check
-    - Contents/Resources/audio-monitor
-    - Contents/Resources/audio-recorder
+    - Contents/Resources/native/mac/fn-listener
+    - Contents/Resources/native/mac/focus-check
+    - Contents/Resources/native/mac/audio-monitor
+    - Contents/Resources/native/mac/audio-recorder
   # 正式分发默认使用 electron-builder 内置公证
   notarize: true
 ```

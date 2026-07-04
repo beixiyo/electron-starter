@@ -97,7 +97,7 @@ try {
       || (args.platform === 'dir' && process.platform === 'darwin')
     if (needsNative) {
       console.log('Building native (swift) binaries...')
-      execSync(`pnpm -F ${packageFilter} build:native`, execOpts)
+      execSync(`pnpm -F ${packageFilter} build:native:mac`, execOpts)
     }
 
     console.log('Running build...')
