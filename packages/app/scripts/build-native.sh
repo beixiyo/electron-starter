@@ -37,7 +37,7 @@ build_universal() {
 build_universal "focus-check"
 build_universal "fn-listener"
 build_universal "audio-monitor" "14.2" "-framework CoreAudio -framework AppKit"
-build_universal "audio-recorder" "14.0" "-framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework AppKit"
+build_universal "audio-recorder" "14.0" "-framework ScreenCaptureKit -framework AVFoundation -framework CoreMedia -framework CoreAudio -framework AppKit"
 
 echo ""
 echo "All native binaries built ✅"

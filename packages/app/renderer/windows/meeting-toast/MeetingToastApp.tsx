@@ -3,13 +3,24 @@ import type { MeetingToastInitialEvent } from './useMeetingToast'
 import { formatDuration } from '@jl-org/tool'
 import { WindowType } from '@shared'
 import { MEETING_TOAST_CONTENT_SIZE, SHADOW_INSET } from '@shared/window-config/metrics'
+import { CountdownBorder } from 'comps'
 import { useTheme } from 'hooks'
-import { Loader2, Pause, Play, Square, Video, X } from 'lucide-react'
+import { AudioLines, Loader2, Pause, Play, Square, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo } from 'react'
 import { cn } from 'utils'
 import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
 import { useMeetingToast } from './useMeetingToast'
+
+/** 检测态描边参数：紫色倒计时描边 + 白底内缩（内缩量 = 可见紫线宽度） */
+const BORDER_RADIUS = 16
+const BORDER_STROKE = 6
+const COUNTDOWN_START_X = 118
+
+/** 关闭按钮：18px 圆钮，悬出容器左上角外 (-7, -5) */
+const CLOSE_BTN_SIZE = 18
+const CLOSE_BTN_OFFSET_X = -7
+const CLOSE_BTN_OFFSET_Y = -5
 
 const CONTENT_SIZE = {
   detection: MEETING_TOAST_CONTENT_SIZE,
@@ -62,12 +73,25 @@ export const MeetingToastApp = memo<MeetingToastAppProps>((props) => {
     if (!visible)
       return []
 
-    return [
+    const regions = [
       getInsetWindowHitTestRegion(SHADOW_INSET, 16, {
         width: contentSize.width + SHADOW_INSET * 2,
         height: contentSize.height + SHADOW_INSET * 2,
       }),
     ]
+
+    /** 检测态关闭按钮悬出圆角矩形外，单独补一块命中区域，否则点击被穿透 */
+    if (viewKey === 'detection') {
+      regions.push({
+        x: SHADOW_INSET + CLOSE_BTN_OFFSET_X,
+        y: SHADOW_INSET + CLOSE_BTN_OFFSET_Y,
+        width: CLOSE_BTN_SIZE,
+        height: CLOSE_BTN_SIZE,
+        radius: CLOSE_BTN_SIZE / 2,
+      })
+    }
+
+    return regions
   })
 
   useEffect(() => {
@@ -82,9 +106,13 @@ export const MeetingToastApp = memo<MeetingToastAppProps>((props) => {
           <motion.div
             key="toast-container"
             className={ cn(
-              'relative overflow-hidden',
-              'bg-background rounded-2xl',
+              'relative rounded-2xl',
               'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+              /**
+               * 检测态由 CountdownBorder 提供白底 + 紫描边、关闭按钮悬出容器外，
+               * 故容器不加 bg / overflow-hidden；录制 / 处理态沿用白底裁切容器
+               */
+              viewKey !== 'detection' && 'overflow-hidden bg-background',
             ) }
             initial={ { opacity: 0, y: -12, scale: 0.96 } }
             animate={ {
@@ -141,71 +169,74 @@ const DetectionView = memo<DetectionViewProps>((props) => {
   const { displayName, progress, onRecord, onDismiss } = props
 
   return (
-    <motion.div className="relative flex h-full items-center gap-3 pl-4 pr-3" { ...viewTransition }>
-      <button
-        type="button"
-        className={ cn(
-          'absolute left-1.5 top-1.5',
-          'flex size-4 items-center justify-center rounded-full',
-          'text-muted-foreground/30 hover:text-muted-foreground/70',
-          'transition-colors duration-150',
+    <motion.div className="relative h-full w-full" { ...viewTransition }>
+      <CountdownBorder
+        width={ CONTENT_SIZE.detection.width }
+        height={ CONTENT_SIZE.detection.height }
+        radius={ BORDER_RADIUS }
+        strokeWidth={ BORDER_STROKE }
+        startX={ COUNTDOWN_START_X }
+        progress={ progress }
+        className="bg-transparent"
+        contentClassName={ cn(
+          /**
+           * 紫色倒计时描边必须是最外沿：容器透明，白底盖在描边上、只露出边缘一圈
+           * 可见紫线宽度 = 白底内缩量（此处 3px），与 strokeWidth 无关——
+           * strokeWidth 只需 ≥ 2× 内缩量把可见环垫满即可（故用 6 而非更大）
+           * 内缩量放大时同步：h-[calc(100%-2×内缩)]、圆角 = 16 - 内缩
+           */
+          'm-[3px] h-[calc(100%-6px)] rounded-[13px] bg-background',
+          'flex items-center gap-2 py-3 pl-2.5 pr-3',
         ) }
-        onClick={ onDismiss }
       >
-        <X size={ 10 } strokeWidth={ 2.5 } />
-      </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-[9px] bg-brand/10">
+            <AudioLines size={ 18 } strokeWidth={ 2.2 } className="text-brand" />
+          </div>
 
-      <div className="flex size-9 shrink-0 translate-y-px items-center justify-center">
-        <div className="relative flex size-8 items-center justify-center">
-          <svg viewBox="0 0 32 32" className="absolute inset-0 size-full">
-            <circle
-              cx="16"
-              cy="16"
-              r="13"
-              fill="none"
-              strokeWidth="2.5"
-              className="stroke-black/10"
-            />
-            <motion.circle
-              cx="16"
-              cy="16"
-              r="13"
-              fill="none"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              className="stroke-black"
-              style={ {
-                transformOrigin: 'center',
-                rotate: -90,
-                pathLength: progress,
-              } }
-            />
-          </svg>
-          <Video size={ 14 } strokeWidth={ 2.2 } className="text-black" />
+          <div className="flex w-36 min-w-0 shrink-0 flex-col leading-[22px]">
+            <p className="truncate text-sm font-semibold leading-[22px] text-text">
+              Meeting detected
+            </p>
+            <p className="truncate text-sm leading-[22px] text-text2">
+              {displayName}
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-medium leading-tight text-textPrimary">
-          Meeting detected
-        </p>
-        <p className="mt-0.5 truncate text-xs leading-tight text-muted-foreground/60">
-          {displayName}
-        </p>
-      </div>
+        <button
+          type="button"
+          className={ cn(
+            'flex h-10 flex-1 items-center justify-center rounded-xl',
+            'bg-button text-sm font-medium leading-[22px] text-textSpecial',
+            'hover:opacity-90 active:scale-[0.97]',
+            'transition-all duration-150',
+          ) }
+          onClick={ onRecord }
+        >
+          Start Recording
+        </button>
+      </CountdownBorder>
 
+      {/* 关闭按钮悬出左上角外，CountdownBorder 有 overflow-hidden，必须放兄弟层 */}
       <button
         type="button"
+        aria-label="Dismiss"
         className={ cn(
-          'shrink-0 rounded-full px-4 py-2',
-          'bg-zinc-900 text-[13px] font-medium text-white',
-          'dark:bg-white dark:text-zinc-900',
-          'hover:opacity-90 active:scale-[0.97]',
+          'absolute z-10 flex items-center justify-center rounded-full',
+          'bg-button2 border border-border text-text2',
+          'hover:bg-background3 hover:text-text active:scale-95',
           'transition-all duration-150',
         ) }
-        onClick={ onRecord }
+        style={ {
+          width: CLOSE_BTN_SIZE,
+          height: CLOSE_BTN_SIZE,
+          left: CLOSE_BTN_OFFSET_X,
+          top: CLOSE_BTN_OFFSET_Y,
+        } }
+        onClick={ onDismiss }
       >
-        Start Recording
+        <X className="size-2.5" />
       </button>
     </motion.div>
   )

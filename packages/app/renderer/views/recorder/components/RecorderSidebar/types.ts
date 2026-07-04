@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { StateMeta } from '../../constants/state-meta'
 import type { PrimaryAction } from '../../types'
 
@@ -33,6 +34,8 @@ export type RecorderSidebarProps = {
     title: string
     items: AudioCard[]
   }
+  /** 音源多选条（原生 tap 录音模式下渲染在音频设置卡顶部，混入系统音频） */
+  audioSourceBar?: ReactNode
   errorMessage: string | null
   /**
    * 录制时长（秒）

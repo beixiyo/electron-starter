@@ -53,11 +53,19 @@ export function getRecorderPid(): number | null {
   return bridge.pid
 }
 
-export function startRecording(outputPath?: string): void {
+export function startRecording(outputPath?: string, options?: StartRecordingOptions): void {
   const filePath = outputPath ?? defaultOutputPath()
   mkdirSync(path.dirname(filePath), { recursive: true })
-  console.log(`[audio-recorder] sending start → ${filePath}`)
-  bridge.send(JSON.stringify({ action: 'start', outputPath: filePath }))
+  console.log(`[audio-recorder] sending start → ${filePath}${options?.engine
+    ? ` (engine=${options.engine}, pids=[${options.pids?.join(',') ?? ''}])`
+    : ''}`)
+  bridge.send(JSON.stringify({ action: 'start', outputPath: filePath, ...options }))
+}
+
+/** tap 录音中热挂/卸音源（mic + 系统音轨）或变更混入进程集合（仅 engine='tap' 的录音有效，SCK 链路忽略） */
+export function updateRecording(options: UpdateRecordingOptions): void {
+  console.log(`[audio-recorder] sending update → mic=${options.micEnabled}, tap=${options.tapEnabled}, pids=[${options.pids.join(',')}]`)
+  bridge.send(JSON.stringify({ action: 'update', ...options }))
 }
 
 export function pauseRecording(): void {
@@ -83,6 +91,40 @@ function defaultOutputPath(): string {
   const ts = formatDate('yyyy-MM-dd HH-mm-ss')
   const dir = path.join(app.getPath('temp'), 'meeting-recordings')
   return path.join(dir, `会议录制 ${ts}.m4a`)
+}
+
+export type StartRecordingOptions = {
+  /** 录音引擎：缺省 = ScreenCaptureKit 全系统音频（会议链路）；tap = Core Audio tap 引擎（手动录音，macOS 14.2+） */
+  engine?: 'tap'
+  /**
+   * tap 引擎：是否随启动挂载系统音轨；false = 纯 mic 开录（系统音轨预建空轨，
+   * 录音中可经 updateRecording 热挂）
+   *
+   * @default true
+   */
+  tapEnabled?: boolean
+  /** tap 引擎：仅混入这些进程的音频；空数组 / 缺省 = 全系统混音 */
+  pids?: number[]
+  /** tap 引擎全系统模式：排除的进程（传自身进程族防自录，include 模式忽略） */
+  excludePids?: number[]
+  /**
+   * tap 引擎：是否随启动采集麦克风（mic 轨恒预建，此项决定初始是否进样；录音中可经 updateRecording 热挂/卸）
+   *
+   * @default true
+   */
+  mic?: boolean
+}
+
+/** tap 录音中热挂/卸的完整音源状态（renderer 每次变更下发全量，Swift 据此挂/卸 mic 与 tap） */
+export type UpdateRecordingOptions = {
+  /** 麦克风是否采集 */
+  micEnabled: boolean
+  /** 系统音轨（tap）是否挂载 */
+  tapEnabled: boolean
+  /** tap 仅混入这些进程；空 = 全系统混音 */
+  pids: number[]
+  /** tap 全系统模式排除的进程（自身进程族） */
+  excludePids: number[]
 }
 
 type RecorderEvents = {

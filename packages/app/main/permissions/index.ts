@@ -1,19 +1,23 @@
 import type { PermissionKind, PermissionStatus } from '@shared'
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
 import { ensureMediaAccess, getMediaAccessStatus } from '@main/media'
 import { logWarn } from '@main/utils/logger'
 import { desktopCapturer, shell, systemPreferences } from 'electron'
 import { getNativeBinaryPath } from '../native-bridge'
 
 const SCREEN_SETTINGS_OPEN_DELAY_MS = 500
+/** 授权弹窗等待用户决策，给足时间；Swift 侧 300s 自行超时退出 */
+const AUDIO_CAPTURE_PROMPT_TIMEOUT_MS = 310_000
 const nativePromptRequestedKinds = new Set<PermissionKind>()
 
 /** macOS 各权限对应的隐私设置面板 URL */
 const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
-  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-  camera: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
-  screen: 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+  'microphone': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  'camera': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
+  'screen': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+  'accessibility': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+  /** 「仅系统音频录制」列表挂在 Screen & System Audio Recording 面板下方独立小节 */
+  'system-audio': 'x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture',
 }
 
 /**
@@ -29,6 +33,13 @@ export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
     return systemPreferences.isTrustedAccessibilityClient(false) && isFnListenerAccessibilityTrusted()
       ? 'granted'
       : 'denied'
+  }
+
+  if (kind === 'system-audio') {
+    if (process.platform !== 'darwin') {
+      return 'granted'
+    }
+    return getAudioCaptureStatus()
   }
 
   return getMediaAccessStatus(kind)
@@ -68,6 +79,31 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     }
     clearSettingsFallback('accessibility')
     return 'granted'
+  }
+
+  if (kind === 'system-audio') {
+    if (process.platform !== 'darwin') {
+      return 'granted'
+    }
+
+    if (getAudioCaptureStatus() === 'granted') {
+      clearSettingsFallback('system-audio')
+      return 'granted'
+    }
+
+    /** 已发起过一次原生弹窗（被拒 / 未决）→ 二次点击改开隐私设置引导 */
+    if (shouldOpenSettingsFallback('system-audio')) {
+      openPrivacySettings('system-audio')
+      return getAudioCaptureStatus()
+    }
+
+    markNativePromptRequested('system-audio')
+
+    const status = await requestAudioCaptureAccess()
+    if (status === 'granted') {
+      clearSettingsFallback('system-audio')
+    }
+    return status
   }
 
   if (kind === 'screen') {
@@ -144,6 +180,86 @@ function requestFnListenerAccessibility(): boolean {
   catch {
     return false
   }
+}
+
+/**
+ * system-audio 探测要同步 spawn 子进程（~10-30ms 阻塞主进程事件循环），
+ * 而权限弹窗打开期间以 1s 轮询 permission.get——必须加短 TTL 缓存；
+ * 授权弹窗有结果时主动失效，保证用户决策后立即反映
+ */
+const AUDIO_CAPTURE_STATUS_TTL_MS = 3000
+let audioCaptureStatusCache: { status: PermissionStatus, at: number } | null = null
+
+function getAudioCaptureStatus(): PermissionStatus {
+  if (audioCaptureStatusCache && Date.now() - audioCaptureStatusCache.at < AUDIO_CAPTURE_STATUS_TTL_MS) {
+    return audioCaptureStatusCache.status
+  }
+
+  const status = probeAudioCaptureStatus()
+  audioCaptureStatusCache = { status, at: Date.now() }
+  return status
+}
+
+/**
+ * 「仅系统音频录制」权限状态（kTCCServiceAudioCapture）
+ *
+ * 无公开 Electron API，经 audio-recorder --check-audio-capture（私有 TCC SPI）探测
+ * exit code：0=granted 1=denied 2=not-determined 3=SPI 不可用 4=macOS < 14.2；
+ * 3/4 返回 'unknown'，调用方按「不硬卡」处理（首次 AudioDeviceStart 仍会触发系统弹窗）
+ */
+function probeAudioCaptureStatus(): PermissionStatus {
+  try {
+    execFileSync(getNativeBinaryPath('audio-recorder'), ['--check-audio-capture'], {
+      stdio: 'ignore',
+    })
+    return 'granted'
+  }
+  catch (error) {
+    const status = (error as { status?: number })?.status
+    if (status === 1) {
+      return 'denied'
+    }
+    if (status === 2) {
+      return 'not-determined'
+    }
+    return 'unknown'
+  }
+}
+
+/** 触发「仅系统音频录制」授权弹窗（TCCAccessRequest），异步等待用户决策，不阻塞主进程 */
+function requestAudioCaptureAccess(): Promise<PermissionStatus> {
+  return new Promise((resolve) => {
+    execFile(
+      getNativeBinaryPath('audio-recorder'),
+      ['--prompt-audio-capture'],
+      { timeout: AUDIO_CAPTURE_PROMPT_TIMEOUT_MS },
+      (error) => {
+        audioCaptureStatusCache = null
+
+        if (!error) {
+          resolve('granted')
+          return
+        }
+
+        const status = (error as { code?: number | string })?.code
+        if (status === 1) {
+          resolve('denied')
+          return
+        }
+        if (status === 2) {
+          resolve('not-determined')
+          return
+        }
+
+        logWarn('触发 audio-recorder 系统音频录制授权时发生错误', {
+          module: 'permissions',
+          operation: 'requestAudioCaptureAccess',
+          context: { error: String(error) },
+        })
+        resolve('unknown')
+      },
+    )
+  })
 }
 
 function requestAudioRecorderScreenCaptureAccess(): PermissionStatus {

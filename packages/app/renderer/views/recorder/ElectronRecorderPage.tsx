@@ -7,13 +7,16 @@ import { Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
+import { useRecordingSourceState } from '@/store/recordingStore'
 import { PermissionModal, usePermissions } from '../../components/permission'
+import { AudioSourceBar } from './components/AudioSourceBar'
 import { PreviewPanel } from './components/PreviewPanel'
 import { RecorderSidebar } from './components/RecorderSidebar'
 import { SourceGrid } from './components/SourceGrid'
 import { buildRecorderStateMeta } from './constants/state-meta'
 import { useLiveWaveAudio } from './hooks/useLiveWaveAudio'
 import { useMeetingRecordingSaver } from './hooks/useMeetingRecordingSaver'
+import { useNativeManualRecording } from './hooks/useNativeManualRecording'
 import { useRecorderController } from './hooks/useRecorderController'
 import { useRecordingTimer } from './hooks/useRecordingTimer'
 import { useSourceManager } from './hooks/useSourceManager'
@@ -89,6 +92,44 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   })
 
   const permissions = usePermissions()
+
+  /**
+   * 原生 Core Audio tap 录音控制器（macOS 14.2+ 可混入所有软件系统音频，无需屏幕录制权限）
+   * 引擎选择：Electron + 支持 + 「仅录音」→ 走原生 tap；录视频 / 不支持 → 回退 web ScreenRecorder
+   */
+  const native = useNativeManualRecording(() => {
+    setListRefreshKey(prev => prev + 1)
+    Message.success(t('meetingRecording.saved', '录音已保存'))
+  })
+  const { systemAudioMixEnabled } = useRecordingSourceState()
+
+  const nativeMode = native.supported && audioOnly
+
+  const effIsRecording = nativeMode
+    ? native.isRecording
+    : isRecording
+  const effIsPaused = nativeMode
+    ? native.isPaused
+    : isPaused
+  const effIsBusy = nativeMode
+    ? native.isBusy
+    : isBusy
+
+  /** 原生录音开录：先 ensure 麦克风（应用内说明弹窗），混系统音频时再触发系统「仅系统音频录制」授权框 */
+  const handleStartNative = useLatestCallback(async () => {
+    const micOk = await permissions.ensure(['microphone'], {
+      title: t('permission.recordingTitle', '允许应用录制你的会议'),
+      subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
+    })
+    if (!micOk)
+      return
+
+    if (systemAudioMixEnabled) {
+      /** 被拒则主进程降级为纯麦克风录音，不阻断开录 */
+      await $ipc.permission.request('system-audio')
+    }
+    native.start()
+  })
 
   const layoutStyle = useMemo(() => ({
     minHeight: 'calc(100vh - 48px)',
@@ -233,20 +274,24 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const stateMeta = stateMetaMap[recorderState]
 
   const primaryAction = useMemo<PrimaryAction>(() => {
-    if (isRecording) {
+    if (effIsRecording) {
       return {
         label: t('primaryActions.pause'),
-        onClick: pause,
+        onClick: nativeMode
+          ? native.pause
+          : pause,
         variant: 'warning',
         disabled: false,
         icon: <Pause className="size-4" />,
         loading: false,
       }
     }
-    if (isPaused) {
+    if (effIsPaused) {
       return {
         label: t('primaryActions.resume'),
-        onClick: resume,
+        onClick: nativeMode
+          ? native.resume
+          : resume,
         variant: 'info',
         disabled: false,
         icon: <Play className="size-4" />,
@@ -255,54 +300,70 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     }
     return {
       label: t('primaryActions.start'),
-      onClick: handleStartRecording,
+      onClick: nativeMode
+        ? handleStartNative
+        : handleStartRecording,
       variant: 'primary',
-      disabled: isBusy || loading,
+      disabled: effIsBusy || loading,
       icon: <Play className="size-4" />,
       loading,
     }
-  }, [isBusy, isPaused, isRecording, loading, pause, resume, handleStartRecording, t])
+  }, [effIsBusy, effIsPaused, effIsRecording, nativeMode, native.pause, native.resume, loading, pause, resume, handleStartNative, handleStartRecording, t])
 
   const sidebarActions = {
     stopLabel: t('primaryActions.stop'),
     cancelLabel: t('primaryActions.cancel'),
     resetLabel: t('primaryActions.clear'),
     downloadLabel: t('primaryActions.download'),
-    isBusy,
-    hasResult,
-    onStop: stop,
-    onCancel: cancel,
+    isBusy: effIsBusy,
+    hasResult: nativeMode
+      ? false
+      : hasResult,
+    onStop: nativeMode
+      ? native.stop
+      : stop,
+    onCancel: nativeMode
+      ? native.cancel
+      : cancel,
     onReset: reset,
     onDownload: download,
   }
 
+  const audioOnlyCard = {
+    title: t('audioSettings.audioOnly.label'),
+    description: t('audioSettings.audioOnly.description'),
+    checked: audioOnly,
+    onChange: setAudioOnly,
+  }
+
+  /**
+   * 原生 tap 模式：音源多选（麦克风 + 所有软件）由 AudioSourceBar 承载，
+   * 只保留「仅录音」开关；web 模式沿用系统音频 / 麦克风 / 仅录音三个开关
+   */
   const audioCards = {
     title: t('audioSettings.title'),
-    items: [
-      {
-        title: t('audioSettings.systemAudio.label'),
-        description: t('audioSettings.systemAudio.description'),
-        checked: systemAudio && canControlSystemAudio,
-        disabled: !canControlSystemAudio,
-        onChange: (_checked: boolean) => {
-          if (!canControlSystemAudio)
-            return
-          return toggleSystemAudio()
-        },
-      },
-      {
-        title: t('audioSettings.microphone.label'),
-        description: t('audioSettings.microphone.description'),
-        checked: micAudio,
-        onChange: setMicAudio,
-      },
-      {
-        title: t('audioSettings.audioOnly.label'),
-        description: t('audioSettings.audioOnly.description'),
-        checked: audioOnly,
-        onChange: setAudioOnly,
-      },
-    ],
+    items: nativeMode
+      ? [audioOnlyCard]
+      : [
+          {
+            title: t('audioSettings.systemAudio.label'),
+            description: t('audioSettings.systemAudio.description'),
+            checked: systemAudio && canControlSystemAudio,
+            disabled: !canControlSystemAudio,
+            onChange: (_checked: boolean) => {
+              if (!canControlSystemAudio)
+                return
+              return toggleSystemAudio()
+            },
+          },
+          {
+            title: t('audioSettings.microphone.label'),
+            description: t('audioSettings.microphone.description'),
+            checked: micAudio,
+            onChange: setMicAudio,
+          },
+          audioOnlyCard,
+        ],
   }
 
   const summary: PreviewSummary = {
@@ -348,8 +409,8 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       }
     : undefined
 
-  /** 录制时长管理 */
-  const recordingDuration = useRecordingTimer(isRecording, isPaused)
+  /** 录制时长管理（原生模式沿用本地计时器，按有效录音态驱动） */
+  const recordingDuration = useRecordingTimer(effIsRecording, effIsPaused)
 
   // LiveWaveAudio 错误处理
   const handleLiveWaveError = useCallback((error: Error) => {
@@ -359,8 +420,8 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     )
   }, [t])
 
-  /** 仅在音频模式下显示音频波形（系统音频或麦克风任一开启即可） */
-  const shouldShowLiveWave = audioOnly && (micAudio || systemAudio)
+  /** 仅在 web 音频模式下显示音频波形（原生 tap 录音无 MediaStream，不走波形/预览） */
+  const shouldShowLiveWave = !nativeMode && audioOnly && (micAudio || systemAudio)
 
   /** 判断是否显示预览面板 */
   const shouldShowPreview = !audioOnly || !shouldShowLiveWave || hasResult
@@ -396,36 +457,56 @@ export default function ElectronRecorderPage(): React.JSX.Element {
             primaryAction={ primaryAction }
             actions={ sidebarActions }
             audioCards={ audioCards }
+            audioSourceBar={ nativeMode
+              ? <AudioSourceBar />
+              : null }
             errorMessage={ errorMessage }
             recordingDuration={ recordingDuration }
-            isRecording={ isRecording }
-            isPaused={ isPaused }
+            isRecording={ effIsRecording }
+            isPaused={ effIsPaused }
           />
 
           <div className="flex h-full flex-col gap-5 min-h-0">
             <div className="grid gap-5 lg:grid-cols-2">
               <section className="flex flex-col gap-4 rounded-3xl border border-border bg-background shadow-card p-4" style={ { height: CARD_HEIGHT } }>
-                { shouldShowLiveWave && (
-                  <LiveWaveAudio
-                    ref={ liveWaveControlsRef }
-                    state={ liveWaveState }
-                    externalStream={ liveWaveStream }
-                    mode="static"
-                    height={ shouldShowPreview
-                      ? undefined
-                      : '100%' }
-                    className={ cn({ 'flex-1': shouldShowPreview }) }
-                    onError={ handleLiveWaveError }
-                  />
-                ) }
-                { shouldShowPreview && (
-                  <PreviewPanel
-                    title={ t('preview.title') }
-                    summary={ summary }
-                    audioPreview={ audioPreview }
-                    videoPreview={ videoPreview }
-                  />
-                ) }
+                { nativeMode
+                  ? (
+                      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                        <p className="text-sm font-medium text-textPrimary">
+                          { effIsBusy
+                            ? t('nativeRecording.recording', '正在录制（可混入系统音频）…')
+                            : t('nativeRecording.idle', '选择音源后点击开始录制') }
+                        </p>
+                        <p className="text-xs text-textSecondary">
+                          { t('nativeRecording.hint', '录制完成后自动保存到下方列表') }
+                        </p>
+                      </div>
+                    )
+                  : (
+                      <>
+                        { shouldShowLiveWave && (
+                          <LiveWaveAudio
+                            ref={ liveWaveControlsRef }
+                            state={ liveWaveState }
+                            externalStream={ liveWaveStream }
+                            mode="static"
+                            height={ shouldShowPreview
+                              ? undefined
+                              : '100%' }
+                            className={ cn({ 'flex-1': shouldShowPreview }) }
+                            onError={ handleLiveWaveError }
+                          />
+                        ) }
+                        { shouldShowPreview && (
+                          <PreviewPanel
+                            title={ t('preview.title') }
+                            summary={ summary }
+                            audioPreview={ audioPreview }
+                            videoPreview={ videoPreview }
+                          />
+                        ) }
+                      </>
+                    ) }
               </section>
 
             </div>

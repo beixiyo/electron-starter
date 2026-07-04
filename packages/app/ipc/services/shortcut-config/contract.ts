@@ -14,7 +14,7 @@ export type ShortcutBindings = Record<string, ShortcutBinding | null>
 
 export const DEFAULT_BINDINGS: ShortcutBindings = {
   recording: { type: 'combo', key: 'Space' },
-  askFlowtica: { type: 'doublePress' },
+  askAssistant: { type: 'doublePress' },
   voiceDictation: { type: 'hold' },
   bookmark: { type: 'combo', key: 'Grave' },
 }

@@ -46,6 +46,11 @@
       "description": "跳过视频画面，仅输出音轨"
     }
   },
+  "nativeRecording": {
+    "recording": "正在录制（可混入系统音频）…",
+    "idle": "选择音源后点击开始录制",
+    "hint": "录制完成后自动保存到下方列表"
+  },
   "sourceSelection": {
     "title": "选择录制窗口",
     "refresh": "刷新",

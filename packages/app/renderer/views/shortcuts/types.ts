@@ -88,9 +88,9 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
     supportedGestures: ['combo', 'doublePress', 'hotkey'],
   },
   {
-    id: 'askFlowtica',
+    id: 'askAssistant',
     label: 'Ask',
-    binding: DEFAULT_BINDINGS.askFlowtica,
+    binding: DEFAULT_BINDINGS.askAssistant,
     supportedGestures: ['doublePress', 'combo', 'hotkey'],
   },
   {

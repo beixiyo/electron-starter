@@ -50,14 +50,14 @@ export default function App() {
             {/* 默认关闭 */ }
             <Button rounded="full" variant="secondary">默认无辉光</Button>
 
-            {/* 开启辉光：白底胶囊 + Ask Flowtica（对齐设计稿） */ }
+            {/* 开启辉光：白底胶囊 + Ask AI（对齐设计稿） */ }
             <Button
               glow
               rounded="full"
               leftIcon={ <Plus size={ 18 } strokeWidth={ 2.2 } /> }
               className="bg-white text-black border-transparent hover:bg-white"
             >
-              Ask Flowtica
+              Ask AI
             </Button>
 
             {/* 自定义辉光参数（更强更大更快） */ }

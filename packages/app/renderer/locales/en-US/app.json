@@ -46,6 +46,11 @@
       "description": "Skip video frames, output audio track only"
     }
   },
+  "nativeRecording": {
+    "recording": "Recording (system audio can be mixed in)…",
+    "idle": "Pick audio sources, then click Start",
+    "hint": "The recording is saved to the list below when finished"
+  },
   "sourceSelection": {
     "title": "Select Recording Window",
     "refresh": "Refresh",

@@ -4,6 +4,7 @@ import type { MeetingSession } from './meeting-detector'
 import path from 'node:path'
 import { meetingDetectionService } from '@ipc/services/meeting-detection/service'
 import { getRecorderPid, onRecorderEvent, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { recordingState } from '@main/recording-state'
 import { WindowType } from '@shared'
 import { app } from 'electron'
 import { logicalWindowManager, windowManager } from '../window-manager'
@@ -81,7 +82,8 @@ export function initMeetingDetection(): void {
       : 'ended'
     console.log(`[meeting-detection] ${label}: ${event.session.displayName} pid=${event.session.pid}`)
 
-    if (event.type === 'meeting-ended') {
+    /** 手动 native 录音进行中不响应会议结束的自动停止，避免误停手动录音（共用同一子进程） */
+    if (event.type === 'meeting-ended' && recordingState.nativeSource !== 'manual') {
       stopRecording()
     }
 
@@ -95,16 +97,29 @@ export function initMeetingDetection(): void {
     stopRecorder()
   })
 
+  /**
+   * 手动 native tap 录音与会议录音共用同一 audio-recorder 子进程：
+   * 手动录音的 recorder 事件由 native-recording 管线处理，这里必须早退，
+   * 否则会误弹会议 toast、把手动录音当会议录音重复存盘
+   */
   onRecorderEvent('recording', ({ path }) => {
+    if (recordingState.nativeSource === 'manual')
+      return
     emitRecordingState({ status: 'recording', path })
   })
   onRecorderEvent('paused', ({ path }) => {
+    if (recordingState.nativeSource === 'manual')
+      return
     emitRecordingState({ status: 'paused', path })
   })
   onRecorderEvent('mixing', ({ path }) => {
+    if (recordingState.nativeSource === 'manual')
+      return
     emitRecordingState({ status: 'mixing', path })
   })
   onRecorderEvent('stopped', ({ path: filePath, duration }) => {
+    if (recordingState.nativeSource === 'manual')
+      return
     emitRecordingState({ status: 'stopped', path: filePath, duration })
 
     const mainWin = windowManager.get(WindowType.MAIN)

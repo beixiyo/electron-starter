@@ -1,4 +1,5 @@
 export * from './media'
 export * from './oauth'
 export * from './permission'
+export * from './recording'
 export * from './window'

@@ -76,6 +76,14 @@
     "downloadAudio": "下载音频",
     "downloadVideo": "下载视频",
     "recordingDesc": "录制中将展示实时预览，停止后展示最终回放"
+  },
+  "audioSource": {
+    "label": "音源",
+    "mic": "麦克风",
+    "allApps": "所有软件",
+    "needOneSource": "至少保留一个音源",
+    "permissionDenied": "系统音频录制权限被拒绝",
+    "recordFailed": "音源切换失败，请重试"
   }
 }
 

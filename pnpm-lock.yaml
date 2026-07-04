@@ -168,8 +168,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@jl-org/tool':
-        specifier: 4.0.2
-        version: 4.0.2
+        specifier: 4.0.3
+        version: 4.0.3
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.2(vite@8.0.14(@types/node@24.12.4)(jiti@2.7.0)(sass@1.100.0)(yaml@2.9.0))
@@ -1140,6 +1140,9 @@ packages:
 
   '@jl-org/tool@4.0.2':
     resolution: {integrity: sha512-GJEv7PZejvqb782dVSU+BugqiC2k5AJwgbLYPZDIMMiY9XBtwGEUt+WYRSE1FtabfeLFvxj4cLmDUh0tdKsPlA==}
+
+  '@jl-org/tool@4.0.3':
+    resolution: {integrity: sha512-XH30hSbTD0nDgfTYkhjR6Pqp62jO4JcYkDAZa3eyvcZuTllmsRoWD7YL5GIw0U6ZZ5Ty96EPpfjXSu987Uct8Q==}
 
   '@jl-org/ts-tool@0.0.8':
     resolution: {integrity: sha512-2YwGmzod5LBOi7cKknRXn2H9xcp99OhokZJ55t+kg7wvPST4obcwLxO03ji0gVuFoHp5BgrkwzDICV+z1a3TDg==}
@@ -6150,6 +6153,8 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
 
   '@jl-org/tool@4.0.2': {}
+
+  '@jl-org/tool@4.0.3': {}
 
   '@jl-org/ts-tool@0.0.8': {}
 

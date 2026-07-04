@@ -23,6 +23,7 @@ import { holdStateManager, registerFnShortcuts, registerHoldGlobalShortcut, regi
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
+import { initNativeRecordingPipeline } from './native-recording'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
 import { registerScreenshotShortcut } from './screenshot'
@@ -78,6 +79,8 @@ initDeeplink(() => {
   if (process.platform === 'darwin') {
     startFocusCheckPolling()
     initMeetingDetection()
+    /** 手动 native tap 录音管线（macOS 14.2+ 混入系统音频）：与会议录音共用 audio-recorder 子进程 */
+    initNativeRecordingPipeline()
   }
 })
 
@@ -309,7 +312,7 @@ function showShortcutTestWindow(
 /** hotkey 绑定的触发处理器，按 action id 索引 */
 const HOTKEY_HANDLERS: Record<string, () => void> = {
   recording: () => showShortcutTestWindow('Recording (hotkey)', 'hotkey'),
-  askFlowtica: () => showShortcutTestWindow('Ask (hotkey)', 'hotkey'),
+  askAssistant: () => showShortcutTestWindow('Ask (hotkey)', 'hotkey'),
   bookmark: () => showShortcutTestWindow('Bookmark (hotkey)', 'hotkey'),
 }
 
@@ -341,7 +344,7 @@ function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
         }
       : undefined,
 
-    doublePress: bindings.askFlowtica?.type === 'doublePress'
+    doublePress: bindings.askAssistant?.type === 'doublePress'
       ? {
           onTrigger: () => {
             console.log('[fn:double] ✅ 双击触发')

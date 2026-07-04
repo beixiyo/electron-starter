@@ -11,6 +11,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
     primaryAction,
     actions,
     audioCards,
+    audioSourceBar,
     errorMessage,
     recordingDuration,
     isRecording,
@@ -103,6 +104,11 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
         <div className="mb-4">
           <p className="text-sm font-semibold">{ audioCards.title }</p>
         </div>
+        { audioSourceBar && (
+          <div className="mb-4">
+            { audioSourceBar }
+          </div>
+        ) }
         <div className="space-y-3">
           { audioCards.items.map(card => (
             <AudioToggleCard

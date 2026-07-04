@@ -59,7 +59,7 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron-toolkit/utils": "^4.0.0",
     "@jl-org/auth": "^1.0.2",
-    "@jl-org/tool": "4.0.2",
+    "@jl-org/tool": "4.0.3",
     "@vitejs/plugin-react": "^6.0.1",
     "comps": "workspace:*",
     "config": "workspace:*",

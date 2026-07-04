@@ -80,10 +80,17 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
         '@': resolve(__dirname, './renderer'),
         '@shared': resolve(__dirname, './shared'),
         '@ipc': resolve(__dirname, './ipc'),
-        'comps/index.css': resolve(__dirname, '../comps/dist/index.css'),
-        'comps': resolve(__dirname, '../comps/src/index.ts'),
         'http-api': resolve(__dirname, '../http-api/src/index.ts'),
-        'hooks': resolve(__dirname, '../hooks/src/index.ts'),
+
+        /**
+         * comps / hooks 不配 alias、也不进 optimizeDeps.include：
+         * 统一经各自 package.json exports 解析到 dist 单文件产物。
+         * - dist 是打包好的单文件，dev 下没有 src barrel 的请求瀑布，启动快
+         * - 链接包不预构建 = 不进 .vite 缓存，避免「重建 dist / 改源码后一直吃旧缓存」
+         * - 改动 comps / hooks 源码后手动 `pnpm -F <pkg> build` 即刻生效
+         * ⚠️ 切勿把它们加回 optimizeDeps.include：renderer/hooks 与包名重名，
+         *    include 的入口解析会被 root 下本地目录劫持
+         */
       },
     },
     plugins: [

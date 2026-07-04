@@ -8,6 +8,7 @@ import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
 import { notificationClient } from '@ipc/services/notification/client'
 import { oauthClient } from '@ipc/services/oauth/client'
 import { permissionClient } from '@ipc/services/permission/client'
+import { recordingClient } from '@ipc/services/recording/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
@@ -27,6 +28,7 @@ export const ipc = {
   shortcutConfig: shortcutConfigClient,
   oauth: oauthClient,
   permission: permissionClient,
+  recording: recordingClient,
   fn: fnClient,
   screenshot: screenshotClient,
   meetingDetection: meetingDetectionClient,

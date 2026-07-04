@@ -76,6 +76,14 @@
     "downloadAudio": "Download Audio",
     "downloadVideo": "Download Video",
     "recordingDesc": "Real-time preview during recording"
+  },
+  "audioSource": {
+    "label": "Audio Source",
+    "mic": "Microphone",
+    "allApps": "All Software",
+    "needOneSource": "Keep at least one audio source",
+    "permissionDenied": "System audio recording permission denied",
+    "recordFailed": "Failed to switch audio source"
   }
 }
 
