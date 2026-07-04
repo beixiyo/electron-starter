@@ -84,6 +84,12 @@
     "needOneSource": "至少保留一个音源",
     "permissionDenied": "系统音频录制权限被拒绝",
     "recordFailed": "音源切换失败，请重试"
+  },
+  "recordError": {
+    "captureInterrupted": "音频采集中断，录音已自动结束，中断前的音频已保存",
+    "noAudioContent": "没有录到音频内容：所选音源没有产生声音",
+    "emptyAudio": "本次录音没有写入有效音频，请检查麦克风和输入设备后重试",
+    "unreadableAudio": "录音文件写入失败，请重新录制"
   }
 }
 

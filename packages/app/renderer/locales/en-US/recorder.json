@@ -84,6 +84,12 @@
     "needOneSource": "Keep at least one audio source",
     "permissionDenied": "System audio recording permission denied",
     "recordFailed": "Failed to switch audio source"
+  },
+  "recordError": {
+    "captureInterrupted": "Audio capture was interrupted. The recording ended automatically and audio before the interruption was saved",
+    "noAudioContent": "No audio content captured: the selected source produced no sound",
+    "emptyAudio": "No valid audio was written. Check your microphone and input device, then try again",
+    "unreadableAudio": "Failed to write the recording file. Please record again"
   }
 }
 

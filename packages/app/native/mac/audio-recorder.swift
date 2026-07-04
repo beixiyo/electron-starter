@@ -137,9 +137,106 @@ func emitStatus(_ status: String, path: String, duration: Double? = nil) {
   fflush(stdout)
 }
 
-func emitError(_ error: String) {
-  print("{\"error\":\"\(escapeJSON(error))\"}")
+func emitError(_ error: String, detail: String? = nil) {
+  var json = "{\"error\":\"\(escapeJSON(error))\""
+  if let detail {
+    json += ",\"detail\":\"\(escapeJSON(detail))\""
+  }
+  json += "}"
+  print(json)
   fflush(stdout)
+}
+
+/** NSError 展开为 domain#code(+underlying),writer 失败等诊断必须带错误码落盘,localizedDescription 只有通用文案无法定位根因 */
+func describeError(_ error: Error?) -> String {
+  guard let error else { return "unknown" }
+  let ns = error as NSError
+  var desc = "\(ns.domain)#\(ns.code): \(ns.localizedDescription)"
+  if let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+    desc += " underlying=\(underlying.domain)#\(underlying.code)"
+  }
+  return desc
+}
+
+// ── 设备拓扑快照(两引擎开录时落盘,虚拟声卡 / 聚合设备是 VPIO 无样本类故障的关键环境因素) ──
+
+/** 默认输入 / 输出设备一行描述:名称 + 采样率 + 传输类型,读取失败返回错误码占位不抛错 */
+func describeDefaultAudioDevices() -> String {
+  "in=\(describeDefaultDevice(selector: kAudioHardwarePropertyDefaultInputDevice)) out=\(describeDefaultDevice(selector: kAudioHardwarePropertyDefaultOutputDevice))"
+}
+
+private func describeDefaultDevice(selector: AudioObjectPropertySelector) -> String {
+  var address = AudioObjectPropertyAddress(
+    mSelector: selector,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+  var deviceID = AudioObjectID(kAudioObjectUnknown)
+  var dataSize = UInt32(MemoryLayout<AudioObjectID>.size)
+  let err = AudioObjectGetPropertyData(
+    AudioObjectID(kAudioObjectSystemObject),
+    &address, 0, nil, &dataSize, &deviceID
+  )
+  guard err == noErr, deviceID != AudioObjectID(kAudioObjectUnknown) else {
+    return "<unavailable_\(err)>"
+  }
+
+  let name = readDeviceCFString(deviceID, selector: kAudioObjectPropertyName) ?? "<unnamed>"
+  let rate = readDeviceSampleRate(deviceID).map { "\(Int($0))Hz" } ?? "?Hz"
+  return "\"\(name)\" (\(rate), \(readDeviceTransport(deviceID)))"
+}
+
+private func readDeviceCFString(_ deviceID: AudioObjectID, selector: AudioObjectPropertySelector) -> String? {
+  var address = AudioObjectPropertyAddress(
+    mSelector: selector,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+  var value: CFString = "" as CFString
+  var size = UInt32(MemoryLayout<CFString>.size)
+  let err = withUnsafeMutablePointer(to: &value) { ptr in
+    AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, ptr)
+  }
+  guard err == noErr else { return nil }
+  return value as String
+}
+
+private func readDeviceSampleRate(_ deviceID: AudioObjectID) -> Double? {
+  var address = AudioObjectPropertyAddress(
+    mSelector: kAudioDevicePropertyNominalSampleRate,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+  var rate: Float64 = 0
+  var size = UInt32(MemoryLayout<Float64>.size)
+  let err = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &rate)
+  guard err == noErr, rate > 0 else { return nil }
+  return rate
+}
+
+private func readDeviceTransport(_ deviceID: AudioObjectID) -> String {
+  var address = AudioObjectPropertyAddress(
+    mSelector: kAudioDevicePropertyTransportType,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+  var transport: UInt32 = 0
+  var size = UInt32(MemoryLayout<UInt32>.size)
+  let err = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport)
+  guard err == noErr else { return "transport?" }
+
+  switch transport {
+  case kAudioDeviceTransportTypeBuiltIn: return "builtin"
+  case kAudioDeviceTransportTypeVirtual: return "virtual"
+  case kAudioDeviceTransportTypeAggregate: return "aggregate"
+  case kAudioDeviceTransportTypeBluetooth, kAudioDeviceTransportTypeBluetoothLE: return "bluetooth"
+  case kAudioDeviceTransportTypeUSB: return "usb"
+  case kAudioDeviceTransportTypeHDMI: return "hdmi"
+  case kAudioDeviceTransportTypeDisplayPort: return "displayport"
+  case kAudioDeviceTransportTypeAirPlay: return "airplay"
+  case kAudioDeviceTransportTypeThunderbolt: return "thunderbolt"
+  default: return String(format: "transport_0x%08x", transport)
+  }
 }
 
 // MARK: - AAC 编码参数（系统音轨 / mic 轨 / 混音成品三处写入器共用）
@@ -164,6 +261,10 @@ func aacMicSettings() -> [String: Any] {
   ]
 }
 
+let FIRST_AUDIO_SAMPLE_TIMEOUT: TimeInterval = 5
+let AUDIO_SAMPLE_GAP_TIMEOUT: TimeInterval = 30
+let AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL: TimeInterval = 5
+
 // MARK: - SCK 会议引擎（全系统音频 + mic，依赖屏幕录制权限）
 
 class Recorder: NSObject, SCStreamOutput {
@@ -178,6 +279,15 @@ class Recorder: NSObject, SCStreamOutput {
   private var totalPausedDuration: TimeInterval = 0
   private var pausedAt: Date?
   private var sessionStarted = false
+  /** 真实落盘样本数(append 成功才计):sessionStarted 只代表首帧到达,零 append 的空文件必须靠它拦截 */
+  private var appendedSampleCount = 0
+  private var firstSampleWatchdogToken = UUID()
+  private var firstSampleErrorEmitted = false
+  private var sampleGapWatchdogToken = UUID()
+  private var sampleGapErrorEmitted = false
+  private var lastSampleAt: Date?
+  /** 样本回调与 watchdog 检查共用此串行队列,避免跨线程裸读 sessionStarted / lastSampleAt */
+  private let sampleQueue = DispatchQueue(label: "audio-recorder", qos: .userInitiated)
 
   @discardableResult
   func start(outputPath: String) async -> Bool {
@@ -214,16 +324,18 @@ class Recorder: NSObject, SCStreamOutput {
 
       try setupWriter(outputPath: outputPath)
 
-      let queue = DispatchQueue(label: "audio-recorder", qos: .userInitiated)
-      try scStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: queue)
+      try scStream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
       if #available(macOS 15.0, *) {
-        try scStream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: queue)
+        try scStream.addStreamOutput(self, type: .microphone, sampleHandlerQueue: sampleQueue)
       }
 
       try await scStream.startCapture()
       self.stream = scStream
       self.startTime = Date()
+      startFirstSampleWatchdog()
+      startSampleGapWatchdog()
 
+      log("SCK start: hasMic=\(hasMic) devices: \(describeDefaultAudioDevices())")
       output(status: "recording", path: outputPath)
       return true
     }
@@ -254,6 +366,11 @@ class Recorder: NSObject, SCStreamOutput {
       pausedAt = nil
     }
     paused = false
+    lastSampleAt = Date()
+    if !sessionStarted {
+      startFirstSampleWatchdog()
+    }
+    startSampleGapWatchdog()
     output(status: "recording", path: outputPath)
   }
 
@@ -281,12 +398,31 @@ class Recorder: NSObject, SCStreamOutput {
     if let writer = writer, writer.status == .writing {
       await writer.finishWriting()
     }
+    let writerStatus = writer?.status
+    let writerError = describeError(writer?.error)
+    let didWriteSamples = sessionStarted && appendedSampleCount > 0
+    let stats = "sessionStarted=\(sessionStarted) appended=\(appendedSampleCount) devices: \(describeDefaultAudioDevices())"
+    log("SCK stats: \(stats)")
 
     let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
     let duration = max(0, elapsed - totalPausedDuration)
     let savedPath = outputPath
 
     cleanup()
+
+    if !didWriteSamples {
+      log("SCK writer finish failed: no audio samples")
+      try? FileManager.default.removeItem(atPath: savedPath)
+      output(error: "no_audio_samples", detail: stats)
+      return
+    }
+
+    if writerStatus != .completed {
+      log("SCK writer finish failed: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
+      try? FileManager.default.removeItem(atPath: savedPath)
+      output(error: "writer_failed", detail: writerError)
+      return
+    }
 
     if hadMic {
       output(status: "mixing", path: savedPath)
@@ -297,6 +433,65 @@ class Recorder: NSObject, SCStreamOutput {
     }
 
     output(status: "stopped", path: savedPath, duration: duration)
+  }
+
+  private func startFirstSampleWatchdog() {
+    firstSampleErrorEmitted = false
+    let token = UUID()
+    firstSampleWatchdogToken = token
+
+    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + FIRST_AUDIO_SAMPLE_TIMEOUT) { [weak self] in
+      guard let self else { return }
+
+      self.sampleQueue.async { [weak self] in
+        guard let self else { return }
+        guard self.firstSampleWatchdogToken == token,
+              self.stream != nil,
+              self.hasMic,
+              !self.paused,
+              !self.sessionStarted,
+              !self.firstSampleErrorEmitted
+        else { return }
+
+        self.firstSampleErrorEmitted = true
+        log("SCK first audio sample timeout")
+        self.output(error: "no_audio_samples", detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())")
+      }
+    }
+  }
+
+  private func startSampleGapWatchdog() {
+    sampleGapErrorEmitted = false
+    let token = UUID()
+    sampleGapWatchdogToken = token
+    scheduleSampleGapWatchdog(token)
+  }
+
+  private func scheduleSampleGapWatchdog(_ token: UUID) {
+    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL) { [weak self] in
+      guard let self else { return }
+
+      self.sampleQueue.async { [weak self] in
+        guard let self else { return }
+        guard self.sampleGapWatchdogToken == token,
+              self.stream != nil
+        else { return }
+
+        if !self.paused,
+           self.hasMic,
+           let lastSampleAt = self.lastSampleAt,
+           Date().timeIntervalSince(lastSampleAt) >= AUDIO_SAMPLE_GAP_TIMEOUT,
+           !self.sampleGapErrorEmitted {
+          self.sampleGapErrorEmitted = true
+          let gap = Int(Date().timeIntervalSince(lastSampleAt))
+          log("SCK audio sample gap timeout (gap=\(gap)s)")
+          self.output(error: "audio_sample_timeout", detail: "no samples for \(gap)s, appended=\(self.appendedSampleCount), devices: \(describeDefaultAudioDevices())")
+          return
+        }
+
+        self.scheduleSampleGapWatchdog(token)
+      }
+    }
   }
 
   private func setupWriter(outputPath: String) throws {
@@ -337,11 +532,17 @@ class Recorder: NSObject, SCStreamOutput {
     switch type {
     case .audio:
       if let input = systemInput, input.isReadyForMoreMediaData {
-        input.append(sampleBuffer)
+        if input.append(sampleBuffer) {
+          appendedSampleCount += 1
+          lastSampleAt = Date()
+        }
       }
     case .microphone:
       if let input = micInput, input.isReadyForMoreMediaData {
-        input.append(sampleBuffer)
+        if input.append(sampleBuffer) {
+          appendedSampleCount += 1
+          lastSampleAt = Date()
+        }
       }
     default:
       break
@@ -359,6 +560,12 @@ class Recorder: NSObject, SCStreamOutput {
     totalPausedDuration = 0
     pausedAt = nil
     sessionStarted = false
+    appendedSampleCount = 0
+    firstSampleWatchdogToken = UUID()
+    firstSampleErrorEmitted = false
+    sampleGapWatchdogToken = UUID()
+    sampleGapErrorEmitted = false
+    lastSampleAt = nil
   }
 
   // ── stdout JSON ──
@@ -367,8 +574,8 @@ class Recorder: NSObject, SCStreamOutput {
     emitStatus(status, path: path, duration: duration)
   }
 
-  private func output(error: String) {
-    emitError(error)
+  private func output(error: String, detail: String? = nil) {
+    emitError(error, detail: detail)
   }
 }
 
@@ -504,7 +711,6 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   private var micAecPref = true
   /** tap 采集管线是否挂载中(可录音中热挂/卸;false 时系统音轨停止进样,mic 轨照常) */
   private var tapActive = false
-  private var hasSystemSamples = false
 
   private var paused = false
   private var outputPath = ""
@@ -518,6 +724,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    */
   private var pauseOffset = CMTime.zero
   private var pauseStartHostTime: CMTime?
+  private var firstSampleWatchdogToken = UUID()
+  private var firstSampleErrorEmitted = false
+  private var sampleGapWatchdogToken = UUID()
+  private var sampleGapErrorEmitted = false
+  private var lastSampleAt: Date?
 
   private var tapFormat: AudioStreamBasicDescription?
   private var tapFormatDescription: CMAudioFormatDescription?
@@ -577,6 +788,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       }
 
       startTime = Date()
+      startFirstSampleWatchdog()
+      startSampleGapWatchdog()
+      log("tap start: mic=\(micReady) tap=\(tapEnabled) devices: \(describeDefaultAudioDevices())")
       emitStatus("recording", path: outputPath)
       return true
     }
@@ -705,6 +919,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       pauseStartHostTime = nil
     }
     paused = false
+    lastSampleAt = Date()
+    if !sessionStarted {
+      startFirstSampleWatchdog()
+    }
+    startSampleGapWatchdog()
     emitStatus("recording", path: outputPath)
   }
 
@@ -721,6 +940,10 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       totalPausedDuration += Date().timeIntervalSince(pa)
     }
 
+    /** 必须在拆管线前快照:stopCapturePipeline → detachMic 会把 micActive 清为 false,
+     * 事后再读恒为 false,零样本收尾会把 mic 采集故障误报成「无音频内容」 */
+    let hadMicAtStop = micActive
+
     stopCapturePipeline()
     /** 排空采样队列里已入队的回调,避免 markAsFinished 后再 append 抛 ObjC 异常 */
     sampleQueue.sync {}
@@ -731,16 +954,35 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     if let writer, writer.status == .writing {
       await writer.finishWriting()
     }
+    let writerStatus = writer?.status
+    let writerError = describeError(writer?.error)
+    let didWriteSamples = sessionStarted && (sysAppendCount + micAppendCount) > 0
     if let writer, writer.status == .failed {
-      log("tap: writer finish failed: \(writer.error?.localizedDescription ?? "unknown")")
+      log("tap: writer finish failed: \(writerError)")
     }
-    log("tap stats: tapCb=\(tapCallbackCount) sysOK=\(sysAppendCount) sysDrop=\(sysDropCount) micCb=\(micCallbackCount) micConvFail=\(micConvertFailCount) micOK=\(micAppendCount) micDrop=\(micDropCount)")
+    let stats = "tapCb=\(tapCallbackCount) sysOK=\(sysAppendCount) sysDrop=\(sysDropCount) micCb=\(micCallbackCount) micConvFail=\(micConvertFailCount) micOK=\(micAppendCount) micDrop=\(micDropCount)"
+    log("tap stats: \(stats) devices: \(describeDefaultAudioDevices())")
 
     let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
     let duration = max(0, elapsed - totalPausedDuration)
     let savedPath = outputPath
 
     cleanup()
+
+    if !didWriteSamples {
+      log("tap: writer finish failed: no audio samples")
+      try? FileManager.default.removeItem(atPath: savedPath)
+      let error = hadMicAtStop ? "no_audio_samples" : "no_audio_content"
+      emitError(error, detail: stats)
+      return
+    }
+
+    if writerStatus != .completed {
+      log("tap: writer finish failed: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
+      try? FileManager.default.removeItem(atPath: savedPath)
+      emitError("writer_failed", detail: writerError)
+      return
+    }
 
     /**
      * 两轨恒预建,mixTracks 内部过滤零时长轨后按非空轨数产出单轨（纯系统 / 纯 mic / 混音统一收口）——
@@ -753,6 +995,65 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     }
 
     emitStatus("stopped", path: savedPath, duration: duration)
+  }
+
+  private func startFirstSampleWatchdog() {
+    firstSampleErrorEmitted = false
+    let token = UUID()
+    firstSampleWatchdogToken = token
+
+    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + FIRST_AUDIO_SAMPLE_TIMEOUT) { [weak self] in
+      guard let self else { return }
+
+      self.sampleQueue.async { [weak self] in
+        guard let self else { return }
+        guard self.firstSampleWatchdogToken == token,
+              self.writer != nil,
+              self.micActive,
+              !self.paused,
+              !self.sessionStarted,
+              !self.firstSampleErrorEmitted
+        else { return }
+
+        self.firstSampleErrorEmitted = true
+        log("tap: first audio sample timeout")
+        emitError("no_audio_samples", detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())")
+      }
+    }
+  }
+
+  private func startSampleGapWatchdog() {
+    sampleGapErrorEmitted = false
+    let token = UUID()
+    sampleGapWatchdogToken = token
+    scheduleSampleGapWatchdog(token)
+  }
+
+  private func scheduleSampleGapWatchdog(_ token: UUID) {
+    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL) { [weak self] in
+      guard let self else { return }
+
+      self.sampleQueue.async { [weak self] in
+        guard let self else { return }
+        guard self.sampleGapWatchdogToken == token,
+              self.writer != nil
+        else { return }
+
+        if !self.paused,
+           self.micActive,
+           let lastSampleAt = self.lastSampleAt,
+           Date().timeIntervalSince(lastSampleAt) >= AUDIO_SAMPLE_GAP_TIMEOUT,
+           !self.sampleGapErrorEmitted {
+          self.sampleGapErrorEmitted = true
+          let gap = Int(Date().timeIntervalSince(lastSampleAt))
+          log("tap: audio sample gap timeout (gap=\(gap)s)")
+          emitError("audio_sample_timeout", detail: "no samples for \(gap)s, sysOK=\(self.sysAppendCount) micOK=\(self.micAppendCount), devices: \(describeDefaultAudioDevices())")
+          return
+        }
+
+        self.scheduleSampleGapWatchdog(token)
+      }
+    }
   }
 
   // ── 采集管线搭建 ──
@@ -932,6 +1233,8 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     /** VPIO 路径 captureSession 为 nil(无操作);裸采集路径在此启动 */
     captureSession?.startRunning()
     micActive = true
+    /** 重挂 mic 后重置 gap 基准:关麦超 30s 再开麦时,陈旧时间戳会让下一个 tick 抢在新引擎首帧前误报 audio_sample_timeout */
+    lastSampleAt = Date()
     return true
   }
 
@@ -1230,12 +1533,12 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
         return
       }
       if input === systemInput {
-        hasSystemSamples = true
         sysAppendCount += 1
       }
       else {
         micAppendCount += 1
       }
+      lastSampleAt = Date()
     }
     else if input === systemInput {
       sysDropCount += 1
@@ -1317,7 +1620,6 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     systemInput = nil
     micInput = nil
     micAecPref = true
-    hasSystemSamples = false
     paused = false
     startTime = nil
     totalPausedDuration = 0
@@ -1325,6 +1627,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     pauseOffset = .zero
     pauseStartHostTime = nil
     sessionStarted = false
+    firstSampleWatchdogToken = UUID()
+    firstSampleErrorEmitted = false
+    sampleGapWatchdogToken = UUID()
+    sampleGapErrorEmitted = false
+    lastSampleAt = nil
     tapFormat = nil
     tapFormatDescription = nil
     micFormatDescription = nil

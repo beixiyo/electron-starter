@@ -1,6 +1,6 @@
 import type { NativeRecordingSource, RecordingPhase } from '@shared'
 import type { NativeRecordingSession } from './session'
-import { unlink } from 'node:fs/promises'
+import { stat, unlink } from 'node:fs/promises'
 import { onRecorderEvent, pauseRecording, resumeRecording, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
 import { recordingState } from '@main/recording-state'
 import { app } from 'electron'
@@ -74,28 +74,52 @@ export function initNativeRecordingPipeline(): void {
     discardPending = false
   })
 
-  onRecorderEvent('error', (error) => {
+  onRecorderEvent('error', ({ code, detail }) => {
     /**
-     * 录音中 Swift 子进程报错（权限被拒、设备异常）：仅手动 native 录音且 isBusy 时处理，
-     * 会议链路的 not_recording 等收尾噪声、非本管线录音的报错一律忽略
+     * 录音中 Swift 子进程报错（权限被拒、设备异常、无样本）：仅手动 native 录音处理，
+     * 非本管线录音（会议链路）的报错一律忽略
+     * 注意不能按 isBusy 过滤——stop 收尾阶段 Swift 可能上报 no_audio_samples /
+     * writer_failed（此时 phase 已是 stopped），吞掉会让 renderer 干等完成事件
      */
     const source = recordingState.nativeSource
-    if (!source || !recordingState.isBusy)
+    if (!source)
       return
 
     /**
      * 重复 start 被拒（并发触发时第二次 start 的回执）：活录音本身无恙，
      * 绝不能当致命错误 reset——那会触发 discard 链路把正在录的第一路停掉并删文件
      */
-    if (error === 'already_recording') {
+    if (code === 'already_recording') {
       console.warn('[native-recording] duplicate start rejected, active recording keeps going')
       return
     }
 
-    console.warn(`[native-recording] recorder error while recording: ${error}`)
+    /** 非录音态收到 stop 的回执噪声（重复 stop / error 收尾后的补发），不是致命错误 */
+    if (code === 'not_recording') {
+      console.warn('[native-recording] not_recording ack ignored')
+      return
+    }
+
+    /**
+     * 采集中断（gap watchdog）：writer 里中断前的样本完好，绝不能走致命 reset——
+     * 那会经 discard 链路把整段已录音频删掉。直接走正常 stop 收尾保留产物
+     * （本仓无笔记快照需 renderer 代发，主进程即可收口），错误通知照发给 UI
+     */
+    if (code === 'audio_sample_timeout') {
+      console.warn(`[native-recording] capture interrupted, salvaging partial recording${detail
+        ? ` (${detail})`
+        : ''}`)
+      handlersBySource[source]?.onError(code, detail)
+      recordingState.stop()
+      return
+    }
+
+    console.warn(`[native-recording] recorder error: ${code}${detail
+      ? ` (${detail})`
+      : ''}`)
     clearNativeRecordingSession()
     recordingState.reset()
-    handlersBySource[source]?.onError(error)
+    handlersBySource[source]?.onError(code, detail)
   })
 
   onRecorderEvent('stopped', async ({ path: filePath, duration }) => {
@@ -112,6 +136,20 @@ export function initNativeRecordingPipeline(): void {
     const session = consumeNativeRecordingSession()
     if (!session) {
       /** 无本管线会话（如会议录音的 stopped）：交由其它订阅者处理，本管线跳过 */
+      return
+    }
+
+    /** 0B / 缺失产物不得当成功上报——Swift 侧硬校验之外的最后一道闸（如 mixTracks 极端产物） */
+    try {
+      const file = await stat(filePath)
+      if (file.size <= 0) {
+        throw new Error(`recording file is empty: ${file.size} bytes`)
+      }
+    }
+    catch (err) {
+      console.warn('[native-recording] invalid recording file, skip completion', err)
+      unlink(filePath).catch(() => { /* ignore */ })
+      handlersBySource[session.source]?.onError('empty_recording')
       return
     }
 
@@ -133,6 +171,12 @@ export function initNativeRecordingPipeline(): void {
 export type NativeRecordingHandlers = {
   /** 录音正常结束：session 已被消费，filePath 为最终混音产物 */
   onComplete: (session: NativeRecordingSession, filePath: string, duration: number) => void | Promise<void>
-  /** 录音中子进程报错：状态机已 reset、session 已清空，处理器只负责通知用户 */
-  onError: (detail: string) => void
+  /**
+   * 录音中子进程报错。除 audio_sample_timeout 外状态机已 reset、session 已清空，处理器只负责通知用户；
+   * audio_sample_timeout 为挽救链路：主进程随后走正常 stop 收尾，中断前音频照常经 onComplete 交付
+   *
+   * @param code 错误码（no_audio_samples / writer_failed / audio_sample_timeout / no_audio_content / empty_recording 等）
+   * @param message 诊断详情（Swift 侧采集统计 / writer 错误码 / 设备快照），仅用于展示与日志
+   */
+  onError: (code: string, message?: string) => void
 }

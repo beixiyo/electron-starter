@@ -111,7 +111,7 @@ registerNativeRecordingHandlers('manual', {
       mimeType: session.mimeType,
     }, mainWin)
   },
-  onError(detail) {
-    emitManualRecordingError({ reason: 'recorder-error', detail })
+  onError(code, message) {
+    emitManualRecordingError({ reason: 'recorder-error', detail: code, message })
   },
 })

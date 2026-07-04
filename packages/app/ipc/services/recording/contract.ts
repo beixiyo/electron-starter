@@ -74,6 +74,8 @@ export type ManualRecordingCompletePayload = {
 export type ManualRecordingErrorPayload = {
   /** recorder-error: 录制中 Swift 子进程报错 */
   reason: 'recorder-error'
-  /** 原始错误信息 */
+  /** 错误码（no_audio_samples / writer_failed / audio_sample_timeout / no_audio_content / empty_recording 等） */
   detail?: string
+  /** 诊断详情（采集统计 / writer 错误码 / 设备快照），仅展示与日志用 */
+  message?: string
 }

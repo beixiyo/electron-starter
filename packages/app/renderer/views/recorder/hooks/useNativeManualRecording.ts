@@ -63,8 +63,29 @@ export function useNativeManualRecording(onSaved?: () => void) {
       }
     })
 
-    const unsubError = $ipc.recording.on('manualRecordingError', (payload) => {
-      Message.danger(payload.detail || t('audioSource.recordFailed'))
+    const unsubError = $ipc.recording.on('manualRecordingError', ({ detail, message }) => {
+      console.warn(`[manual-recording] error: ${detail ?? 'unknown'}${message
+        ? ` (${message})`
+        : ''}`)
+
+      /** 采集中断走挽救链路：主进程随后经 complete 交付中断前音频，提示而非报错 */
+      if (detail === 'audio_sample_timeout') {
+        Message.warning(t('recordError.captureInterrupted'))
+        return
+      }
+
+      /** 所选音源没出声属正常场景（如纯系统音频但源 App 静默），不按异常措辞 */
+      if (detail === 'no_audio_content') {
+        Message.info(t('recordError.noAudioContent'))
+        return
+      }
+
+      const key = detail === 'empty_recording' || detail === 'no_audio_samples'
+        ? 'recordError.emptyAudio'
+        : detail === 'writer_failed'
+          ? 'recordError.unreadableAudio'
+          : 'audioSource.recordFailed'
+      Message.danger(t(key))
     })
 
     return () => {

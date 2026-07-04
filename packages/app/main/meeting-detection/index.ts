@@ -134,6 +134,34 @@ export function initMeetingDetection(): void {
     }
   })
 
+  onRecorderEvent('error', ({ code, detail }) => {
+    if (recordingState.nativeSource === 'manual')
+      return
+
+    /** 回执噪声（重复 stop / 并发 start 被拒）与会议录音状态无关，不动 UI */
+    if (code === 'not_recording' || code === 'already_recording')
+      return
+
+    console.warn(`[meeting-detection] recorder error: ${code}${detail
+      ? ` (${detail})`
+      : ''}`)
+
+    /**
+     * 采集中断（gap watchdog）：中断前样本仍在 writer 里，走正常 stop 挽救，
+     * 随后真正的 stopped 事件会驱动 toast 收口并交付产物
+     */
+    if (code === 'audio_sample_timeout') {
+      stopRecording()
+      return
+    }
+
+    /**
+     * 其余采集失败（无样本 / writer 失败等）：Swift 已删空文件且不再发 stopped，
+     * 补一个 stopped 状态让 toast 收口，避免 UI 永远卡在录音态
+     */
+    emitRecordingState({ status: 'stopped' })
+  })
+
   startRecorder()
   startMeetingDetector()
   console.log('[meeting-detection] started')

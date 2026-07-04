@@ -12,8 +12,10 @@ const bridge = new NativeBridge<RecorderEvents>({
     try {
       const msg: RecorderMessage = JSON.parse(line)
       if ('error' in msg) {
-        console.warn(`[audio-recorder] error: ${msg.error}`)
-        bus.emit('error', msg.error)
+        console.warn(`[audio-recorder] error: ${msg.error}${msg.detail
+          ? ` (${msg.detail})`
+          : ''}`)
+        bus.emit('error', { code: msg.error, detail: msg.detail })
       }
       else if (msg.status === 'recording') {
         console.log(`[audio-recorder] recording → ${msg.path}`)
@@ -132,12 +134,12 @@ type RecorderEvents = {
   paused: { path: string }
   mixing: { path: string }
   stopped: { path: string, duration: number }
-  error: string
+  error: { code: string, detail?: string }
 }
 
 type RecorderMessage
-  = | { status: 'recording', path: string, duration?: never }
-    | { status: 'paused', path: string, duration?: never }
-    | { status: 'mixing', path: string, duration?: never }
-    | { status: 'stopped', path: string, duration?: number }
-    | { error: string, status?: never }
+  = | { status: 'recording', path: string, duration?: never, detail?: never }
+    | { status: 'paused', path: string, duration?: never, detail?: never }
+    | { status: 'mixing', path: string, duration?: never, detail?: never }
+    | { status: 'stopped', path: string, duration?: number, detail?: never }
+    | { error: string, detail?: string, status?: never }
