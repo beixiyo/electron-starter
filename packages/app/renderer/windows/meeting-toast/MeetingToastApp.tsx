@@ -14,7 +14,10 @@ import { useMeetingToast } from './useMeetingToast'
 
 /** 检测态描边参数：紫色倒计时描边 + 白底内缩（内缩量 = 可见紫线宽度） */
 const BORDER_RADIUS = 16
-const BORDER_STROKE = 6
+/** 可见倒计时描边宽度 = 白底内缩量；高度 / 圆角全由它推导，改这一处即可 */
+const BORDER_INSET = 3
+/** SVG 描边宽度只需 ≥ BORDER_INSET 即可把可见环垫满 */
+const BORDER_STROKE = 4
 const COUNTDOWN_START_X = 118
 
 /** 关闭按钮：18px 圆钮，悬出容器左上角外 (-7, -5) */
@@ -178,16 +181,16 @@ const DetectionView = memo<DetectionViewProps>((props) => {
         startX={ COUNTDOWN_START_X }
         progress={ progress }
         className="bg-transparent"
-        contentClassName={ cn(
-          /**
-           * 紫色倒计时描边必须是最外沿：容器透明，白底盖在描边上、只露出边缘一圈
-           * 可见紫线宽度 = 白底内缩量（此处 3px），与 strokeWidth 无关——
-           * strokeWidth 只需 ≥ 2× 内缩量把可见环垫满即可（故用 6 而非更大）
-           * 内缩量放大时同步：h-[calc(100%-2×内缩)]、圆角 = 16 - 内缩
-           */
-          'm-[3px] h-[calc(100%-6px)] rounded-[13px] bg-background',
-          'flex items-center gap-2 py-3 pl-2.5 pr-3',
-        ) }
+        /**
+         * 紫色倒计时描边是最外沿：容器透明，白底内缩 BORDER_INSET 盖住内侧、只露边缘一圈
+         * 可见紫线宽度 = BORDER_INSET，高度 / 圆角由它推导（避免分散硬编码，改一处即可）
+         */
+        contentStyle={ {
+          margin: BORDER_INSET,
+          height: `calc(100% - ${BORDER_INSET * 2}px)`,
+          borderRadius: BORDER_RADIUS - BORDER_INSET,
+        } }
+        contentClassName="flex items-center gap-2 bg-background py-3 pl-2.5 pr-3"
       >
         <div className="flex shrink-0 items-center gap-2">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-[9px] bg-brand/10">
