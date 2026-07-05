@@ -87,8 +87,10 @@ export function createBrowserWindow(
    * 否则超高的登录/同意页无法滚动、把用户卡住
    */
   if (htmlPath && !initialUrl) {
-    window.webContents.on('did-finish-load', () => {
-      window.webContents.insertCSS('html { overflow: hidden !important; }').catch(() => {})
+    const webContents = window.webContents
+    webContents.on('did-finish-load', () => {
+      if (!webContents.isDestroyed())
+        webContents.insertCSS('html { overflow: hidden !important; }').catch(() => {})
     })
   }
 

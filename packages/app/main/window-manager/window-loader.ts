@@ -42,21 +42,40 @@ export async function createWindowsSequentially(
     if (!win)
       continue
 
+    const webContents = win.webContents
+
     await new Promise<void>((resolve) => {
-      const onLoad = (): void => {
+      let settled = false
+
+      const done = (message: string): void => {
+        if (settled)
+          return
+
+        settled = true
         clearTimeout(timer)
-        console.log(`[dock-test] ${task.type}: did-finish-load 正常加载（耗时 ${Date.now() - startedAt}ms）`)
+        win.off('closed', onClosed)
+        if (!webContents.isDestroyed())
+          webContents.removeListener('did-finish-load', onLoad)
+
+        console.log(message)
         resolve()
+      }
+
+      const onLoad = (): void => {
+        done(`[dock-test] ${task.type}: did-finish-load 正常加载（耗时 ${Date.now() - startedAt}ms）`)
+      }
+      const onClosed = (): void => {
+        done(`[dock-test] ${task.type}: 窗口已关闭，停止等待 did-finish-load`)
       }
       const timer = setTimeout(() => {
         /** 超时放行时移除监听器，避免在长寿命 webContents 上累积 */
-        win.webContents.removeListener('did-finish-load', onLoad)
-        console.log(`[dock-test] ${task.type}: 等待 did-finish-load 超时放行（${timeoutMs}ms，监听器已移除）`)
-        resolve()
+        done(`[dock-test] ${task.type}: 等待 did-finish-load 超时放行（${timeoutMs}ms，监听器已移除）`)
       }, timeoutMs)
-      win.webContents.once('did-finish-load', onLoad)
+      webContents.once('did-finish-load', onLoad)
+      win.once('closed', onClosed)
     })
 
-    task.onLoaded?.(win)
+    if (!win.isDestroyed())
+      task.onLoaded?.(win)
   }
 }
