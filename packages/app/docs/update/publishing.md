@@ -74,6 +74,7 @@ sha512: ...
 - `latest*.yml` **不要长缓存**,否则用户看不到新版本;CDN 上线后要刷新这些元数据文件
 - 安装包必须支持 **HTTP Range**(响应 `Accept-Ranges: bytes`),否则 blockmap 增量下载回退为全量
 - 安装包、`.blockmap` 文件名带版本号,**可以长缓存**
+- 手动下载稳定入口可直接指向 `app-latest.dmg`；它只是当前 `.dmg` 的固定别名,不参与 `latest-mac.yml` 的自动更新决策
 - 更新目录建议**公开可读**;私有签名 URL 会增加复杂度,当前模板没做鉴权头
 - 同一前缀里不要手写或混放不同构建产物;`latest*.yml`、安装包、`.blockmap` 必须来自同一次构建
 - 稳定版与 beta 用独立前缀(如 `/electron-app/` 与 `/electron-app-beta/`)

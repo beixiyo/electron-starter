@@ -36,6 +36,9 @@ const { values } = parseArgs({
     publicBaseUrl: {
       type: 'string',
     },
+    latestDmgAlias: {
+      type: 'string',
+    },
     dryRun: {
       type: 'boolean',
       default: false,
@@ -70,6 +73,7 @@ const gcsBaseUrl = trimEndSlash(getCliOrEnv(
   values.publicBaseUrl,
   `https://storage.googleapis.com/${updateBucket}/${updatePrefix}`,
 ))
+const latestDmgAlias = trimSlashes(getCliOrEnv('LATEST_DMG_ALIAS', values.latestDmgAlias, 'app-latest.dmg'))
 const gcsTarget = `gs://${updateBucket}/${updatePrefix}/`
 
 if (!existsSync(distDir)) {
@@ -92,6 +96,8 @@ console.log(`GCS target: ${gcsTarget}`)
 console.log(`Public base URL: ${gcsBaseUrl}`)
 console.log(`Install assets: ${installFiles.length}`)
 console.log(`Feed files: ${feedFiles.length}`)
+if (latestDmgAlias)
+  console.log(`Latest dmg alias: ${latestDmgAlias}`)
 
 run('gcloud', ['config', 'set', 'project', gcpProject])
 
@@ -104,6 +110,14 @@ run('gcloud', ['storage', 'buckets', 'get-iam-policy', `gs://${updateBucket}`])
 console.log('\nUploading installers and blockmaps...')
 for (const file of installFiles) {
   upload(file.path, 'public, max-age=31536000, immutable')
+}
+
+if (latestDmgAlias) {
+  const latestDmg = pickSingleDmg(installFiles)
+  if (latestDmg) {
+    console.log(`\nUploading dmg alias: ${latestDmgAlias}`)
+    upload(latestDmg.path, 'no-store', undefined, `${gcsTarget}${latestDmgAlias}`)
+  }
 }
 
 console.log('\nUploading latest*.yml...')
@@ -119,16 +133,22 @@ if (!skipVerify) {
   await verifyHead(`${gcsBaseUrl}/${rangeFile.name}`, 206, {
     Range: 'bytes=0-1',
   })
+
+  if (latestDmgAlias) {
+    const latestDmg = pickSingleDmg(installFiles)
+    if (latestDmg)
+      await verifyHead(`${gcsBaseUrl}/${latestDmgAlias}`, 200)
+  }
 }
 
 console.log('\nGCS update feed upload completed.')
 
-function upload(filePath: string, cacheControl: string, contentType?: string): void {
+function upload(filePath: string, cacheControl: string, contentType?: string, target = gcsTarget): void {
   const args = [
     'storage',
     'cp',
     filePath,
-    gcsTarget,
+    target,
     `--cache-control=${cacheControl}`,
     ...(contentType
       ? [`--content-type=${contentType}`]
@@ -203,6 +223,19 @@ function isVersionedUpdateAsset(file: DistFile): boolean {
     '.AppImage',
     '.blockmap',
   ].some(ext => file.name.endsWith(ext))
+}
+
+function pickSingleDmg(files: DistFile[]): DistFile | null {
+  const dmgFiles = files.filter(file => file.name.endsWith('.dmg'))
+
+  if (dmgFiles.length === 0)
+    return null
+
+  if (dmgFiles.length > 1) {
+    throw new Error(`Expected exactly one dmg for latest alias, found ${dmgFiles.length}: ${dmgFiles.map(file => file.name).join(', ')}`)
+  }
+
+  return dmgFiles[0]
 }
 
 function trimSlashes(value: string): string {

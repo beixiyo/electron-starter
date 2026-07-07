@@ -15,6 +15,7 @@ cd packages/app && cp env/.env.example env/.env
 | `UPDATE_PREFIX` | 否,默认 `desktop` | bucket 内对象前缀,区分 stable / beta |
 | `GCS_PUBLIC_BASE_URL` | 否 | 公开下载地址,默认由 `bucket/prefix` 推导 |
 | `UPDATE_PUBLISH_URL` | 否 | 仅当下载地址 ≠ GCS 公开地址(接了独立 CDN 域名)时才填 |
+| `LATEST_DMG_ALIAS` | 否,默认 `app-latest.dmg` | 手动下载稳定入口；上传脚本会把当前构建的 `.dmg` 额外复制到这个固定文件名 |
 
 `.env` 已被根 `.gitignore` 忽略,填真实值不会提交;`.env.example` 作为模板被跟踪
 

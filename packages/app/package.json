@@ -41,6 +41,8 @@
     "sign:setup": "bun scripts/selfsign-app.ts setup",
     "sign:install": "bun scripts/selfsign-app.ts install",
     "sign:cleanup": "bun scripts/selfsign-app.ts cleanup",
+    "// pack:installed:mac": "发给别人后若提示无法打开，在对方电脑运行：xattr -dr com.apple.quarantine /Applications/app.app && open /Applications/app.app",
+    "pack:installed:mac": "rm -f \"$HOME/Desktop/app-test.zip\" && ditto -c -k --keepParent \"$HOME/Applications/app.app\" \"$HOME/Desktop/app-test.zip\"",
 
     "----- update-local -----": "-----",
     "update:build:mac": "node ./scripts/build-for.mjs --platform=mac --mode=test --localUpdate --localUpdatePayloadKb=4096",

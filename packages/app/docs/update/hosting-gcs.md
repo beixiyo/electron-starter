@@ -29,6 +29,7 @@ GCP_PROJECT=<your-gcp-project-id>
 UPDATE_BUCKET=<your-update-bucket>
 UPDATE_PREFIX=<desktop-release-prefix>
 # GCS_PUBLIC_BASE_URL 默认推导为 https://storage.googleapis.com/<bucket>/<prefix>
+# LATEST_DMG_ALIAS 默认是 app-latest.dmg，可改成别的稳定文件名
 ```
 
 `publish.url` 由 env 注入,无需手改 `electron-builder.yml`(见 [config.md](./config.md))
@@ -53,13 +54,14 @@ gcloud storage buckets add-iam-policy-binding "gs://$UPDATE_BUCKET" \
 pnpm -F app update:upload:gcs
 ```
 
-脚本会:先传安装包和 `.blockmap`(长缓存)→ 再传 `latest*.yml`(`no-store`)→ 用公开 URL 校验 `latest*.yml` 返回 `200`、安装包 Range 返回 `206`
+脚本会:先传安装包和 `.blockmap`(长缓存)→ 额外把当前 `.dmg` 复制一份到稳定别名（默认 `app-latest.dmg`，`no-store`）→ 再传 `latest*.yml`(`no-store`)→ 用公开 URL 校验 `latest*.yml` 返回 `200`、安装包 Range 返回 `206`
 
 常用参数:
 
 ```bash
 pnpm -F app update:upload:gcs -- --dryRun       # 只打印 gcloud 命令不真传（首次强烈建议）
 pnpm -F app update:upload:gcs -- --skipVerify   # 跳过上传后校验
+pnpm -F app update:upload:gcs -- --latestDmgAlias=app-latest.dmg
 pnpm -F app update:upload:gcs -- --envPath=.env.production
 pnpm -F app update:upload:gcs -- --project=<p> --bucket=<b> --prefix=<pre>  # CLI 覆盖 env
 pnpm -F app update:upload:gcs -- --dir=<path>   # 指定产物目录（默认 dist/dist）
@@ -99,6 +101,7 @@ find packages/app/dist/dist -maxdepth 1 -type f -name 'latest*.yml' \
 ```bash
 curl -I "$GCS_PUBLIC_BASE_URL/latest-mac.yml"                              # 200，Cache-Control: no-store
 curl -I -H 'Range: bytes=0-1' "$GCS_PUBLIC_BASE_URL/app-1.0.1-arm64-mac.zip"  # 206 + Content-Range
+curl -I "$GCS_PUBLIC_BASE_URL/app-latest.dmg"                              # 200，Cache-Control: no-store
 ```
 
 接了 Cloud CDN 时,更新 `latest*.yml` 后要刷新 CDN 里这些入口文件。不要把 service account key、signed URL 写进 App;App 只需公开可读的 HTTPS 地址
@@ -111,5 +114,6 @@ gs://$UPDATE_BUCKET/$UPDATE_PREFIX/
 ├── app-1.0.1-setup.exe(.blockmap)
 ├── app-1.0.1-arm64-mac.zip(.blockmap)
 ├── app-1.0.1.dmg
+├── app-latest.dmg
 └── app-1.0.1.AppImage(.blockmap)
 ```
