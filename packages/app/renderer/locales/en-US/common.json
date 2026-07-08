@@ -1,3 +1,8 @@
 {
-  "welcome": "Welcome to App"
+  "welcome": "Welcome to App",
+  "errorBoundary": {
+    "title": "This page is temporarily unavailable",
+    "description": "A rendering error occurred. You can retry this page without restarting the app.",
+    "retry": "Retry page"
+  }
 }

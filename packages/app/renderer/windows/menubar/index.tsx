@@ -2,6 +2,7 @@ import { SHADOW_INSET, WindowType } from '@shared'
 import { useTheme } from 'hooks'
 import { createRoot } from 'react-dom/client'
 import { cn } from 'utils'
+import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
 
 import 'styles/css/index.css'
@@ -77,5 +78,7 @@ document.body.style.overflow = 'hidden'
 document.getElementById('root')!.style.background = 'transparent'
 
 createRoot(document.getElementById('root')!).render(
-  <MenuBarApp />,
+  <AppErrorBoundary className="min-h-screen bg-transparent">
+    <MenuBarApp />
+  </AppErrorBoundary>,
 )

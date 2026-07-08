@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
+import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
+import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 
 /**
  * 透明浮窗统一挂载入口
@@ -16,5 +18,11 @@ export function mountTransparentWindow(node: ReactNode): void {
   const root = document.getElementById('root')!
   root.style.background = 'transparent'
 
-  createRoot(root).render(node)
+  createRoot(root).render(
+    createElement(
+      AppErrorBoundary,
+      { className: 'min-h-screen bg-transparent' },
+      node,
+    ),
+  )
 }
