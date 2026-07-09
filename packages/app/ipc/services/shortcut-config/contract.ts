@@ -36,15 +36,12 @@ export type ShortcutConfigContract = IpcContract<{
   /** 录制结束后调用，恢复主进程响应 */
   resumeAfterRecord: () => void
 }, {
-  /** 主进程检测到修饰键组合，推送给录制中的渲染进程 */
-  hotkey: KeyboardShortcutChord
+  /** 主进程检测到真实键盘 down/up，推送给录制中的渲染进程 */
+  record: ShortcutRecordEvent
 }>
 
 /** 快捷键修饰键，`Primary` 表示 macOS Command、Windows/Linux Control */
 export type ShortcutModifier = NativeModifier | 'Primary'
-
-/** 兼容旧代码中对 Modifier 的导入，语义已扩展为支持 `Primary` */
-export type Modifier = ShortcutModifier
 
 /** 普通键盘快捷键 chord */
 export type KeyboardShortcutChord = {
@@ -81,3 +78,13 @@ export type ShortcutBinding = {
 
 /** action id → 绑定，null 表示禁用 */
 export type ShortcutBindings = Record<string, ShortcutBinding | null>
+
+/** 录制阶段的键盘事件，由具体 backend 产生，renderer 按 action 能力判定最终手势 */
+export type ShortcutRecordEvent = {
+  phase: ShortcutRecordPhase
+  chord: KeyboardShortcutChord
+  timestamp: number
+}
+
+/** 录制阶段的键盘事件相位 */
+export type ShortcutRecordPhase = 'down' | 'up'

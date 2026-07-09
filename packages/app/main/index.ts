@@ -1,16 +1,19 @@
 import type { FocusPayload } from '@ipc/services/focus/contract'
-import type { FnComboKey, Modifier, ShortcutBinding, ShortcutBindings } from '@ipc/services/shortcut-config/contract'
+import type { FnComboKey, ShortcutBinding, ShortcutBindings, ShortcutModifier } from '@ipc/services/shortcut-config/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
+import type { KeyboardHotkeyEvent } from './keyboard'
 
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { focusService } from '@ipc/services/focus/service'
+import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
   APP_PROTOCOL,
   FOCUS_NATIVE_WINDOW_SIZE,
+  HOLD_MIN_DURATION_MS,
   HOLD_SHORT_ERROR_MESSAGE,
   SHORTCUTS,
   WindowType,
@@ -311,22 +314,104 @@ function showShortcutTestWindow(
 }
 
 /** hotkey 绑定的触发处理器，按 action id 索引 */
-const HOTKEY_HANDLERS: Record<string, (gesture: KeyboardHotkeyGesture) => void> = {
-  recording: gesture => showKeyboardShortcutTestWindow('Recording', gesture),
-  askAssistant: gesture => showKeyboardShortcutTestWindow('Ask', gesture),
-  bookmark: gesture => showKeyboardShortcutTestWindow('Bookmark', gesture),
+const HOTKEY_HANDLERS: Record<string, (event: KeyboardHotkeyEvent) => void> = {
+  recording: event => showKeyboardShortcutTestWindow('Recording', event),
+  askAssistant: event => showKeyboardShortcutTestWindow('Ask', event),
+  voiceDictation: handleVoiceDictationHotkey,
+  bookmark: event => showKeyboardShortcutTestWindow('Bookmark', event),
 }
 
-function showKeyboardShortcutTestWindow(label: string, gesture: KeyboardHotkeyGesture): void {
+function showKeyboardShortcutTestWindow(label: string, event: KeyboardHotkeyEvent): void {
+  if (event.phase !== 'trigger')
+    return
+
+  const { gesture } = event
   showShortcutTestWindow(
-    `${label} (${gesture === 'doublePress'
-      ? 'double hotkey'
-      : 'hotkey'})`,
+    `${label} (${formatKeyboardGestureLabel(gesture)})`,
     gesture === 'doublePress'
       ? 'doublePress'
-      : 'hotkey',
+      : gesture === 'hold'
+        ? 'hold'
+        : 'hotkey',
   )
 }
+
+function formatKeyboardGestureLabel(gesture: KeyboardHotkeyEvent['gesture']): string {
+  switch (gesture) {
+    case 'press':
+      return 'hotkey'
+    case 'doublePress':
+      return 'double hotkey'
+    case 'hold':
+      return 'hold hotkey'
+  }
+}
+
+function handleVoiceDictationHotkey(event: KeyboardHotkeyEvent): void {
+  if (event.gesture !== 'hold') {
+    showKeyboardShortcutTestWindow('Voice Dictation', event)
+    return
+  }
+
+  if (event.phase === 'trigger') {
+    keyboardVoiceImeHoldActive = true
+    void startVoiceImeKeyboardHold()
+    return
+  }
+
+  keyboardVoiceImeHoldActive = false
+  finishVoiceImeKeyboardHold()
+}
+
+async function startVoiceImeKeyboardHold(): Promise<void> {
+  if (holdStateManager.isHolding(WindowType.VOICE_IME))
+    return
+
+  if (!(await ensureMicrophonePermissionOrExplain('voice-ime'))) {
+    keyboardVoiceImeHoldActive = false
+    return
+  }
+
+  if (!keyboardVoiceImeHoldActive)
+    return
+
+  holdStateManager.startHold({
+    type: WindowType.VOICE_IME,
+    onRelease: handleVoiceImeRelease,
+    showWindow: true,
+  })
+
+  const win = windowManager.get(WindowType.VOICE_IME) || windowManager.create(WindowType.VOICE_IME)
+  if (win && !win.isVisible()) {
+    const config = windowManager.getMetadata(WindowType.VOICE_IME)?.config
+    if (config?.focusable) {
+      windowManager.show(WindowType.VOICE_IME)
+    }
+    else {
+      windowManager.showInactive(WindowType.VOICE_IME)
+    }
+  }
+
+  sendHoldStartEvent(WindowType.VOICE_IME)
+}
+
+function finishVoiceImeKeyboardHold(): void {
+  const holdState = holdStateManager.getHoldState(WindowType.VOICE_IME)
+  if (!holdState || !holdState.isHolding)
+    return
+
+  const holdDuration = Date.now() - holdState.startTime
+  if (holdDuration < HOLD_MIN_DURATION_MS) {
+    holdStateManager.completeHold(WindowType.VOICE_IME, {
+      error: HOLD_SHORT_ERROR_MESSAGE,
+      duration: Math.max(holdDuration, 0),
+    })
+  }
+
+  sendHoldEndEvent(WindowType.VOICE_IME)
+}
+
+let keyboardVoiceImeHoldActive = false
 
 function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
   if (process.platform !== 'darwin')
@@ -392,8 +477,8 @@ function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
   })
 }
 
-function normalizeFnModifiers(modifiers: Modifier[] | undefined): Exclude<Modifier, 'Primary'>[] {
-  return (modifiers ?? []).filter((modifier): modifier is Exclude<Modifier, 'Primary'> => {
+function normalizeFnModifiers(modifiers: ShortcutModifier[] | undefined): Exclude<ShortcutModifier, 'Primary'>[] {
+  return (modifiers ?? []).filter((modifier): modifier is Exclude<ShortcutModifier, 'Primary'> => {
     return modifier !== 'Primary'
   })
 }
@@ -494,5 +579,3 @@ const FOCUS_UPDATE_TARGETS = [
 
 const FOCUS_NATIVE_MARGIN = 20
 let focusNativeLastFocused = false
-
-type KeyboardHotkeyGesture = 'press' | 'doublePress'

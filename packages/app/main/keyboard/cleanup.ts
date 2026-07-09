@@ -1,8 +1,7 @@
 import { app } from 'electron'
-import { resetDoublePressShortcutStates } from './global'
 import { resetFnShortcutStates, stopFnKeyListener } from './fn'
+import { resetKeyboardGestureShortcutStates, unregisterAllGlobalShortcuts } from './global'
 import { getHoldShortcutsMap, resetHoldShortcutStates } from './hold'
-import { unregisterAllGlobalShortcuts } from './global'
 
 /**
  * 应用退出前取消注册所有快捷键
@@ -18,8 +17,8 @@ app.on('will-quit', () => {
   /** 清理长按快捷键配置 */
   getHoldShortcutsMap().clear()
 
-  /** 清理双击快捷键状态 */
-  resetDoublePressShortcutStates()
+  /** 清理用户自定义键盘手势快捷键状态 */
+  resetKeyboardGestureShortcutStates()
 
   if (process.platform === 'darwin') {
     /** 清理 fn 键快捷键状态 */

@@ -1,7 +1,7 @@
-import type { Modifier, ShortcutBinding, ShortcutChord, ShortcutGestureType } from '@ipc/services/shortcut-config/contract'
+import type { ShortcutBinding, ShortcutChord, ShortcutGestureType, ShortcutModifier } from '@ipc/services/shortcut-config/contract'
 import { DEFAULT_BINDINGS, shortcutChordsEqual } from '@ipc/services/shortcut-config/contract'
 
-export type { Modifier, ShortcutBinding }
+export type { ShortcutBinding }
 export type { FnComboKey } from '@ipc/services/fn/contract'
 
 export type GestureType = ShortcutGestureType
@@ -42,7 +42,7 @@ const FN_KEY_DISPLAY: Record<string, string> = {
   Down: '↓',
 }
 
-const MOD_SYMBOL: Record<Modifier, string> = {
+const MOD_SYMBOL: Record<ShortcutModifier, string> = {
   Meta: '⌘',
   Primary: '⌘/Ctrl',
   Control: '⌃',
@@ -62,6 +62,8 @@ const HOTKEY_DISPLAY: Record<string, string> = {
   ArrowUp: '↑',
   ArrowDown: '↓',
 }
+
+const ALL_GESTURES: GestureType[] = ['press', 'doublePress', 'hold']
 
 export function formatBinding(binding: ShortcutBinding): string {
   const chord = formatChord(binding.chord)
@@ -105,24 +107,24 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
     id: 'recording',
     label: '录音',
     binding: DEFAULT_BINDINGS.recording,
-    supportedGestures: ['press', 'doublePress'],
+    supportedGestures: ALL_GESTURES,
   },
   {
     id: 'askAssistant',
     label: 'Ask',
     binding: DEFAULT_BINDINGS.askAssistant,
-    supportedGestures: ['doublePress', 'press'],
+    supportedGestures: ALL_GESTURES,
   },
   {
     id: 'voiceDictation',
     label: '语音听写',
     binding: DEFAULT_BINDINGS.voiceDictation,
-    supportedGestures: ['hold'],
+    supportedGestures: ALL_GESTURES,
   },
   {
     id: 'bookmark',
     label: '标记',
     binding: DEFAULT_BINDINGS.bookmark,
-    supportedGestures: ['press', 'doublePress'],
+    supportedGestures: ALL_GESTURES,
   },
 ]

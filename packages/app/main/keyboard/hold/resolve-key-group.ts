@@ -48,6 +48,20 @@ export function resolveKeyGroup(rawToken: string): number[] {
       return [UiohookKey.Space]
     case 'plus':
       return [UiohookKey.Equal]
+    case 'grave':
+      return [UiohookKey.Backquote]
+    case 'left':
+      return [UiohookKey.ArrowLeft]
+    case 'right':
+      return [UiohookKey.ArrowRight]
+    case 'up':
+      return [UiohookKey.ArrowUp]
+    case 'down':
+      return [UiohookKey.ArrowDown]
+    case 'leftbracket':
+      return [UiohookKey.BracketLeft]
+    case 'rightbracket':
+      return [UiohookKey.BracketRight]
   }
 
   const lookupKey = rawToken.toLowerCase()

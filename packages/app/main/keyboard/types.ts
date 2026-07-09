@@ -45,29 +45,3 @@ export type HoldShortcutConfig = {
   canStart?: () => boolean | Promise<boolean>
   onRelease?: (result: unknown) => void
 }
-
-/**
- * 双击全局快捷键配置
- */
-export type DoublePressGlobalShortcutConfig = {
-  /** 快捷键组合，例如 'CommandOrControl+E' */
-  accelerator: string
-  /** 目标窗口类型，双击触发时切换窗口 */
-  windowType?: WindowType
-  /** 双击判定间隔 */
-  intervalMs?: number
-  /** 第一次按下时的回调（每次首次按下都会触发） */
-  onFirstPress?: () => void
-  /** 双击触发时的回调 */
-  onDoublePress?: () => void
-}
-
-/**
- * 双击快捷键内部配置
- */
-export type DoublePressShortcutConfig = {
-  windowType?: WindowType
-  intervalMs?: number
-  onFirstPress?: () => void
-  onDoublePress?: () => void
-}

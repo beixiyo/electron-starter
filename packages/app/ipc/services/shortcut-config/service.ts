@@ -1,8 +1,7 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import type { ShortcutBindings, ShortcutConfigContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { resumeFnShortcuts, suspendFnShortcuts } from '@main/keyboard'
-import { startRecordHotkeyDetection, stopRecordHotkeyDetection } from '@main/keyboard'
+import { resumeFnShortcuts, startRecordShortcutDetection, stopRecordShortcutDetection, suspendFnShortcuts } from '@main/keyboard'
 import { readShortcutBindings, writeShortcutBindings } from '@main/store/shortcut-bindings'
 import { BrowserWindow } from 'electron'
 
@@ -25,13 +24,13 @@ export function createShortcutConfigService(
     async pauseForRecord(e) {
       suspendFnShortcuts()
       const win = BrowserWindow.fromWebContents((e as IpcMainInvokeEvent).sender)
-      startRecordHotkeyDetection((hotkey) => {
-        service.emit('hotkey', hotkey, win ?? undefined)
+      startRecordShortcutDetection((recordEvent) => {
+        service.emit('record', recordEvent, win ?? undefined)
       })
     },
 
     async resumeAfterRecord(_e) {
-      stopRecordHotkeyDetection()
+      stopRecordShortcutDetection()
       resumeFnShortcuts()
     },
   })

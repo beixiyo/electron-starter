@@ -1,9 +1,7 @@
-import type { KeyboardShortcutChord, Modifier } from '@ipc/services/shortcut-config/contract'
+import type { KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from '@ipc/services/shortcut-config/contract'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { uIOhook, UiohookKey } from 'uiohook-napi'
 import { acquireHook, releaseHook } from '../uiohook-lifecycle'
-
-export type RecordedHotkey = KeyboardShortcutChord
 
 const MODIFIER_CODES: Set<number> = new Set([
   UiohookKey.Ctrl,
@@ -19,51 +17,33 @@ const MODIFIER_CODES: Set<number> = new Set([
   UiohookKey.ScrollLock,
 ])
 
-/** keycode → 显示名称（与渲染进程 normalizeHotkeyKey 保持一致） */
 const CODE_TO_NAME: Map<number, string> = new Map(
   Object.entries(UiohookKey)
     .filter((entry): entry is [string, number] => typeof entry[1] === 'number')
     .map(([name, code]) => [code, name]),
 )
 
-function keycodeToName(keycode: number): string | null {
-  return CODE_TO_NAME.get(keycode) ?? null
-}
-
-let activeListener: ((e: UiohookKeyboardEvent) => void) | null = null
+let activeEmit: ((event: ShortcutRecordEvent) => void) | null = null
+let keyDownListener: ((e: UiohookKeyboardEvent) => void) | null = null
+let keyUpListener: ((e: UiohookKeyboardEvent) => void) | null = null
 let hookAcquired = false
 
+const activeChords = new Map<number, KeyboardShortcutChord>()
+
 /**
- * 录制期间开始监听修饰键组合，通过 emit 回调上报
+ * 录制期间监听真实键盘 down/up。
+ * 该事件流只表达“捕获到了什么”，具体判定 press / doublePress / hold 由渲染层按 action 能力完成
  */
-export function startRecordHotkeyDetection(emit: (hotkey: RecordedHotkey) => void): void {
-  if (activeListener)
+export function startRecordShortcutDetection(emit: (event: ShortcutRecordEvent) => void): void {
+  if (activeEmit)
     return
 
-  activeListener = (e: UiohookKeyboardEvent) => {
-    if (!e.metaKey && !e.ctrlKey && !e.altKey)
-      return
-    if (MODIFIER_CODES.has(e.keycode))
-      return
+  activeEmit = emit
+  keyDownListener = handleKeyDown
+  keyUpListener = handleKeyUp
 
-    const key = keycodeToName(e.keycode)
-    if (!key)
-      return
-
-    const modifiers: Modifier[] = []
-    if (e.metaKey)
-      modifiers.push('Meta')
-    if (e.ctrlKey)
-      modifiers.push('Control')
-    if (e.altKey)
-      modifiers.push('Alt')
-    if (e.shiftKey)
-      modifiers.push('Shift')
-
-    emit({ source: 'keyboard', key, modifiers })
-  }
-
-  uIOhook.on('keydown', activeListener)
+  uIOhook.on('keydown', keyDownListener)
+  uIOhook.on('keyup', keyUpListener)
 
   if (!hookAcquired) {
     acquireHook()
@@ -74,15 +54,88 @@ export function startRecordHotkeyDetection(emit: (hotkey: RecordedHotkey) => voi
 /**
  * 录制结束，移除监听器并释放 uIOhook
  */
-export function stopRecordHotkeyDetection(): void {
-  if (!activeListener)
-    return
+export function stopRecordShortcutDetection(): void {
+  if (keyDownListener) {
+    uIOhook.off('keydown', keyDownListener)
+    keyDownListener = null
+  }
 
-  uIOhook.off('keydown', activeListener)
-  activeListener = null
+  if (keyUpListener) {
+    uIOhook.off('keyup', keyUpListener)
+    keyUpListener = null
+  }
+
+  activeEmit = null
+  activeChords.clear()
 
   if (hookAcquired) {
     releaseHook()
     hookAcquired = false
   }
+}
+
+function handleKeyDown(event: UiohookKeyboardEvent): void {
+  if (!activeEmit)
+    return
+  if (MODIFIER_CODES.has(event.keycode))
+    return
+  if (activeChords.has(event.keycode))
+    return
+
+  const chord = toKeyboardShortcutChord(event)
+  if (!chord)
+    return
+
+  activeChords.set(event.keycode, chord)
+  activeEmit({
+    phase: 'down',
+    chord,
+    timestamp: Date.now(),
+  })
+}
+
+function handleKeyUp(event: UiohookKeyboardEvent): void {
+  if (!activeEmit)
+    return
+
+  const chord = activeChords.get(event.keycode)
+  if (!chord)
+    return
+
+  activeChords.delete(event.keycode)
+  activeEmit({
+    phase: 'up',
+    chord,
+    timestamp: Date.now(),
+  })
+}
+
+function toKeyboardShortcutChord(event: UiohookKeyboardEvent): KeyboardShortcutChord | null {
+  const key = keycodeToName(event.keycode)
+  if (!key)
+    return null
+
+  return {
+    source: 'keyboard',
+    key,
+    modifiers: getModifiers(event),
+  }
+}
+
+function keycodeToName(keycode: number): string | null {
+  return CODE_TO_NAME.get(keycode) ?? null
+}
+
+function getModifiers(event: UiohookKeyboardEvent): ShortcutModifier[] {
+  const modifiers: ShortcutModifier[] = []
+  if (event.metaKey)
+    modifiers.push('Meta')
+  if (event.ctrlKey)
+    modifiers.push('Control')
+  if (event.altKey)
+    modifiers.push('Alt')
+  if (event.shiftKey)
+    modifiers.push('Shift')
+
+  return modifiers
 }
