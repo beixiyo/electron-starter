@@ -33,6 +33,8 @@ type State
     | 'HOLD_ACTIVE'
     | 'DOUBLE_DONE'
 
+type FnShortcutComboConfig = NonNullable<FnShortcutsConfig['combos']>[number]
+
 /** IPC 转发监听器，不随快捷键重注册而清除；仅在 setupFnKeyIpc 重绑定窗口或 app 退出时清除 */
 const ipcCleanupFns: Array<() => void> = []
 
@@ -59,6 +61,8 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
   let decidingTimer: ReturnType<typeof setTimeout> | null = null
   let waitDoubleTimer: ReturnType<typeof setTimeout> | null = null
   let decidingStartTime = 0
+  const comboLastPressTime = new Map<string, number>()
+  const comboDoublePressTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
   const clearTimers = () => {
     if (decidingTimer) {
@@ -69,6 +73,46 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
       clearTimeout(waitDoubleTimer)
       waitDoubleTimer = null
     }
+  }
+
+  const clearComboDoublePressTimers = () => {
+    comboDoublePressTimers.forEach(clearTimeout)
+    comboDoublePressTimers.clear()
+    comboLastPressTime.clear()
+  }
+
+  const triggerCombo = (combo: FnShortcutComboConfig) => {
+    if (combo.gesture !== 'doublePress') {
+      combo.onTrigger()
+      return
+    }
+
+    const intervalMs = combo.intervalMs ?? DECIDING_MS
+    const chordId = getComboChordId(combo.key, combo.modifiers ?? [])
+    const now = Date.now()
+    const last = comboLastPressTime.get(chordId) ?? 0
+    const existingTimer = comboDoublePressTimers.get(chordId)
+    const isDoublePress = existingTimer !== undefined && now - last <= intervalMs
+
+    if (isDoublePress) {
+      clearTimeout(existingTimer)
+      comboDoublePressTimers.delete(chordId)
+      comboLastPressTime.delete(chordId)
+      combo.onTrigger()
+      return
+    }
+
+    if (existingTimer)
+      clearTimeout(existingTimer)
+
+    comboLastPressTime.set(chordId, now)
+    comboDoublePressTimers.set(
+      chordId,
+      setTimeout(() => {
+        comboDoublePressTimers.delete(chordId)
+        comboLastPressTime.delete(chordId)
+      }, intervalMs),
+    )
   }
 
   if (combos.length > 0) {
@@ -83,7 +127,7 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
 
       clearTimers()
       if (!suspended)
-        matched.onTrigger()
+        triggerCombo(matched)
       state = 'IDLE'
     })
     shortcutCleanupFns.push(unsubCombo)
@@ -218,7 +262,7 @@ export function registerFnShortcuts(config: FnShortcutsConfig): void {
     }
   })
 
-  shortcutCleanupFns.push(unsub, clearTimers)
+  shortcutCleanupFns.push(unsub, clearTimers, clearComboDoublePressTimers)
 }
 
 /** [dock-test] 统计 setupFnKeyIpc 注册次数 */
@@ -276,4 +320,8 @@ function modifiersMatch(a: Modifier[], b: Modifier[]): boolean {
   const sa = [...a].sort()
   const sb = [...b].sort()
   return sa.every((m, i) => m === sb[i])
+}
+
+function getComboChordId(key: string, modifiers: Modifier[]): string {
+  return `${[...modifiers].sort().join('+')}+${key}`
 }

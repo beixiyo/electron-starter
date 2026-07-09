@@ -1,9 +1,9 @@
-import type { Modifier } from '@ipc/services/fn/contract'
+import type { KeyboardShortcutChord, Modifier } from '@ipc/services/shortcut-config/contract'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { uIOhook, UiohookKey } from 'uiohook-napi'
 import { acquireHook, releaseHook } from '../uiohook-lifecycle'
 
-export type RecordedHotkey = { key: string, modifiers: Modifier[] }
+export type RecordedHotkey = KeyboardShortcutChord
 
 const MODIFIER_CODES: Set<number> = new Set([
   UiohookKey.Ctrl,
@@ -60,7 +60,7 @@ export function startRecordHotkeyDetection(emit: (hotkey: RecordedHotkey) => voi
     if (e.shiftKey)
       modifiers.push('Shift')
 
-    emit({ key, modifiers })
+    emit({ source: 'keyboard', key, modifiers })
   }
 
   uIOhook.on('keydown', activeListener)

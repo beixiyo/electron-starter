@@ -7,10 +7,9 @@ import { ShortcutBadge } from './ShortcutBadge'
 import { formatBinding } from './types'
 
 const GESTURE_LABEL: Record<GestureType, string> = {
-  combo: 'fn 组合键',
-  doublePress: '双击 fn',
-  hold: '长按 fn',
-  hotkey: '⌘⌃⌥ 快捷键',
+  press: '单击快捷键',
+  doublePress: '双击快捷键',
+  hold: '长按快捷键',
 }
 
 function buildHint(supported: GestureType[]): string {

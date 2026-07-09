@@ -18,10 +18,10 @@ keyboard/
     resolve-key-group.ts     accelerator 字符串 → uiohook keycode 数组
     index.ts
 
-  global/                    基于 Electron globalShortcut 的快捷键
+  global/                    全局快捷键
     hotkey.ts                标准热键（⌘⌥R 等），注册 / 取消注册
     normal.ts                单次按下的普通全局快捷键
-    double.ts                双击普通键检测，timer 判断双击间隔
+    double.ts                uiohook 双击普通键检测，timer 判断双击间隔
     index.ts
 
   record/                    录制模式专用
@@ -47,7 +47,7 @@ keyboard/
 | ⌘⌥R 等热键 **录制** | `record/detector` | uiohook `keydown` 全局监听 |
 | fn 手势 **录制** | `fn/state-machine` → IPC → renderer | 原始事件透传给渲染进程 |
 | Cmd+E 长按普通键 | `hold/shortcut` + `hold/release-detector` | `globalShortcut`(↓) + uiohook(↑) |
-| 双击普通键 | `global/double` | `globalShortcut` + timer |
+| 双击普通键 | `global/double` | uiohook `keydown/keyup` + timer |
 
 ## 关键约束
 

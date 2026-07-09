@@ -1,5 +1,5 @@
 import type { FocusPayload } from '@ipc/services/focus/contract'
-import type { ShortcutBindings } from '@ipc/services/shortcut-config/contract'
+import type { FnComboKey, Modifier, ShortcutBinding, ShortcutBindings } from '@ipc/services/shortcut-config/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
 
 import { join } from 'node:path'
@@ -310,33 +310,67 @@ function showShortcutTestWindow(
 }
 
 /** hotkey 绑定的触发处理器，按 action id 索引 */
-const HOTKEY_HANDLERS: Record<string, () => void> = {
-  recording: () => showShortcutTestWindow('Recording (hotkey)', 'hotkey'),
-  askAssistant: () => showShortcutTestWindow('Ask (hotkey)', 'hotkey'),
-  bookmark: () => showShortcutTestWindow('Bookmark (hotkey)', 'hotkey'),
+const HOTKEY_HANDLERS: Record<string, (gesture: KeyboardHotkeyGesture) => void> = {
+  recording: gesture => showKeyboardShortcutTestWindow('Recording', gesture),
+  askAssistant: gesture => showKeyboardShortcutTestWindow('Ask', gesture),
+  bookmark: gesture => showKeyboardShortcutTestWindow('Bookmark', gesture),
+}
+
+function showKeyboardShortcutTestWindow(label: string, gesture: KeyboardHotkeyGesture): void {
+  showShortcutTestWindow(
+    `${label} (${gesture === 'doublePress'
+      ? 'double hotkey'
+      : 'hotkey'})`,
+    gesture === 'doublePress'
+      ? 'doublePress'
+      : 'hotkey',
+  )
 }
 
 function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
   if (process.platform !== 'darwin')
     return
 
-  /** 收集所有 combo 类型绑定，含修饰符信息 */
+  let holdBinding: ShortcutBinding | null = null
+  let doublePressBinding: ShortcutBinding | null = null
+
   const combos = Object.entries(bindings).flatMap(([id, b]) => {
-    if (b?.type !== 'combo')
+    if (!b || b.chord.source !== 'fn')
       return []
-    const { key, modifiers } = b
+
+    if (b.chord.key === 'Fn') {
+      if (b.gesture === 'hold' && id === 'voiceDictation')
+        holdBinding = b
+      if (b.gesture === 'doublePress' && id === 'askAssistant')
+        doublePressBinding = b
+      return []
+    }
+
+    if (b.gesture !== 'press' && b.gesture !== 'doublePress')
+      return []
+
+    const { key, modifiers } = b.chord
     return [{
-      key,
-      modifiers,
+      key: key as FnComboKey,
+      modifiers: normalizeFnModifiers(modifiers),
+      gesture: b.gesture,
+      intervalMs: b.intervalMs,
       onTrigger: () => {
-        console.log(`[fn:combo] ✅ Fn+${key} → ${id}`)
-        showShortcutTestWindow(`Fn + ${key}`, 'combo')
+        console.log(`[fn:${b.gesture}] ✅ Fn+${key} → ${id}`)
+        showShortcutTestWindow(
+          b.gesture === 'doublePress'
+            ? `Double Fn + ${key}`
+            : `Fn + ${key}`,
+          b.gesture === 'doublePress'
+            ? 'doublePress'
+            : 'combo',
+        )
       },
     }]
   })
 
   registerFnShortcuts({
-    hold: bindings.voiceDictation?.type === 'hold'
+    hold: holdBinding
       ? {
           windowType: WindowType.VOICE_IME,
           canStart: () => ensureMicrophonePermissionOrExplain('voice-ime'),
@@ -344,7 +378,7 @@ function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
         }
       : undefined,
 
-    doublePress: bindings.askAssistant?.type === 'doublePress'
+    doublePress: doublePressBinding
       ? {
           onTrigger: () => {
             console.log('[fn:double] ✅ 双击触发')
@@ -354,6 +388,12 @@ function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
       : undefined,
 
     combos,
+  })
+}
+
+function normalizeFnModifiers(modifiers: Modifier[] | undefined): Exclude<Modifier, 'Primary'>[] {
+  return (modifiers ?? []).filter((modifier): modifier is Exclude<Modifier, 'Primary'> => {
+    return modifier !== 'Primary'
   })
 }
 
@@ -453,3 +493,5 @@ const FOCUS_UPDATE_TARGETS = [
 
 const FOCUS_NATIVE_MARGIN = 20
 let focusNativeLastFocused = false
+
+type KeyboardHotkeyGesture = 'press' | 'doublePress'

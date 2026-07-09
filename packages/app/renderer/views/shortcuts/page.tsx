@@ -1,17 +1,9 @@
-import type { Modifier } from '@ipc/services/fn/contract'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useState } from 'react'
 import { ShortcutRow } from './ShortcutRow'
+import { bindingsConflict } from './types'
 import { useRecordBinding } from './useRecordBinding'
 import { useShortcutsList } from './useShortcutsList'
-
-function modifiersEq(a: Modifier[], b: Modifier[]): boolean {
-  if (a.length !== b.length)
-    return false
-  const sa = [...a].sort()
-  const sb = [...b].sort()
-  return sa.every((m, i) => m === sb[i])
-}
 
 export default function ShortcutsPage() {
   const { actions, updateBinding, resetToDefault } = useShortcutsList()
@@ -31,25 +23,11 @@ export default function ShortcutsPage() {
     const id = recordingId
     const binding = recorder.detected
     if (id && binding) {
-      /** 新绑定优先：hold/doublePress 全局唯一，combo key 全局唯一，清空冲突项 */
+      /** 新绑定优先：清空同 chord 下会互相抢占的绑定 */
       const evicted = actions.filter((a) => {
         if (a.id === id || !a.binding)
           return false
-        if (binding.type === 'hold' && a.binding.type === 'hold')
-          return true
-        if (binding.type === 'doublePress' && a.binding.type === 'doublePress')
-          return true
-        if (binding.type === 'combo' && a.binding.type === 'combo'
-          && a.binding.key === binding.key
-          && modifiersEq(a.binding.modifiers ?? [], binding.modifiers ?? [])) {
-          return true
-        }
-        if (binding.type === 'hotkey' && a.binding.type === 'hotkey'
-          && a.binding.key === binding.key
-          && a.binding.modifiers.join() === binding.modifiers.join()) {
-          return true
-        }
-        return false
+        return bindingsConflict(binding, a.binding)
       })
       for (const a of evicted) updateBinding(a.id, null)
       updateBinding(id, binding)

@@ -54,6 +54,8 @@ export type DoublePressGlobalShortcutConfig = {
   accelerator: string
   /** 目标窗口类型，双击触发时切换窗口 */
   windowType?: WindowType
+  /** 双击判定间隔 */
+  intervalMs?: number
   /** 第一次按下时的回调（每次首次按下都会触发） */
   onFirstPress?: () => void
   /** 双击触发时的回调 */
@@ -65,6 +67,7 @@ export type DoublePressGlobalShortcutConfig = {
  */
 export type DoublePressShortcutConfig = {
   windowType?: WindowType
+  intervalMs?: number
   onFirstPress?: () => void
   onDoublePress?: () => void
 }

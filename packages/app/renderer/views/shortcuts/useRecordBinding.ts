@@ -1,4 +1,6 @@
+import type { ShortcutChord } from '@ipc/services/shortcut-config/contract'
 import type { GestureType, ShortcutBinding } from './types'
+import { shortcutChordsEqual } from '@ipc/services/shortcut-config/contract'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useRef, useState } from 'react'
 
@@ -15,6 +17,7 @@ export function useRecordBinding() {
   const supportedRef = useRef<GestureType[]>([])
   const downTimeRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingChordRef = useRef<ShortcutChord | null>(null)
 
   const syncPhase = (p: RecordPhase) => {
     phaseRef.current = p
@@ -30,7 +33,8 @@ export function useRecordBinding() {
 
   const detect = useLatestCallback((binding: ShortcutBinding) => {
     clearTimer()
-    if (supportedRef.current.includes(binding.type)) {
+    pendingChordRef.current = null
+    if (supportedRef.current.includes(binding.gesture)) {
       setDetected(binding)
       syncPhase('detected')
     }
@@ -49,6 +53,7 @@ export function useRecordBinding() {
 
   const start = useLatestCallback((supportedGestures: GestureType[]) => {
     clearTimer()
+    pendingChordRef.current = null
     supportedRef.current = supportedGestures
     setDetected(null)
     syncPhase('waiting')
@@ -56,8 +61,41 @@ export function useRecordBinding() {
 
   const cancel = useLatestCallback(() => {
     clearTimer()
+    pendingChordRef.current = null
     setDetected(null)
     syncPhase('idle')
+  })
+
+  const detectChordPress = useLatestCallback((chord: ShortcutChord) => {
+    const supported = supportedRef.current
+    const canPress = supported.includes('press')
+    const canDoublePress = supported.includes('doublePress')
+    const pendingChord = pendingChordRef.current
+
+    if (canDoublePress && pendingChord && shortcutChordsEqual(pendingChord, chord)) {
+      detect({ gesture: 'doublePress', chord, intervalMs: DECIDING_MS })
+      return
+    }
+
+    if (canDoublePress) {
+      clearTimer()
+      pendingChordRef.current = chord
+      syncPhase('wait_double')
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        pendingChordRef.current = null
+
+        if (canPress) {
+          detect({ gesture: 'press', chord })
+        }
+        else if (phaseRef.current === 'wait_double') {
+          syncPhase('waiting')
+        }
+      }, DECIDING_MS)
+      return
+    }
+
+    detect({ gesture: 'press', chord })
   })
 
   const isActive = phase !== 'idle'
@@ -75,11 +113,15 @@ export function useRecordBinding() {
       const cur = phaseRef.current
       if (cur === 'waiting' || cur === 'deciding') {
         clearTimer()
+        pendingChordRef.current = null
         downTimeRef.current = Date.now()
         syncPhase('deciding')
       }
       else if (cur === 'wait_double') {
-        detect({ type: 'doublePress' })
+        const pendingChord = pendingChordRef.current
+        if (pendingChord && (pendingChord.source !== 'fn' || pendingChord.key !== 'Fn'))
+          return
+        detect({ gesture: 'doublePress', chord: { source: 'fn', key: 'Fn' }, intervalMs: DECIDING_MS })
       }
     })
 
@@ -89,7 +131,7 @@ export function useRecordBinding() {
       clearTimer()
       const elapsed = Date.now() - downTimeRef.current
       if (elapsed >= DECIDING_MS) {
-        detect({ type: 'hold' })
+        detect({ gesture: 'hold', chord: { source: 'fn', key: 'Fn' }, minDurationMs: DECIDING_MS })
       }
       else {
         const remaining = Math.max(DECIDING_MS - elapsed, 50)
@@ -104,15 +146,15 @@ export function useRecordBinding() {
 
     const unsubCombo = ipc.fn.on('combo', ({ key, modifiers }) => {
       const cur = phaseRef.current
-      if (cur === 'deciding' || cur === 'waiting')
-        detect({ type: 'combo', key, modifiers })
+      if (cur === 'deciding' || cur === 'waiting' || cur === 'wait_double')
+        detectChordPress({ source: 'fn', key, modifiers })
     })
 
     /** 主进程 uIOhook 检测到修饰键组合（替代原浏览器 keydown 方案） */
-    const unsubHotkey = ipc.shortcutConfig.on('hotkey', ({ key, modifiers }) => {
+    const unsubHotkey = ipc.shortcutConfig.on('hotkey', (chord) => {
       const cur = phaseRef.current
-      if (cur === 'waiting' || cur === 'deciding')
-        detect({ type: 'hotkey', key, modifiers })
+      if (cur === 'waiting' || cur === 'deciding' || cur === 'wait_double')
+        detectChordPress(chord)
     })
 
     return () => {

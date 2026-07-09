@@ -1,10 +1,10 @@
-import type { Modifier, ShortcutBinding } from '@ipc/services/shortcut-config/contract'
-import { DEFAULT_BINDINGS } from '@ipc/services/shortcut-config/contract'
+import type { Modifier, ShortcutBinding, ShortcutChord, ShortcutGestureType } from '@ipc/services/shortcut-config/contract'
+import { DEFAULT_BINDINGS, shortcutChordsEqual } from '@ipc/services/shortcut-config/contract'
 
 export type { Modifier, ShortcutBinding }
 export type { FnComboKey } from '@ipc/services/fn/contract'
 
-export type GestureType = 'hold' | 'doublePress' | 'combo' | 'hotkey'
+export type GestureType = ShortcutGestureType
 
 export type ShortcutAction = {
   id: string
@@ -44,6 +44,7 @@ const FN_KEY_DISPLAY: Record<string, string> = {
 
 const MOD_SYMBOL: Record<Modifier, string> = {
   Meta: '⌘',
+  Primary: '⌘/Ctrl',
   Control: '⌃',
   Alt: '⌥',
   Shift: '⇧',
@@ -63,21 +64,40 @@ const HOTKEY_DISPLAY: Record<string, string> = {
 }
 
 export function formatBinding(binding: ShortcutBinding): string {
-  switch (binding.type) {
-    case 'combo': {
-      const mods = (binding.modifiers ?? []).map(m => MOD_SYMBOL[m]).join('')
-      return `fn + ${mods}${FN_KEY_DISPLAY[binding.key] ?? binding.key}`
-    }
+  const chord = formatChord(binding.chord)
+
+  switch (binding.gesture) {
+    case 'press':
+      return chord
     case 'doublePress':
-      return 'Double fn'
+      return `Double ${chord}`
     case 'hold':
-      return 'Hold fn'
-    case 'hotkey': {
-      const mods = binding.modifiers.map(m => MOD_SYMBOL[m]).join('')
-      const key = HOTKEY_DISPLAY[binding.key] ?? binding.key
-      return `${mods}${key}`
-    }
+      return `Hold ${chord}`
   }
+}
+
+export function bindingsConflict(a: ShortcutBinding, b: ShortcutBinding): boolean {
+  if (!shortcutChordsEqual(a.chord, b.chord))
+    return false
+
+  if (a.chord.source === 'fn' && b.chord.source === 'fn' && a.chord.key === 'Fn') {
+    return a.gesture === b.gesture
+  }
+
+  return true
+}
+
+function formatChord(chord: ShortcutChord): string {
+  if (chord.source === 'fn') {
+    if (chord.key === 'Fn')
+      return 'fn'
+    const mods = (chord.modifiers ?? []).map(m => MOD_SYMBOL[m]).join('')
+    return `fn + ${mods}${FN_KEY_DISPLAY[chord.key] ?? chord.key}`
+  }
+
+  const mods = chord.modifiers.map(m => MOD_SYMBOL[m]).join('')
+  const key = HOTKEY_DISPLAY[chord.key] ?? chord.key
+  return `${mods}${key}`
 }
 
 export const DEFAULT_ACTIONS: ShortcutAction[] = [
@@ -85,13 +105,13 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
     id: 'recording',
     label: '录音',
     binding: DEFAULT_BINDINGS.recording,
-    supportedGestures: ['combo', 'doublePress', 'hotkey'],
+    supportedGestures: ['press', 'doublePress'],
   },
   {
     id: 'askAssistant',
     label: 'Ask',
     binding: DEFAULT_BINDINGS.askAssistant,
-    supportedGestures: ['doublePress', 'combo', 'hotkey'],
+    supportedGestures: ['doublePress', 'press'],
   },
   {
     id: 'voiceDictation',
@@ -103,6 +123,6 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
     id: 'bookmark',
     label: '标记',
     binding: DEFAULT_BINDINGS.bookmark,
-    supportedGestures: ['combo', 'doublePress', 'hotkey'],
+    supportedGestures: ['press', 'doublePress'],
   },
 ]
