@@ -2,7 +2,7 @@ import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { holdStateManager } from '@main/keyboard'
-import { logicalWindowManager, windowManager } from '@main/window-manager'
+import { getShortcutTestWindowBounds, logicalWindowManager, windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 
 export const windowService = createIpcService<WindowContract>('window', {
@@ -69,7 +69,7 @@ export const windowService = createIpcService<WindowContract>('window', {
    */
   show: async (_event, type: WindowType) => {
     const success = logicalWindowManager.isPooled(type)
-      ? logicalWindowManager.show(type) !== null
+      ? logicalWindowManager.show(type, getLogicalWindowShowOptions(type)) !== null
       : windowManager.show(type)
     return { success }
   },
@@ -154,6 +154,16 @@ export const windowService = createIpcService<WindowContract>('window', {
     return { success: true }
   },
 })
+
+function getLogicalWindowShowOptions(type: WindowType) {
+  if (type === WindowType.SHORTCUT_TEST) {
+    return {
+      bounds: getShortcutTestWindowBounds(),
+    }
+  }
+
+  return undefined
+}
 
 function isAllowedOAuthUrl(rawUrl: string): boolean {
   try {

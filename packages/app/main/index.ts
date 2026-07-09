@@ -31,7 +31,7 @@ import { initSelectionHook } from './selection'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
-import { createWindowsSequentially, logicalWindowManager, windowManager } from './window-manager'
+import { createWindowsSequentially, getShortcutTestWindowBounds, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
 // Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃
@@ -306,6 +306,7 @@ function showShortcutTestWindow(
 ): void {
   logicalWindowManager.show(WindowType.SHORTCUT_TEST, {
     payload: { triggerType, label },
+    bounds: getShortcutTestWindowBounds(),
   })
 }
 

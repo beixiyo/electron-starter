@@ -78,6 +78,18 @@ export const MENUBAR_WINDOW_SIZE = {
   height: MENUBAR_CONTENT_SIZE.height + SHADOW_INSET * 2,
 } as const
 
+/** SHORTCUT_TEST 内容尺寸（不含 shadow inset） */
+export const SHORTCUT_TEST_CONTENT_SIZE = {
+  width: 500,
+  height: 360,
+} as const
+
+/** SHORTCUT_TEST 窗口尺寸（内容 + 2×SHADOW_INSET） */
+export const SHORTCUT_TEST_WINDOW_SIZE = {
+  width: SHORTCUT_TEST_CONTENT_SIZE.width + SHADOW_INSET * 2,
+  height: SHORTCUT_TEST_CONTENT_SIZE.height + SHADOW_INSET * 2,
+} as const
+
 /** 状态类浮窗池默认窗口尺寸 */
 export const FLOATING_STATUS_POOL_WINDOW_SIZE = MEETING_TOAST_WINDOW_SIZE
 
