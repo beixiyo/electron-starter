@@ -3,6 +3,7 @@ import Cocoa
 import CoreAudio
 import CoreGraphics
 import CoreMedia
+import Darwin
 import ScreenCaptureKit
 
 // ── stdout JSON(SCK 与 tap 两个引擎共用) ──
@@ -48,6 +49,23 @@ func describeError(_ error: Error?) -> String {
     desc += " underlying=\(underlying.domain)#\(underlying.code)"
   }
   return desc
+}
+
+/** 磁盘写满可能包在 AVFoundation 的 underlying NSError 中，沿错误链识别 POSIX ENOSPC */
+func isStorageInsufficientError(_ error: Error?) -> Bool {
+  guard let error else { return false }
+  return isStorageInsufficientNSError(error as NSError)
+}
+
+private func isStorageInsufficientNSError(_ error: NSError) -> Bool {
+  if error.domain == NSPOSIXErrorDomain && error.code == Int(ENOSPC) {
+    return true
+  }
+
+  guard let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError else {
+    return false
+  }
+  return isStorageInsufficientNSError(underlying)
 }
 
 // ── 设备拓扑快照(两引擎开录时落盘,虚拟声卡 / 聚合设备是 VPIO 无样本类故障的关键环境因素) ──

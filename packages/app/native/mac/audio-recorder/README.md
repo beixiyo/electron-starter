@@ -68,6 +68,7 @@ helper 发出的 `error` 码：
 | `no_audio_samples` | 整场没写过任何样本（含 5s 首帧超时） |
 | `no_audio_content` | 停止时只有系统音轨、麦克风已关且无内容 |
 | `writer_failed` | 有样本但 `AVAssetWriter` 收尾失败（带 `NSError domain#code`） |
+| `storage_insufficient` | writer 确认磁盘空间不足（POSIX `ENOSPC`，detail 保留完整 NSError） |
 | `audio_sample_timeout` | 录音中断流超 30s（**非致命**，供上层走挽救收尾保留已录音频） |
 
 `mic_degraded` 刻意走 status 而不是 error：上层收到后只记录降级诊断，不能重置录音状态或删除仍在写入的系统音轨

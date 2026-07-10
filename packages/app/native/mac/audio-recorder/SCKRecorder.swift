@@ -81,7 +81,10 @@ class Recorder: NSObject, SCStreamOutput {
       return true
     }
     catch let error as NSError {
-      if error.domain == "com.apple.ScreenCaptureKit"
+      if isStorageInsufficientError(error) {
+        output(error: "storage_insufficient", detail: describeError(error))
+      }
+      else if error.domain == "com.apple.ScreenCaptureKit"
         || error.localizedDescription.contains("permission") {
         output(error: "permission_denied")
       }
@@ -146,6 +149,7 @@ class Recorder: NSObject, SCStreamOutput {
     checkpoints?.finish()
     let writerStatus = writer?.status
     let writerError = describeError(writer?.error)
+    let hasStorageWriteError = isStorageInsufficientError(writer?.error)
     let didWriteSamples = sessionStarted && appendedSampleCount > 0
     let stats = "sessionStarted=\(sessionStarted) appended=\(appendedSampleCount) devices: \(describeDefaultAudioDevices())"
     log("SCK stats: \(stats)")
@@ -155,6 +159,12 @@ class Recorder: NSObject, SCStreamOutput {
     let savedPath = outputPath
 
     cleanup()
+
+    if hasStorageWriteError {
+      log("SCK recording storage insufficient: \(writerError)")
+      output(error: "storage_insufficient", detail: writerError)
+      return
+    }
 
     if !didWriteSamples {
       log("SCK writer finish failed: no audio samples")

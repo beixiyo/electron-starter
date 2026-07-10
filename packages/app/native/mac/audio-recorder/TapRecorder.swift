@@ -48,6 +48,8 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   private var micInput: AVAssetWriterInput?
   private var micSidecarURL: URL?
   private var micAudioFile: AVAudioFile?
+  /** mic sidecar 写盘失败单独保留，停止收尾时归一化为 storage_insufficient */
+  private var micSidecarWriteError: Error?
   private var captureSession: AVCaptureSession?
   private var audioEngine: AVAudioEngine?
   /** mic 采集是否挂载中(mic 轨恒预建;active 决定是否进样,支持录音中热挂/卸) */
@@ -186,7 +188,12 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       return true
     }
     catch {
-      emitError((error as? TapRecorderError)?.message ?? error.localizedDescription)
+      if isStorageInsufficientError(error) {
+        emitError("storage_insufficient", detail: describeError(error))
+      }
+      else {
+        emitError((error as? TapRecorderError)?.message ?? error.localizedDescription)
+      }
       cleanup()
       return false
     }
@@ -358,6 +365,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     checkpoints?.finish()
     let writerStatus = writer?.status
     let writerError = describeError(writer?.error)
+    let hasStorageWriteError = isStorageInsufficientError(writer?.error)
+      || isStorageInsufficientError(micSidecarWriteError)
+    let storageWriteError = isStorageInsufficientError(writer?.error)
+      ? writerError
+      : describeError(micSidecarWriteError)
     let micSidecarPath = micSidecarURL?.path
     micAudioFile = nil
     var micSidecarDuration = CMTime.zero
@@ -377,6 +389,12 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     let savedPath = outputPath
 
     cleanup()
+
+    if hasStorageWriteError {
+      log("tap: recording storage insufficient: \(storageWriteError)")
+      emitError("storage_insufficient", detail: storageWriteError)
+      return
+    }
 
     if !didWriteSamples {
       log("tap: writer finish failed: no audio samples")
@@ -1331,6 +1349,10 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     }
     catch {
       micDropCount += 1
+      if isStorageInsufficientError(error) && micSidecarWriteError == nil {
+        micSidecarWriteError = error
+        log("tap: mic sidecar storage insufficient: \(describeError(error))")
+      }
       if micDropCount == 1 {
         log("tap: mic sidecar write failed: \(describeError(error))")
       }
@@ -1691,6 +1713,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     systemInput = nil
     micInput = nil
     micAudioFile = nil
+    micSidecarWriteError = nil
     micSidecarURL = nil
     micAecPref = true
     paused = false

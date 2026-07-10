@@ -93,5 +93,12 @@
     "micDegraded": "麦克风已断开且自动恢复失败，系统音频仍在继续录制",
     "meetingFailed": "会议录音失败：{{code}}",
     "recovered": "已恢复并导入上次未完成的录音"
+  },
+  "storageInsufficient": {
+    "title": "电脑存储空间不足",
+    "body": "电脑存储空间不足，可能无法保存录音。请清理空间后继续。",
+    "openSettings": "打开存储设置",
+    "endAndSave": "结束并保存",
+    "close": "关闭"
   }
 }

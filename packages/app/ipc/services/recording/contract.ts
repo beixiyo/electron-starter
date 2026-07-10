@@ -14,6 +14,8 @@ export type RecordingContract = IpcContract<{
    * 更早系统 / 非 darwin 由 renderer 回退浏览器 mic 采集，不经过此入口
    */
   start: () => RecordingSnapshot
+  /** 打开当前平台的系统存储管理入口 */
+  openStorageSettings: () => void
   /** 同步手动录音偏好（麦克风 / 混入系统音频开关）到主进程 */
   setManualRecordingPrefs: (prefs: ManualRecordingPrefs) => void
   /**
@@ -43,6 +45,11 @@ export type RecordingContract = IpcContract<{
   manualRecordingComplete: ManualRecordingCompletePayload
   /** 手动 native 录音失败（定向主窗弹提示） */
   manualRecordingError: ManualRecordingErrorPayload
+  /** 录音空间低于安全阈值，或 Native writer 已明确返回 ENOSPC */
+  storageInsufficient: {
+    availableBytes: number
+    context: 'start' | 'recording' | 'resume' | 'write'
+  }
   /** 麦克风自愈失败，录音仍以剩余音源继续 */
   micDegraded: MicDegradedPayload
   /** 正在输出音频的软件列表发生变化 */
@@ -114,7 +121,7 @@ export type MicDegradedPayload = {
 export type ManualRecordingErrorPayload = {
   /** recorder-error: 录制中 Swift 子进程报错 */
   reason: 'recorder-error'
-  /** 错误码（no_audio_samples / writer_failed / audio_sample_timeout / no_audio_content / empty_recording 等） */
+  /** 错误码（no_audio_samples / writer_failed / storage_insufficient / audio_sample_timeout 等） */
   detail?: string
   /** 诊断详情（采集统计 / writer 错误码 / 设备快照），仅展示与日志用 */
   message?: string

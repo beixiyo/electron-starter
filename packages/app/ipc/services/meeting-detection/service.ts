@@ -6,6 +6,7 @@ import { registerNativeRecordingHandlers } from '@main/native-recording'
 import { setNativeRecordingSession } from '@main/native-recording/session'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
+import { ensureRecordingStorageAvailable, reportRecordingStorageInsufficient } from '@main/recording-storage'
 
 export const meetingDetectionService = createIpcService<MeetingDetectionContract>('meeting-detection', {
   async dismiss(_event, appId: string, pid: number) {
@@ -14,6 +15,9 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
 
   async startRecording(_event, appId: string, pid: number, displayName?: string) {
     if (!recordingState.canStart)
+      return
+
+    if (!await ensureRecordingStorageAvailable())
       return
 
     suppressSession(appId, pid)
@@ -32,7 +36,8 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
   },
 
   async resumeRecording() {
-    recordingState.resume()
+    if (await ensureRecordingStorageAvailable('resume'))
+      recordingState.resume()
   },
 
   async stopRecording() {
@@ -50,6 +55,12 @@ registerNativeRecordingHandlers('meeting', {
     })
   },
   onError(code, detail) {
+    if (code === 'storage_insufficient') {
+      reportRecordingStorageInsufficient()
+      meetingDetectionService.emit('recording-state', { status: 'stopped' })
+      return
+    }
+
     meetingDetectionService.emit('recording-error', { code, detail })
     meetingDetectionService.emit('recording-state', { status: 'stopped' })
   },

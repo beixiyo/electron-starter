@@ -93,5 +93,12 @@
     "micDegraded": "The microphone disconnected and could not be restored. System audio recording continues",
     "meetingFailed": "Meeting recording failed: {{code}}",
     "recovered": "Recovered recordings from the previous session were imported"
+  },
+  "storageInsufficient": {
+    "title": "Storage Space Is Low",
+    "body": "Your computer is running low on storage. Please free up space to ensure your recording is safely saved.",
+    "openSettings": "Open Storage Settings",
+    "endAndSave": "End and save",
+    "close": "Close"
   }
 }

@@ -4,6 +4,7 @@ import { startRecording, updateRecording } from '@main/audio-recorder'
 import { getPermissionStatus, requestPermission } from '@main/permissions'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
+import { ensureRecordingStorageAvailable } from '@main/recording-storage'
 import { isMacOSAtLeast } from '@main/utils/macos-version'
 import { getSelfProcessPids } from '@main/utils/self-pids'
 import { initNativeRecordingPipeline } from '.'
@@ -49,13 +50,16 @@ function isSystemAudioPermissionUsable(): boolean {
  */
 let startingManual = false
 
-export function startManualRecording(): RecordingSnapshot {
+export async function startManualRecording(): Promise<RecordingSnapshot> {
   if (!isSystemAudioRecordingSupported() || startingManual || !recordingState.canStart) {
     return recordingState.snapshot
   }
 
   startingManual = true
   try {
+    if (!await ensureRecordingStorageAvailable())
+      return recordingState.snapshot
+
     const micEnabled = manualPrefs.micEnabled
     const mixSystemAudio = manualPrefs.mixSystemAudio
     const selectedPids = mixSystemAudio

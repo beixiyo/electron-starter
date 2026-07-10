@@ -1,6 +1,6 @@
-import { Message } from 'comps'
+import { Button, Message, Modal } from 'comps'
 import { useLatestCallback } from 'hooks'
-import { useCallback, useEffect } from 'react'
+import { createElement, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   disposeRecordingStore,
@@ -93,10 +93,56 @@ export function useNativeManualRecording(onSaved?: () => void) {
       Message.warning(t('recordError.micDegraded'))
     })
 
+    const unsubStorageInsufficient = $ipc.recording.on('storageInsufficient', ({ context }) => {
+      const isRecording = context === 'recording'
+      let controller: ReturnType<typeof Modal.warning> | null = null
+      controller = Modal.warning({
+        titleText: t('storageInsufficient.title'),
+        titleAlign: 'left',
+        showIcon: false,
+        showCloseBtn: true,
+        children: createElement('p', {
+          className: 'text-sm leading-6 text-text2',
+        }, t('storageInsufficient.body')),
+        footer: createElement(
+          'div',
+          { className: 'flex justify-end gap-2' },
+          createElement(Button, {
+            variant: 'secondary',
+            size: 'md',
+            onClick: () => {
+              if (isRecording) {
+                void $ipc.recording.openStorageSettings()
+                return
+              }
+              controller?.close()
+            },
+          }, isRecording
+            ? t('storageInsufficient.openSettings')
+            : t('storageInsufficient.close')),
+          createElement(Button, {
+            variant: 'primary',
+            size: 'md',
+            onClick: () => {
+              if (isRecording) {
+                controller?.close()
+                void stopNativeRecording()
+                return
+              }
+              void $ipc.recording.openStorageSettings()
+            },
+          }, isRecording
+            ? t('storageInsufficient.endAndSave')
+            : t('storageInsufficient.openSettings')),
+        ),
+      })
+    })
+
     return () => {
       unsubComplete()
       unsubError()
       unsubMicDegraded()
+      unsubStorageInsufficient()
     }
   }, [handleSaved, t])
 

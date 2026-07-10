@@ -11,10 +11,14 @@ import {
 import { peekNativeRecordingSession } from '@main/native-recording/session'
 import { deleteRecoveryRecording, listRecoverableRecordings, readRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
+import { ensureRecordingStorageAvailable, onRecordingStorageInsufficient, openStorageSettings, reportRecordingStorageInsufficient } from '@main/recording-storage'
 import { getSelfProcessPids } from '@main/utils/self-pids'
 import { windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 import { Notification } from 'electron'
+
+const RECORDING_STORAGE_CHECK_INTERVAL_MS = 15_000
+let recordingStorageCheckTimer: ReturnType<typeof setInterval> | null = null
 
 function listAudioApps(): AudioAppItem[] {
   const selfPids = new Set(getSelfProcessPids())
@@ -41,6 +45,10 @@ export const recordingService = createIpcService<RecordingContract>('recording',
     return startManualRecording()
   },
 
+  async openStorageSettings() {
+    await openStorageSettings()
+  },
+
   async setManualRecordingPrefs(_event, prefs) {
     setManualRecordingPrefs(prefs)
   },
@@ -63,6 +71,9 @@ export const recordingService = createIpcService<RecordingContract>('recording',
   },
 
   async resume() {
+    if (!await ensureRecordingStorageAvailable('resume'))
+      return recordingState.snapshot
+
     return recordingState.resume()
   },
 
@@ -96,6 +107,48 @@ onAudioProcessChange(() => {
 recordingState.setBroadcast((snapshot) => {
   recordingService.emit('stateChanged', snapshot)
 })
+
+onRecordingStorageInsufficient((availableBytes, context) => {
+  const mainWin = windowManager.get(WindowType.MAIN)
+  if (!mainWin || mainWin.isDestroyed())
+    return
+
+  windowManager.show(WindowType.MAIN)
+  recordingService.emit('storageInsufficient', { availableBytes, context }, mainWin)
+})
+
+recordingState.onPhaseChange((_prev, next) => {
+  if (next === 'recording')
+    startRecordingStorageMonitor()
+  else
+    stopRecordingStorageMonitor()
+})
+
+function startRecordingStorageMonitor(): void {
+  stopRecordingStorageMonitor()
+  recordingStorageCheckTimer = setInterval(() => {
+    void pauseRecordingWhenStorageInsufficient()
+  }, RECORDING_STORAGE_CHECK_INTERVAL_MS)
+}
+
+function stopRecordingStorageMonitor(): void {
+  if (!recordingStorageCheckTimer)
+    return
+
+  clearInterval(recordingStorageCheckTimer)
+  recordingStorageCheckTimer = null
+}
+
+async function pauseRecordingWhenStorageInsufficient(): Promise<void> {
+  if (recordingState.snapshot.phase !== 'recording')
+    return
+
+  if (await ensureRecordingStorageAvailable('recording'))
+    return
+
+  if (recordingState.snapshot.phase === 'recording')
+    recordingState.pause()
+}
 
 recordingState.setMaxDurationReached(() => {
   const mainWin = windowManager.get(WindowType.MAIN)
@@ -137,6 +190,11 @@ registerNativeRecordingHandlers('manual', {
     }, mainWin)
   },
   onError(code, message) {
+    if (code === 'storage_insufficient') {
+      reportRecordingStorageInsufficient()
+      return
+    }
+
     emitManualRecordingError({ reason: 'recorder-error', detail: code, message })
   },
   onMicDegraded(detail) {
