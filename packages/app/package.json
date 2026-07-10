@@ -54,7 +54,7 @@
 
     "----- update-upload -----": "-----",
     "update:upload:gcs": "bun scripts/upload-gcs-update-feed.ts",
-    "update:upload:gcs:test": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.test",
+    "update:upload:gcs:test": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.test --latestDmgAlias=app-test-latest.dmg",
     "update:upload:gcs:prod": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.production",
     "update:feed:mac:gcs": "bun scripts/create-local-update-feed.ts --upload",
     "update:feed:mac:selfsign": "bun scripts/create-local-update-feed.ts --selfSign",

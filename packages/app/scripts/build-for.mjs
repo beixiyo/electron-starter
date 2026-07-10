@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { randomBytes } from 'node:crypto'
 import { execSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { access, copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -129,7 +129,11 @@ try {
   const platformFlag = args.platform === 'dir'
     ? '--dir'
     : `--${args.platform}`
-  const configOverrides = [...getPublishOverrides(), ...getElectronBuilderConfigOverrides()]
+  const configOverrides = [
+    ...getPublishOverrides(),
+    ...getTestArtifactNameOverrides(),
+    ...getElectronBuilderConfigOverrides(),
+  ]
 
   execSync(
     `"${electronBuilderBin}" --projectDir "${deployDir}" ${platformFlag} ${configOverrides.join(' ')}`,
@@ -263,6 +267,34 @@ function getElectronBuilderConfigOverrides() {
   }
 
   return []
+}
+
+/** 测试环境产物名显式带 test，避免与生产安装包混淆；feed 会同步引用这些文件名 */
+function getTestArtifactNameOverrides() {
+  if (args.mode !== 'test')
+    return []
+
+  // electron-builder 的文件名宏，不是 JS 模板字符串
+  // eslint-disable-next-line no-template-curly-in-string
+  const artifactName = '${name}-test-${version}.${ext}'
+
+  switch (args.platform) {
+    case 'mac':
+      return [
+        `'-c.mac.artifactName=${artifactName}'`,
+        `'-c.dmg.artifactName=${artifactName}'`,
+      ]
+    case 'win':
+      return [`'-c.nsis.artifactName=${artifactName}'`]
+    case 'linux':
+      return [
+        `'-c.appImage.artifactName=${artifactName}'`,
+        `'-c.deb.artifactName=${artifactName}'`,
+        `'-c.snap.artifactName=${artifactName}'`,
+      ]
+    default:
+      return []
+  }
 }
 
 function verifyMacNotarizationCredentials() {
