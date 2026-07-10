@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
+import { initRendererDiagnostics } from '@/logging'
 
 /**
  * 透明浮窗统一挂载入口
@@ -10,6 +11,8 @@ import { AppErrorBoundary } from '@/components/AppErrorBoundary'
  * 各透明窗口入口文件调用它以免逐份复制这段 bootstrap
  */
 export function mountTransparentWindow(node: ReactNode): void {
+  initRendererDiagnostics()
+
   document.documentElement.style.background = 'transparent'
   document.documentElement.style.overflow = 'hidden'
   document.body.style.background = 'transparent'

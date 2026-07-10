@@ -3,6 +3,9 @@ import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { EventBus } from '@jl-org/tool'
 import { app } from 'electron'
+import { createMainDiagnosticLogger } from './logging'
+
+const log = createMainDiagnosticLogger('native.bridge')
 
 export function getNativeBinaryPath(name: string): string {
   const resourcePath = path.join('native', getNativePlatformDir(), name)
@@ -40,7 +43,10 @@ export class NativeBridge<T extends Record<string, any>> {
   start(): void {
     /** 与 startFnKeyListener 约定一致：非 macOS 静默跳过而非抛错，避免上层产生 unhandled rejection */
     if (process.platform !== 'darwin') {
-      console.warn(`[${this.config.name}] macOS only, start() skipped`)
+      log.info('process.skipped', 'native helper start skipped on unsupported platform', {
+        helper: this.config.name,
+        platform: process.platform,
+      })
       return
     }
     if (this.child !== null)
@@ -59,6 +65,10 @@ export class NativeBridge<T extends Record<string, any>> {
     })
 
     this.child.stdout?.setEncoding('utf8')
+    log.info('process.started', 'native helper process started', {
+      helper: this.config.name,
+      pid: this.child.pid,
+    })
 
     let buffer = ''
     this.child.stdout?.on('data', (data: string) => {
@@ -96,7 +106,11 @@ export class NativeBridge<T extends Record<string, any>> {
       const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
       this.child = null
       if (unexpected) {
-        console.warn(`[${this.config.name}] unexpected exit: code=${code} signal=${signal}`)
+        log.warn('process.unexpected-exit', 'native helper exited unexpectedly', {
+          helper: this.config.name,
+          exitCode: code,
+          signal,
+        })
         this.config.onUnexpectedExit?.(code, signal)
       }
     })
@@ -106,7 +120,7 @@ export class NativeBridge<T extends Record<string, any>> {
         return
 
       childClosed = true
-      console.warn(`[${this.config.name}] failed to start:`, error)
+      log.error('process.start.failed', 'native helper failed to start', error, { helper: this.config.name })
       this.child = null
       this.config.onUnexpectedExit?.(null, null)
     })
@@ -122,6 +136,7 @@ export class NativeBridge<T extends Record<string, any>> {
     if (this.child === null)
       return
     this.child.kill()
+    log.info('process.stopped', 'native helper process stopped', { helper: this.config.name })
     this.child = null
   }
 

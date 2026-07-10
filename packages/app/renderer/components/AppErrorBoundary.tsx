@@ -2,6 +2,9 @@ import { memo } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
+import { createRendererFeatureLogger } from '@/logging'
+
+const log = createRendererFeatureLogger('renderer.global')
 
 export const AppErrorBoundary = memo<AppErrorBoundaryProps>((props) => {
   const {
@@ -18,7 +21,9 @@ export const AppErrorBoundary = memo<AppErrorBoundaryProps>((props) => {
         />
       ) }
       onError={ (error, info) => {
-        console.error('[AppErrorBoundary]', error, info.componentStack)
+        log.error('render.failed', 'React render failed', error, {
+          componentStack: (info.componentStack ?? '').slice(0, 4000),
+        })
       } }
     >
       { children }

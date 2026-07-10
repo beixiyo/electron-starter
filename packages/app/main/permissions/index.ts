@@ -1,9 +1,11 @@
 import type { PermissionKind, PermissionStatus } from '@shared'
 import { execFile, execFileSync } from 'node:child_process'
+import { createMainDiagnosticLogger } from '@main/logging'
 import { ensureMediaAccess, getMediaAccessStatus } from '@main/media'
-import { logWarn } from '@main/utils/logger'
 import { desktopCapturer, shell, systemPreferences } from 'electron'
 import { getNativeBinaryPath } from '../native-bridge'
+
+const log = createMainDiagnosticLogger('permission')
 
 const SCREEN_SETTINGS_OPEN_DELAY_MS = 500
 /** 授权弹窗等待用户决策，给足时间；Swift 侧 300s 自行超时退出 */
@@ -273,11 +275,7 @@ function requestAudioCaptureAccess(): Promise<PermissionStatus> {
           return
         }
 
-        logWarn('触发 audio-recorder 系统音频录制授权时发生错误', {
-          module: 'permissions',
-          operation: 'requestAudioCaptureAccess',
-          context: { error: String(error) },
-        })
+        log.error('audio-capture.request-failed', 'audio-recorder system audio permission request failed', error)
         resolve('unknown')
       },
     )
@@ -298,11 +296,7 @@ function requestAudioRecorderScreenCaptureAccess(): PermissionStatus {
   catch (error) {
     const status = (error as { status?: number })?.status
     if (status !== 1) {
-      logWarn('触发 audio-recorder 屏幕录制授权时发生错误', {
-        module: 'permissions',
-        operation: 'requestAudioRecorderScreenCaptureAccess',
-        context: { error: String(error) },
-      })
+      log.error('screen-capture.native-request-failed', 'audio-recorder screen capture permission request failed', error)
     }
     return 'denied'
   }
@@ -316,11 +310,7 @@ async function requestElectronScreenCaptureAccess(): Promise<void> {
     })
   }
   catch (error) {
-    logWarn('触发 Electron 屏幕录制授权时发生错误', {
-      module: 'permissions',
-      operation: 'requestElectronScreenCaptureAccess',
-      context: { error: String(error) },
-    })
+    log.error('screen-capture.electron-request-failed', 'Electron screen capture permission request failed', error)
   }
 }
 
@@ -347,11 +337,7 @@ export function openPrivacySettings(kind: PermissionKind): boolean {
     return true
   }
   catch (error) {
-    logWarn('打开系统隐私设置失败', {
-      module: 'permissions',
-      operation: 'openPrivacySettings',
-      context: { kind, error: String(error) },
-    })
+    log.error('settings.open-failed', 'failed to open system privacy settings', error, { kind })
     return false
   }
 }

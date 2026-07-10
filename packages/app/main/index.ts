@@ -5,6 +5,7 @@ import type { ShortcutRuntimeHandlers } from './shortcuts'
 
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
+import { setIpcServiceErrorLogger } from '@ipc/core/service'
 import { focusService } from '@ipc/services/focus/service'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
@@ -17,10 +18,11 @@ import {
   HOLD_SHORT_ERROR_MESSAGE,
   WindowType,
 } from '@shared'
-import { app, BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { checkFocusedTextInput } from './focus-check'
+import { createMainDiagnosticLogger, initAppLogging } from './logging'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
@@ -56,6 +58,12 @@ if (process.platform === 'darwin') {
 }
 
 initDeeplink(() => {
+  initAppLogging(ipcMain)
+  const ipcLog = createMainDiagnosticLogger('ipc.service')
+  setIpcServiceErrorLogger((error, meta) => {
+    ipcLog.error('invoke.failed', 'IPC handler failed', error, meta)
+  })
+
   setupAppIdentity()
   setupDisplayMediaHandler()
   setupBrowserWindowLifecycle()

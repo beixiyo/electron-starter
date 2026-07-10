@@ -1,3 +1,4 @@
+import type { LogRecordPayload } from '@jl-org/log'
 import { electronAPI } from '@electron-toolkit/preload'
 import { fnClient } from '@ipc/services/fn/client'
 import { focusClient } from '@ipc/services/focus/client'
@@ -15,7 +16,8 @@ import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
 import { updateClient } from '@ipc/services/update/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
-import { contextBridge } from 'electron'
+import { exposeLogBridge, JL_LOG_BRIDGE_KEY, JL_LOG_IPC_CHANNEL } from '@jl-org/log'
+import { contextBridge, ipcRenderer } from 'electron'
 
 export const ipc = {
   media: mediaClient,
@@ -40,6 +42,7 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('$electron', electronAPI)
     contextBridge.exposeInMainWorld('$ipc', ipc)
+    exposeLogBridge(contextBridge, ipcRenderer)
   }
   catch (error) {
     console.error(error)
@@ -50,6 +53,10 @@ else {
   window.$electron = electronAPI
   // @ts-ignore (define in dts)
   window.$ipc = ipc
+  // @ts-ignore (define in dts)
+  window[JL_LOG_BRIDGE_KEY] = {
+    send: (record: LogRecordPayload) => ipcRenderer.send(JL_LOG_IPC_CHANNEL, record),
+  }
 }
 
 export type Ipc = typeof ipc

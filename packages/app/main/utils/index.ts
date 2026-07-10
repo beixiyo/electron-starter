@@ -3,6 +3,5 @@
  */
 
 export * from './error-handler'
-export * from './logger'
 export * from './paste-text'
 export * from './performance'

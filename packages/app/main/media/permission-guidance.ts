@@ -1,7 +1,9 @@
 import type { MediaAccessStatus, MediaType } from '@shared'
 import { dialog, shell } from 'electron'
-import { logWarn } from '../utils/logger'
+import { createMainDiagnosticLogger } from '../logging'
 import { windowManager } from '../window-manager/window-manager'
+
+const log = createMainDiagnosticLogger('permission')
 
 /**
  * 权限被拒绝时的处理逻辑
@@ -100,11 +102,7 @@ export class PermissionGuidance {
     const messages = this.GUIDANCE_MESSAGES[platform as keyof typeof this.GUIDANCE_MESSAGES]
 
     if (!messages) {
-      logWarn('不支持的平台，显示通用权限指导', {
-        module: 'permission-guidance',
-        operation: 'showPermissionGuidance',
-        context: { platform, mediaType, status },
-      })
+      log.warn('guidance.unsupported-platform', 'showing generic permission guidance', { platform, mediaType, status })
       await dialog.showMessageBox(windowManager.getMainWindow()!, {
         type: 'warning',
         title: '权限问题',
@@ -116,21 +114,13 @@ export class PermissionGuidance {
 
     const guidance = messages[mediaType]
     if (!guidance) {
-      logWarn('未找到权限指导信息', {
-        module: 'permission-guidance',
-        operation: 'showPermissionGuidance',
-        context: { mediaType, status, platform },
-      })
+      log.warn('guidance.missing-media', 'permission guidance is missing for media type', { mediaType, status, platform })
       return
     }
 
     const message = guidance[status]
     if (!message) {
-      logWarn('未找到对应的权限指导消息', {
-        module: 'permission-guidance',
-        operation: 'showPermissionGuidance',
-        context: { mediaType, status, platform },
-      })
+      log.warn('guidance.missing-status', 'permission guidance is missing for status', { mediaType, status, platform })
       return
     }
 
@@ -150,11 +140,7 @@ export class PermissionGuidance {
       }
     }
     catch (error) {
-      logWarn('显示权限指导对话框时发生错误', {
-        module: 'permission-guidance',
-        operation: 'showPermissionGuidance',
-        context: { mediaType, status, error: String(error) },
-      })
+      log.error('guidance.dialog-failed', 'failed to show permission guidance dialog', error, { mediaType, status })
     }
   }
 
@@ -175,11 +161,7 @@ export class PermissionGuidance {
         shell.openExternal(url)
       }
       catch (error) {
-        logWarn('打开系统偏好设置失败', {
-          module: 'permission-guidance',
-          operation: 'openSystemPreferences',
-          context: { mediaType, error: String(error) },
-        })
+        log.error('settings.open-failed', 'failed to open system privacy settings', error, { mediaType })
       }
     }
   }

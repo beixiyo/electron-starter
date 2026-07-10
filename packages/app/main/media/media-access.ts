@@ -1,7 +1,9 @@
 import type { MediaAccessStatus, MediaType } from '@shared'
 import { systemPreferences } from 'electron'
+import { createMainDiagnosticLogger } from '../logging'
 import { safeExecute, safeExecuteAsync } from '../utils/error-handler'
-import { logWarn } from '../utils/logger'
+
+const log = createMainDiagnosticLogger('permission')
 
 /**
  * 查询系统级媒体权限状态
@@ -12,11 +14,7 @@ export function getMediaAccessStatus(kind: MediaType): MediaAccessStatus {
   const canQueryStatus = typeof systemPreferences.getMediaAccessStatus === 'function'
 
   if (!canQueryStatus) {
-    logWarn('系统不支持查询媒体权限状态', {
-      module: 'media-access',
-      operation: 'getMediaAccessStatus',
-      context: { kind, platform: process.platform },
-    })
+    log.warn('status.unsupported', 'media permission status query is unsupported', { kind, platform: process.platform })
     return 'unknown'
   }
 
@@ -24,11 +22,7 @@ export function getMediaAccessStatus(kind: MediaType): MediaAccessStatus {
     () => {
       const status = systemPreferences.getMediaAccessStatus(kind)
       if (status === undefined || status === null) {
-        logWarn('系统返回了无效的权限状态', {
-          module: 'media-access',
-          operation: 'getMediaAccessStatus',
-          context: { kind, returnedStatus: status },
-        })
+        log.warn('status.invalid', 'system returned invalid media permission status', { kind, returnedStatus: status })
         return 'unknown' as MediaAccessStatus
       }
       return status as MediaAccessStatus
@@ -56,11 +50,7 @@ export async function requestMediaAccess(kind: MediaType): Promise<MediaAccessSt
   const canRequestAccess = typeof systemPreferences.askForMediaAccess === 'function'
 
   if (!canRequestAccess) {
-    logWarn('系统不支持主动申请媒体权限', {
-      module: 'media-access',
-      operation: 'requestMediaAccess',
-      context: { kind, platform: process.platform },
-    })
+    log.warn('request.unsupported', 'media permission request is unsupported', { kind, platform: process.platform })
     return getMediaAccessStatus(kind)
   }
 

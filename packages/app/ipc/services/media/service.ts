@@ -3,9 +3,11 @@ import type { MediaContract } from './contract'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createIpcService } from '@ipc/core'
+import { createMainDiagnosticLogger } from '@main/logging'
 import { buildSourcePayload, getMediaAccessStatus, mediaSessionStore, PermissionGuidance, resolveExtension } from '@main/media'
-import { logWarn } from '@main/utils/logger'
 import { app, desktopCapturer, dialog } from 'electron'
+
+const log = createMainDiagnosticLogger('screenshot')
 
 export const mediaService = createIpcService<MediaContract>('media', {
   /**
@@ -24,11 +26,7 @@ export const mediaService = createIpcService<MediaContract>('media', {
       if (screenNeeded) {
         const screenAccess = getMediaAccessStatus('screen')
         if (screenAccess === 'denied') {
-          logWarn('屏幕录制权限被拒绝，无法获取屏幕源', {
-            module: 'media-handlers',
-            operation: 'getSources',
-            context: { types },
-          })
+          log.warn('sources.permission-denied', 'screen recording permission denied', { types })
 
           await PermissionGuidance.showPermissionGuidance('screen', screenAccess)
 
@@ -61,11 +59,7 @@ export const mediaService = createIpcService<MediaContract>('media', {
       }
     }
     catch (error) {
-      logWarn('获取桌面源时发生错误', {
-        module: 'media-handlers',
-        operation: 'getSources',
-        context: { error: String(error), types },
-      })
+      log.error('sources.fetch-failed', 'failed to get desktop sources', error, { types })
 
       /** 错误时返回空源列表和当前权限状态 */
       const snapshot = mediaSessionStore.updateSnapshot(event.sender.id, {

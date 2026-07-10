@@ -3,6 +3,7 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 import { join, resolve } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { app, BrowserWindow, screen } from 'electron'
+import { attachWindowDiagnostics } from '../logging/window-diagnostics'
 import { DEFAULT_WINDOW_SIZE, WINDOW_POSITION_MARGINS } from './window-position-constants'
 
 export function createBrowserWindow(
@@ -65,6 +66,7 @@ export function createBrowserWindow(
   }
 
   const window = new BrowserWindow(browserWindowOptions)
+  attachWindowDiagnostics(window, windowType)
   applyMacFullscreenAuxiliary(window, macFullscreenAuxiliary)
 
   /**

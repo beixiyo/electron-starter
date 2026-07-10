@@ -136,6 +136,9 @@ importers:
 
   packages/app:
     dependencies:
+      '@jl-org/log':
+        specifier: ^2.1.1
+        version: 2.1.1(rotating-file-stream@3.2.9)
       '@nut-tree-fork/nut-js':
         specifier: 4.2.6
         version: 4.2.6(encoding@0.1.13)
@@ -148,6 +151,9 @@ importers:
       node-screenshots:
         specifier: ^0.2.8
         version: 0.2.8
+      rotating-file-stream:
+        specifier: ^3.2.9
+        version: 3.2.9
       selection-hook:
         specifier: ^1.0.13
         version: 1.0.13
@@ -1134,6 +1140,15 @@ packages:
 
   '@jl-org/js-to-style@1.0.1':
     resolution: {integrity: sha512-Od53B3IU0h1hNYQ3zxf72vebVORvq3CdkUoI69h4sc+vibIdfunA8eM7iLmOtV9uz4ZWfAFjcC2TYeVEz/8eZA==}
+
+  '@jl-org/log@2.1.1':
+    resolution: {integrity: sha512-g1bnMTuzbUHW1Dh1G/mvvwxJ0rwuIa15ZAJwqc1Sz1WxO08mT5EQkPCML2BKaQudecKLboZ0GjfqYxKnRw8itg==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      rotating-file-stream: ^3
+    peerDependenciesMeta:
+      rotating-file-stream:
+        optional: true
 
   '@jl-org/react-router@0.0.8':
     resolution: {integrity: sha512-x064XjxCK1KJSsJeYbhD3WEhEY8yf/lQP6w1Egq1zeWG4GrT/42YSa+K2sPDKczjf/habqCvCXhMIZwz73APoA==}
@@ -4480,6 +4495,10 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
 
+  rotating-file-stream@3.2.9:
+    resolution: {integrity: sha512-i9i0KkHh12ryl4xtELg+0gyoFre2PJ9RcQQLzquWsiqygyYsrZLckrqqYrthhnJZGZb4g+KUHtcoWYVq34gaug==}
+    engines: {node: '>=14.0'}
+
   run-async@4.0.6:
     resolution: {integrity: sha512-IoDlSLTs3Yq593mb3ZoKWKXMNu3UpObxhgA/Xuid5p4bbfi2jdY1Hj0m1K+0/tEuQTxIGMhQDqGjKb7RuxGpAQ==}
     engines: {node: '>=0.12.0'}
@@ -6152,6 +6171,10 @@ snapshots:
       '@babel/types': 7.29.7
     transitivePeerDependencies:
       - supports-color
+
+  '@jl-org/log@2.1.1(rotating-file-stream@3.2.9)':
+    optionalDependencies:
+      rotating-file-stream: 3.2.9
 
   '@jl-org/react-router@0.0.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
@@ -9953,6 +9976,8 @@ snapshots:
       '@rolldown/binding-wasm32-wasi': 1.0.2
       '@rolldown/binding-win32-arm64-msvc': 1.0.2
       '@rolldown/binding-win32-x64-msvc': 1.0.2
+
+  rotating-file-stream@3.2.9: {}
 
   run-async@4.0.6: {}
 

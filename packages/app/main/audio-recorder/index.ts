@@ -1,15 +1,17 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { formatDate } from '@jl-org/tool'
-import { appendNativeDiagnosticLine } from '@main/native-diagnostic-log'
+import { createMainDiagnosticLogger } from '@main/logging'
 import { app } from 'electron'
 import { NativeBridge } from '../native-bridge'
+
+const nativeLog = createMainDiagnosticLogger('native.recorder')
 
 const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
   writable: true,
   logStderr: true,
-  onStderrLine: line => appendNativeDiagnosticLine('audio-recorder', line),
+  onStderrLine: line => nativeLog.info('native.stderr', line),
   onUnexpectedExit: (code, signal) => {
     bridge.events.emit('exited', { code, signal })
   },
@@ -42,9 +44,6 @@ const bridge = new NativeBridge<RecorderEvents>({
         /** 非致命：麦克风掉线且未能自愈，录音继续保留系统音轨 */
         console.warn(`[audio-recorder] mic degraded${msg.detail
           ? ` (${msg.detail})`
-          : ''}`)
-        void appendNativeDiagnosticLine('audio-recorder', `mic_degraded${msg.detail
-          ? `: ${msg.detail}`
           : ''}`)
         bus.emit('mic_degraded', { detail: msg.detail })
       }

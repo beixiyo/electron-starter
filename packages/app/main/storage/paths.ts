@@ -9,7 +9,7 @@ export const APP_STORAGE_DIR = join(homedir(), APP_STORAGE_DIR_NAME)
  * 获取 `~/.electron-app` 下已登记存储区的绝对路径
  */
 export function getAppStorageAreaPath(
-  areaId: 'main-json-store' | 'recording-recovery-files' | 'native-diagnostic-log',
+  areaId: 'main-json-store' | 'recording-recovery-files' | 'diagnostic-logs',
   ...segments: string[]
 ): string {
   const area = assertStorageAreaOwner(areaId, 'main')

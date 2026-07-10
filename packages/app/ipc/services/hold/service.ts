@@ -1,8 +1,10 @@
 import type { HoldContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { logError } from '@main/utils/logger'
+import { createMainDiagnosticLogger } from '@main/logging'
 import { windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
+
+const log = createMainDiagnosticLogger('shortcut.runtime')
 
 export const holdService = createIpcService<HoldContract>('hold', {})
 
@@ -27,11 +29,7 @@ export function sendHoldStartEvent(windowType?: WindowType): void {
     }
   }
   catch (error) {
-    logError('发送长按开始事件失败', error, {
-      module: 'ipc-window',
-      operation: 'sendHoldStartEvent',
-      context: { windowType },
-    })
+    log.error('hold.start.delivery-failed', 'failed to deliver hold start event', error, { windowType })
   }
 }
 
@@ -56,10 +54,6 @@ export function sendHoldEndEvent(windowType?: WindowType): void {
     }
   }
   catch (error) {
-    logError('发送长按结束事件失败', error, {
-      module: 'ipc-window',
-      operation: 'sendHoldEndEvent',
-      context: { windowType },
-    })
+    log.error('hold.end.delivery-failed', 'failed to deliver hold end event', error, { windowType })
   }
 }

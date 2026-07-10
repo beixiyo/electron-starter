@@ -1,5 +1,7 @@
 import { desktopCapturer, session } from 'electron'
-import { logWarn } from '../utils/logger'
+import { createMainDiagnosticLogger } from '../logging'
+
+const log = createMainDiagnosticLogger('screenshot')
 
 /**
  * 注册 getDisplayMedia 请求处理器
@@ -36,11 +38,7 @@ export function setupDisplayMediaHandler(): void {
         })
       })
       .catch((error) => {
-        logWarn('处理 getDisplayMedia 请求失败', {
-          module: 'display-media',
-          operation: 'setDisplayMediaRequestHandler',
-          context: { error: String(error) },
-        })
+        log.error('display-media.request-failed', 'failed to handle getDisplayMedia request', error)
         callback({})
       })
   })

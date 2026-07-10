@@ -1,6 +1,12 @@
 import type { IpcContract, IpcEmitter, ServiceHandlers } from './contract'
 import { BrowserWindow, ipcMain } from 'electron'
 
+let errorLogger: IpcServiceErrorLogger | null = null
+
+export function setIpcServiceErrorLogger(logger: IpcServiceErrorLogger): void {
+  errorLogger = logger
+}
+
 /**
  * 在主进程注册 IPC 服务
  *
@@ -18,11 +24,23 @@ export function createIpcService<C extends IpcContract>(
   for (const [method, handler] of Object.entries(handlers)) {
     const channel = `${namespace}:${method}`
     ipcMain.handle(channel, async (...args: unknown[]) => {
+      const startedAt = Date.now()
       try {
         return await (handler as (...a: unknown[]) => unknown)(...args)
       }
       catch (error) {
-        console.error(`[IPC] ${channel} error:`, error)
+        const event = args[0] as { sender?: { id?: number } } | undefined
+        const meta = {
+          namespace,
+          method,
+          channel,
+          senderWebContentsId: event?.sender?.id,
+          durationMs: Date.now() - startedAt,
+        }
+        if (errorLogger)
+          errorLogger(error, meta)
+        else
+          console.error(`[IPC] ${channel} error`)
         throw error
       }
     })
@@ -45,3 +63,14 @@ export function createIpcService<C extends IpcContract>(
     },
   }
 }
+
+/** IPC handler 失败时的结构化上下文 */
+export type IpcServiceErrorMeta = {
+  namespace: string
+  method: string
+  channel: string
+  senderWebContentsId?: number
+  durationMs: number
+}
+
+export type IpcServiceErrorLogger = (error: unknown, meta: IpcServiceErrorMeta) => void

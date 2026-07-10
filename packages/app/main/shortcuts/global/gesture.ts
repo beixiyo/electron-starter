@@ -8,12 +8,14 @@ import type {
   ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
+import { createMainDiagnosticLogger } from '@main/logging'
 import { createShortcutGestureEngine } from '@shared/shortcuts'
 import { uIOhook } from 'uiohook-napi'
-import { logError } from '../../utils/logger'
 import { isSuspended } from '../fn'
 import { resolveKeyGroup } from '../hold/resolve-key-group'
 import { acquireHook, releaseHook } from '../uiohook-lifecycle'
+
+const log = createMainDiagnosticLogger('shortcut.runtime')
 
 /** action id → 已解析的 keyboard gesture 注册项 */
 const registeredShortcuts = new Map<string, RegisteredKeyboardGestureShortcut>()
@@ -51,10 +53,10 @@ export function registerKeyboardGestureShortcut(config: KeyboardGestureShortcutC
     registeredShortcuts.delete(id)
     syncGestureEngineEntries()
     maybeStopHook()
-    logError('键盘手势快捷键注册失败', error, {
-      module: 'shortcuts',
-      operation: 'registerKeyboardGestureShortcut',
-      context: { id, key: binding.chord.key, gesture: binding.gesture },
+    log.error('gesture.register-failed', 'keyboard gesture shortcut registration failed', error, {
+      id,
+      key: binding.chord.key,
+      gesture: binding.gesture,
     })
     return false
   }
