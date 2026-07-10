@@ -13,7 +13,15 @@ export function setNativeRecordingSession(session: NativeRecordingSession): void
   activeSession = session
 }
 
-export function consumeNativeRecordingSession(): NativeRecordingSession | null {
+/** 只读当前 session，用于 active 文件门禁与 stopped 代际校验 */
+export function peekNativeRecordingSession(): NativeRecordingSession | null {
+  return activeSession
+}
+
+export function consumeNativeRecordingSession(outputPath: string): NativeRecordingSession | null {
+  if (activeSession?.outputPath !== outputPath)
+    return null
+
   const session = activeSession
   activeSession = null
   return session
@@ -32,4 +40,10 @@ export type NativeRecordingSession = {
   source: NativeRecordingSource
   /** 产物 MIME（m4a → audio/mp4），renderer 存 IndexedDB 用 */
   mimeType: string
+  /** 稳定任务 id，用于 IndexedDB 去重和崩溃恢复 */
+  taskId: string
+  /** Swift start 命令使用的真实产物路径，也是 stopped 代际校验依据 */
+  outputPath: string
+  /** 恢复或最终列表中展示的名称 */
+  name?: string
 }

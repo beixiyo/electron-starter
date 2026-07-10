@@ -6,11 +6,13 @@ export const recordingClient = createServiceClient<RecordingContract>('recording
   'start',
   'setManualRecordingPrefs',
   'setAudioSourceCapture',
+  'getAudioApps',
   'getSystemAudioSupport',
   'pause',
   'resume',
   'stop',
   'reset',
+  'listRecoverableRecordings',
   'readRecordingFile',
   'deleteRecordingFile',
 ])

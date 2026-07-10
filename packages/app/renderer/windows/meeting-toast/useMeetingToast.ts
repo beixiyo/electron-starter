@@ -1,12 +1,15 @@
 import type { MeetingDetectedPayload, RecordingStatePayload } from '@ipc/services/meeting-detection/contract'
 import { WindowType } from '@shared'
+import { Message } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { animate, useMotionValue } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const TOAST_DURATION_MS = 8000
 
 export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) {
+  const { t } = useTranslation('recorder')
   const [meeting, setMeeting] = useState<MeetingDetectedPayload | null>(null)
   const [recordingState, setRecordingState] = useState<RecordingStatePayload | null>(null)
   const [elapsed, setElapsed] = useState(0)
@@ -81,7 +84,7 @@ export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) 
 
   const handleStartRecording = useLatestCallback(() => {
     if (meeting) {
-      $ipc.meetingDetection.startRecording(meeting.appId, meeting.pid)
+      $ipc.meetingDetection.startRecording(meeting.appId, meeting.pid, meeting.displayName)
     }
     clearCountdown()
   })
@@ -128,6 +131,21 @@ export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) 
     }
   })
 
+  const handleEnded = useLatestCallback(() => {
+    setMeeting(null)
+    setRecordingState(null)
+    hideWindow()
+  })
+
+  const handleRecordingError = useLatestCallback((code: string) => {
+    Message.danger(t('recordError.meetingFailed', { code }))
+    hideWindow()
+  })
+
+  const handleMicDegraded = useLatestCallback(() => {
+    Message.warning(t('recordError.micDegraded'))
+  })
+
   useEffect(() => {
     if (!initialEvent)
       return
@@ -138,31 +156,43 @@ export function useMeetingToast(initialEvent?: MeetingToastInitialEvent | null) 
     }
 
     applyRecordingState(initialEvent.payload)
-  }, [initialEvent])
+  }, [applyDetected, applyRecordingState, initialEvent])
 
   useEffect(() => {
     const unsubDetected = $ipc.meetingDetection.on('detected', (payload) => {
       applyDetected(payload)
     })
 
-    const unsubEnded = $ipc.meetingDetection.on('ended', () => {
-      setMeeting(null)
-      setRecordingState(null)
-      hideWindow()
-    })
+    const unsubEnded = $ipc.meetingDetection.on('ended', handleEnded)
 
     const unsubRecording = $ipc.meetingDetection.on('recording-state', (payload) => {
       applyRecordingState(payload)
     })
 
+    const unsubError = $ipc.meetingDetection.on('recording-error', ({ code }) => {
+      handleRecordingError(code)
+    })
+
+    const unsubMicDegraded = $ipc.meetingDetection.on('mic-degraded', handleMicDegraded)
+
     return () => {
       unsubDetected()
       unsubEnded()
       unsubRecording()
+      unsubError()
+      unsubMicDegraded()
       clearCountdown()
       clearElapsedTimer()
     }
-  }, [])
+  }, [
+    applyDetected,
+    applyRecordingState,
+    clearCountdown,
+    clearElapsedTimer,
+    handleEnded,
+    handleMicDegraded,
+    handleRecordingError,
+  ])
 
   return {
     meeting,

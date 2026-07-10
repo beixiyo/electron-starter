@@ -7,6 +7,4 @@ export const meetingDetectionClient = createServiceClient<MeetingDetectionContra
   'pauseRecording',
   'resumeRecording',
   'stopRecording',
-  'readRecordingFile',
-  'deleteRecordingFile',
 ])

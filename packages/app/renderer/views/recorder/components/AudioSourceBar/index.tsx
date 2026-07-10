@@ -1,13 +1,15 @@
+import type { AudioAppItem } from '@ipc/services/recording/contract'
 import type { AudioSourceSwitchResult } from '@/store/recordingStore'
 import { Message } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { Check, Mic, Volume2 } from 'lucide-react'
-import { memo, useEffect } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
 import {
   ensureSystemAudioSupportChecked,
   toggleAllAppsSource,
+  toggleAppSource,
   toggleMicSource,
   useRecordingSourceState,
 } from '@/store/recordingStore'
@@ -24,16 +26,29 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
   const { className } = props
 
   const { t } = useTranslation('recorder')
+  const [apps, setApps] = useState<AudioAppItem[]>([])
   const {
     micEnabled,
     systemAudioMixEnabled,
     audioSourceSwitching,
     systemAudioSupport,
+    systemAudioSelectedPids,
+    nativeSource,
   } = useRecordingSourceState()
 
   useEffect(() => {
     void ensureSystemAudioSupportChecked()
   }, [])
+
+  const visible = systemAudioSupport === true && nativeSource !== 'meeting'
+
+  useEffect(() => {
+    if (!visible)
+      return
+
+    void $ipc.recording.getAudioApps().then(setApps).catch(() => { /* 由后续推送兜底 */ })
+    return $ipc.recording.on('audioAppsChanged', setApps)
+  }, [visible])
 
   const notifyResult = useLatestCallback((result: AudioSourceSwitchResult) => {
     /** switching / not-recording 是无害的忽略态，不提示 */
@@ -55,8 +70,14 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
     notifyResult(await toggleAllAppsSource())
   })
 
-  if (systemAudioSupport !== true)
+  const handleApp = useLatestCallback(async (pid: number) => {
+    notifyResult(await toggleAppSource(pid))
+  })
+
+  if (!visible)
     return null
+
+  const allAppsActive = systemAudioMixEnabled && systemAudioSelectedPids.length === 0
 
   return (
     <div className={ cn('flex flex-col gap-2', className) }>
@@ -74,10 +95,20 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
         <SourceChip
           icon={ <Volume2 size={ 12 } className="shrink-0" /> }
           label={ t('audioSource.allApps') }
-          active={ systemAudioMixEnabled }
+          active={ allAppsActive }
           disabled={ audioSourceSwitching }
           onClick={ handleAllApps }
         />
+
+        { apps.map(app => (
+          <SourceChip
+            key={ app.pid }
+            label={ app.name }
+            active={ systemAudioSelectedPids.includes(app.pid) }
+            disabled={ audioSourceSwitching }
+            onClick={ () => handleApp(app.pid) }
+          />
+        )) }
       </div>
     </div>
   )

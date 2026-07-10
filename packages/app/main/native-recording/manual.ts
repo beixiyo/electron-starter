@@ -1,14 +1,11 @@
 import type { AudioSourceCaptureOptions, AudioSourceCaptureResult, ManualRecordingPrefs } from '@ipc/services/recording/contract'
 import type { RecordingSnapshot } from '@shared'
-import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { startRecording, updateRecording } from '@main/audio-recorder'
 import { getPermissionStatus, requestPermission } from '@main/permissions'
+import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { isMacOSAtLeast } from '@main/utils/macos-version'
 import { getSelfProcessPids } from '@main/utils/self-pids'
-import { app } from 'electron'
 import { initNativeRecordingPipeline } from '.'
 import { setNativeRecordingSession } from './session'
 
@@ -27,6 +24,7 @@ import { setNativeRecordingSession } from './session'
 let manualPrefs: ManualRecordingPrefs = {
   micEnabled: true,
   mixSystemAudio: false,
+  pids: [],
 }
 
 export function setManualRecordingPrefs(prefs: ManualRecordingPrefs): void {
@@ -44,12 +42,6 @@ function isSystemAudioPermissionUsable(): boolean {
   return status === 'granted' || status === 'unknown'
 }
 
-function buildOutputPath(): string {
-  const dir = join(app.getPath('temp'), 'manual-recordings')
-  mkdirSync(dir, { recursive: true })
-  return join(dir, `${randomUUID()}.m4a`)
-}
-
 /**
  * start 全程互斥锁：isBusy 的相位切换发生在 startRecording 前后，
  * 仅靠 isBusy 挡不住双击并发触发——第二次 start 会被 Swift 以 already_recording 拒绝，
@@ -58,46 +50,48 @@ function buildOutputPath(): string {
 let startingManual = false
 
 export function startManualRecording(): RecordingSnapshot {
-  if (!isSystemAudioRecordingSupported() || startingManual || recordingState.isBusy) {
+  if (!isSystemAudioRecordingSupported() || startingManual || !recordingState.canStart) {
     return recordingState.snapshot
   }
 
   startingManual = true
   try {
-    let micEnabled = manualPrefs.micEnabled
-    let mixSystemAudio = manualPrefs.mixSystemAudio
+    const micEnabled = manualPrefs.micEnabled
+    const mixSystemAudio = manualPrefs.mixSystemAudio
+    const selectedPids = mixSystemAudio
+      ? manualPrefs.pids
+      : []
 
-    /** 至少一个音源：偏好异常（两个源都关）兜底开麦克风，避免录出空文件 */
-    if (!micEnabled && !mixSystemAudio) {
-      micEnabled = true
-    }
+    /** 用户没有选择音源时拒绝开录，不擅自开启麦克风 */
+    if (!micEnabled && !mixSystemAudio)
+      return recordingState.snapshot
 
     /**
-     * 系统音频权限缺失时降级——native 未授权的失败形态是静默全零系统音轨，
-     * 事后无法从产物发现，绝不能带病挂 tap。renderer 侧已在开录前 ensure 过权限，
-     * 这里是防御性兜底
+     * 系统音频权限缺失时拒绝开录，不把用户选择的 system-only 偷换成麦克风
      */
     if (mixSystemAudio && !isSystemAudioPermissionUsable()) {
-      mixSystemAudio = false
-      if (!micEnabled) {
-        micEnabled = true
-      }
+      return recordingState.snapshot
     }
 
     /** 幂等：确保 audio-recorder 子进程与管线已就绪（可能早于 meeting-detection 初始化） */
     initNativeRecordingPipeline()
 
-    startRecording(buildOutputPath(), {
+    const session = createRecordingRecoverySession('manual', undefined, {
+      micAudio: micEnabled,
+      systemAudio: mixSystemAudio,
+    })
+    setNativeRecordingSession(session)
+    const snapshot = recordingState.startManualNative()
+
+    startRecording(session.outputPath, {
       engine: 'tap',
       tapEnabled: mixSystemAudio,
-      pids: [],
+      pids: selectedPids,
       excludePids: getSelfProcessPids(),
       mic: micEnabled,
     })
-    setNativeRecordingSession({ source: 'manual', mimeType: 'audio/mp4' })
-
-    console.log(`[recording] manual native recording started (mic=${micEnabled}, mix=${mixSystemAudio})`)
-    return recordingState.startManualNative()
+    console.log(`[recording] manual native recording started (mic=${micEnabled}, mix=${mixSystemAudio}, pids=[${selectedPids.join(',')}])`)
+    return snapshot
   }
   finally {
     startingManual = false
@@ -132,7 +126,9 @@ export async function setAudioSourceCapture(options: AudioSourceCaptureOptions):
   updateRecording({
     micEnabled,
     tapEnabled: systemEnabled,
-    pids: [],
+    pids: systemEnabled
+      ? options.pids
+      : [],
     excludePids: getSelfProcessPids(),
   })
   return { ok: true }

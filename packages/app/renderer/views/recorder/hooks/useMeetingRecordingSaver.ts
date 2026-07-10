@@ -14,10 +14,11 @@ export function useMeetingRecordingSaver(onSaved?: () => void) {
   useEffect(() => {
     const unsub = $ipc.meetingDetection.on('recording-complete', async (payload) => {
       try {
-        const buffer = await $ipc.meetingDetection.readRecordingFile(payload.path)
+        const buffer = await $ipc.recording.readRecordingFile(payload.taskId)
         const blob = new Blob([buffer], { type: payload.mimeType })
 
         await recorderStorage.saveRecord(blob, {
+          id: payload.taskId,
           name: payload.name,
           captureKind: 'audio',
           systemAudio: true,
@@ -25,7 +26,7 @@ export function useMeetingRecordingSaver(onSaved?: () => void) {
           duration: Math.round(payload.duration * 1000),
         })
 
-        await $ipc.meetingDetection.deleteRecordingFile(payload.path)
+        await $ipc.recording.deleteRecordingFile(payload.taskId)
         console.log(`[meeting-recording] saved to IndexedDB: ${payload.name}`)
         handleSaved()
       }
@@ -35,5 +36,5 @@ export function useMeetingRecordingSaver(onSaved?: () => void) {
     })
 
     return unsub
-  }, [])
+  }, [handleSaved])
 }

@@ -1,0 +1,155 @@
+import AVFoundation
+import Cocoa
+import CoreAudio
+import CoreGraphics
+import CoreMedia
+import ScreenCaptureKit
+
+// stdin JSON → {"action":"start","outputPath":"/tmp/rec.m4a"}                        // 会议录音:ScreenCaptureKit 全系统音频
+//            → {"action":"start","outputPath":"...","engine":"tap","tapEnabled":false,
+//               "pids":[123],"excludePids":[456],"mic":true,"micAec":true}                        // 手动录音:tap 引擎(macOS 14.2+);tapEnabled=false 先纯 mic
+//            → {"action":"update","tapEnabled":true,"micEnabled":true,"pids":[123],"excludePids":[456]} // tap 录音中热挂/卸 mic 与系统音轨、变更混入进程集合
+//            → {"action":"stop"}
+// stdout JSON ← {"status":"recording","path":"..."}
+//             ← {"status":"stopped","path":"...","duration":125.3}
+//             ← {"error":"..."}
+
+signal(SIGPIPE, SIG_IGN)
+
+if CommandLine.arguments.contains("--check-screen-capture") {
+  if isScreenCaptureTrusted() {
+    print("SCREEN_CAPTURE_TRUSTED")
+    exit(0)
+  }
+
+  fputs("SCREEN_CAPTURE_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
+
+if CommandLine.arguments.contains("--prompt-screen-capture") {
+  if requestScreenCaptureAccess() {
+    print("SCREEN_CAPTURE_TRUSTED")
+    exit(0)
+  }
+
+  fputs("SCREEN_CAPTURE_NOT_TRUSTED\n", stderr)
+  exit(1)
+}
+
+// exit code 约定:0=granted 1=denied 2=not-determined/超时 3=SPI 不可用 4=系统版本不支持
+if CommandLine.arguments.contains("--check-audio-capture") {
+  guard #available(macOS 14.2, *) else {
+    fputs("AUDIO_CAPTURE_UNSUPPORTED\n", stderr)
+    exit(4)
+  }
+  guard let tcc = loadTCCFunctions() else {
+    fputs("AUDIO_CAPTURE_SPI_UNAVAILABLE\n", stderr)
+    exit(3)
+  }
+
+  switch tcc.preflight(kTCCServiceAudioCaptureName, nil) {
+  case 0:
+    print("AUDIO_CAPTURE_GRANTED")
+    exit(0)
+  case 1:
+    fputs("AUDIO_CAPTURE_DENIED\n", stderr)
+    exit(1)
+  default:
+    fputs("AUDIO_CAPTURE_NOT_DETERMINED\n", stderr)
+    exit(2)
+  }
+}
+
+if CommandLine.arguments.contains("--prompt-audio-capture") {
+  guard #available(macOS 14.2, *) else {
+    fputs("AUDIO_CAPTURE_UNSUPPORTED\n", stderr)
+    exit(4)
+  }
+  guard let tcc = loadTCCFunctions() else {
+    fputs("AUDIO_CAPTURE_SPI_UNAVAILABLE\n", stderr)
+    exit(3)
+  }
+
+  tcc.request(kTCCServiceAudioCaptureName, nil) { granted in
+    if granted {
+      print("AUDIO_CAPTURE_GRANTED")
+      exit(0)
+    }
+    fputs("AUDIO_CAPTURE_DENIED\n", stderr)
+    exit(1)
+  }
+
+  /** 用户长时间不操作授权弹窗的兜底,避免调用方 execFile 永久挂起 */
+  DispatchQueue.main.asyncAfter(deadline: .now() + 300) {
+    fputs("AUDIO_CAPTURE_TIMEOUT\n", stderr)
+    exit(2)
+  }
+  CFRunLoopRun()
+}
+
+if let mergeIndex = CommandLine.arguments.firstIndex(of: "--merge-checkpoints") {
+  let args = CommandLine.arguments
+  guard args.count > mergeIndex + 2 else {
+    fputs("CHECKPOINT_MERGE_USAGE\n", stderr)
+    exit(2)
+  }
+
+  Task {
+    let ok = await mergeCheckpointSegments(
+      segmentDir: args[mergeIndex + 1],
+      outputPath: args[mergeIndex + 2]
+    )
+    exit(ok ? 0 : 1)
+  }
+  CFRunLoopRun()
+}
+
+if let recoverMicIndex = CommandLine.arguments.firstIndex(of: "--recover-mic-sidecar") {
+  let args = CommandLine.arguments
+  guard args.count > recoverMicIndex + 2 else {
+    fputs("MIC_SIDECAR_RECOVERY_USAGE\n", stderr)
+    exit(2)
+  }
+
+  Task {
+    let ok = await recoverMicSidecar(
+      sidecarPath: args[recoverMicIndex + 1],
+      outputPath: args[recoverMicIndex + 2]
+    )
+    exit(ok ? 0 : 1)
+  }
+  CFRunLoopRun()
+}
+
+log("audio-recorder build \(AUDIO_RECORDER_BUILD_ID) forceSyntheticMicTimeline=\(FORCE_SYNTHETIC_MIC_TIMELINE)")
+
+// SIGTERM → 优雅停止录制再退出（NativeBridge.stop() 发 SIGTERM）
+let sigTermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+signal(SIGTERM, SIG_IGN)
+sigTermSource.setEventHandler {
+  finalizeAndExit()
+}
+sigTermSource.resume()
+
+// 检测父进程存活
+let parentCheckTimer = DispatchSource.makeTimerSource(queue: .main)
+parentCheckTimer.schedule(deadline: .now() + 3, repeating: 3)
+parentCheckTimer.setEventHandler {
+  if getppid() == 1 {
+    finalizeAndExit()
+  }
+}
+parentCheckTimer.resume()
+
+// 读 stdin（阻塞，放后台线程）
+DispatchQueue.global(qos: .userInitiated).async {
+  while let line = readLine() {
+    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty { continue }
+    enqueueCommand { await handleCommand(trimmed) }
+  }
+  // stdin 关闭 = 父进程退出;等收尾(含 mixTracks)完成再退,避免混音临时件残留
+  finalizeAndExit()
+}
+
+CFRunLoopRun()

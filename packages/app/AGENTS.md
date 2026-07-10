@@ -64,7 +64,7 @@ packages/app/
 │       ├── fn-listener.swift
 │       ├── focus-check.swift
 │       ├── audio-monitor.swift
-│       └── audio-recorder.swift
+│       └── audio-recorder/       # Swift 录音 helper：双引擎、恢复、看门狗与设备自愈
 │
 ├── resources/         # 运行时资源与原生编译产物
 │   ├── icon.png

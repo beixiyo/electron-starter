@@ -41,11 +41,12 @@ export function useNativeManualRecording(onSaved?: () => void) {
   useEffect(() => {
     const unsubComplete = $ipc.recording.on('manualRecordingComplete', async (payload) => {
       try {
-        const buffer = await $ipc.recording.readRecordingFile(payload.path)
+        const buffer = await $ipc.recording.readRecordingFile(payload.taskId)
         const blob = new Blob([buffer], { type: payload.mimeType })
         const { micEnabled, systemAudioMixEnabled } = getRecordingSourceState()
 
         await recorderStorage.saveRecord(blob, {
+          id: payload.taskId,
           name: buildRecordingName(),
           captureKind: 'audio',
           systemAudio: systemAudioMixEnabled,
@@ -53,7 +54,7 @@ export function useNativeManualRecording(onSaved?: () => void) {
           duration: Math.round(payload.duration * 1000),
         })
 
-        await $ipc.recording.deleteRecordingFile(payload.path)
+        await $ipc.recording.deleteRecordingFile(payload.taskId)
         void resetNativeRecording()
         handleSaved()
       }
@@ -88,9 +89,14 @@ export function useNativeManualRecording(onSaved?: () => void) {
       Message.danger(t(key))
     })
 
+    const unsubMicDegraded = $ipc.recording.on('micDegraded', () => {
+      Message.warning(t('recordError.micDegraded'))
+    })
+
     return () => {
       unsubComplete()
       unsubError()
+      unsubMicDegraded()
     }
   }, [handleSaved, t])
 

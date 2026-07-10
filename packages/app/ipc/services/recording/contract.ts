@@ -21,16 +21,20 @@ export type RecordingContract = IpcContract<{
    * 每次变更下发完整音源状态；开启系统音轨且权限未定时会即时弹系统授权框，录音不中断
    */
   setAudioSourceCapture: (options: AudioSourceCaptureOptions) => AudioSourceCaptureResult
+  /** 当前正在输出音频的软件列表，已排除应用自身进程 */
+  getAudioApps: () => AudioAppItem[]
   /** 本机是否支持混系统音频录音（darwin 且 macOS >= 14.2），UI 据此显隐音源条 */
   getSystemAudioSupport: () => boolean
   pause: () => RecordingSnapshot
   resume: () => RecordingSnapshot
   stop: () => RecordingSnapshot
   reset: () => RecordingSnapshot
+  /** 扫描崩溃残留并返回可恢复录音 */
+  listRecoverableRecordings: () => RecoverableRecordingPayload[]
   /** 读取录音产物（可达几十 MB，异步读避免阻塞主进程） */
-  readRecordingFile: (filePath: string) => ArrayBuffer
+  readRecordingFile: (taskId: string) => ArrayBuffer
   /** 删除录音产物（存进 IndexedDB 后清理临时文件） */
-  deleteRecordingFile: (filePath: string) => void
+  deleteRecordingFile: (taskId: string) => void
 }, {
   stateChanged: RecordingSnapshot
   /** 录音达到最大时长：提示用户确认后再收尾 */
@@ -39,6 +43,10 @@ export type RecordingContract = IpcContract<{
   manualRecordingComplete: ManualRecordingCompletePayload
   /** 手动 native 录音失败（定向主窗弹提示） */
   manualRecordingError: ManualRecordingErrorPayload
+  /** 麦克风自愈失败，录音仍以剩余音源继续 */
+  micDegraded: MicDegradedPayload
+  /** 正在输出音频的软件列表发生变化 */
+  audioAppsChanged: AudioAppItem[]
 }>
 
 /** renderer 同步给主进程的手动录音偏好 */
@@ -47,30 +55,62 @@ export type ManualRecordingPrefs = {
   micEnabled: boolean
   /** 「混入系统音频（所有软件）」音源开关（localStorage 持久化值，默认关） */
   mixSystemAudio: boolean
+  /** 仅混入这些进程；空数组表示所有软件 */
+  pids: number[]
 }
 
+/** 录音中动态更新的音源选择 */
 export type AudioSourceCaptureOptions = {
   /** 麦克风音源是否采集 */
   micEnabled: boolean
   /** 系统音轨（所有软件）音源是否挂载（可能触发授权弹窗） */
   systemEnabled: boolean
+  /** systemEnabled 时仅混入这些进程；空数组表示所有软件 */
+  pids: number[]
 }
 
+/** 动态更新音源的执行结果 */
 export type AudioSourceCaptureResult = {
   ok: boolean
   /** 失败原因：非手动 native 录音中 / 系统音频权限被拒（此时系统音轨未挂，renderer 回退该源选中态） */
   reason?: 'not-recording' | 'permission-denied'
 }
 
+/** 当前正在输出音频、可被 Core Audio tap 单独捕获的软件 */
+export type AudioAppItem = {
+  pid: number
+  name: string
+}
+
+/** 手动 native 录音完成事件 */
 export type ManualRecordingCompletePayload = {
-  /** 产物临时文件路径，renderer 经 readRecordingFile 取回后存 IndexedDB */
-  path: string
+  /** 稳定任务 id，同时作为 IndexedDB 去重 id */
+  taskId: string
   /** 录制时长（秒） */
   duration: number
   /** 产物 MIME（audio/mp4） */
   mimeType: string
 }
 
+/** 崩溃恢复目录中的可导入录音 */
+export type RecoverableRecordingPayload = {
+  taskId: string
+  name: string
+  source: 'manual' | 'meeting'
+  mimeType: string
+  createdAt: number
+  fileSize: number
+  micAudio: boolean
+  systemAudio: boolean
+}
+
+/** 麦克风降级但其余音源仍继续录制的事件 */
+export type MicDegradedPayload = {
+  source: 'manual' | 'meeting'
+  detail?: string
+}
+
+/** 手动 native 录音错误事件 */
 export type ManualRecordingErrorPayload = {
   /** recorder-error: 录制中 Swift 子进程报错 */
   reason: 'recorder-error'

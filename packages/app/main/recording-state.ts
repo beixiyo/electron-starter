@@ -5,9 +5,8 @@ import { RECORDING_MAX_DURATION_MS, RECORDING_TICK_MS } from '@shared'
 /**
  * 录音状态机（主进程单一真源）
  *
- * 手动 native tap 录音由此驱动：相位切换（pause/resume/stop/reset）经 onPhaseChange
- * 转发给 audio-recorder 子进程；每秒 broadcast 快照给 renderer（录音页计时）
- * 会议录音（既有 ScreenCaptureKit 链路）不经过本状态机，故 nativeSource 只会是 'manual' 或 null
+ * 手动 tap 与会议 ScreenCaptureKit 录音统一由此驱动：相位切换（pause/resume/stop/reset）
+ * 经 onPhaseChange 转发给 audio-recorder 子进程；每秒 broadcast 快照给 renderer
  */
 class RecordingStateManager {
   private phase: RecordingPhase = 'idle'
@@ -32,6 +31,11 @@ class RecordingStateManager {
     return this.phase === 'recording' || this.phase === 'paused'
   }
 
+  /** 仅 idle 可创建新 native session；stopped 仍处于原生混音/文件校验收尾窗口 */
+  get canStart(): boolean {
+    return this.phase === 'idle'
+  }
+
   /** native 录音来源（null = 未在 native 录音），主进程 syncToRecorder 据此路由 native 命令 */
   get nativeSource(): NativeRecordingSource | null {
     return this._nativeSource
@@ -50,6 +54,11 @@ class RecordingStateManager {
     return this.startWithSource('manual')
   }
 
+  /** 会议录音（native SCK 引擎）：与手动录音共享互斥状态 */
+  startMeetingNative(): RecordingSnapshot {
+    return this.startWithSource('meeting')
+  }
+
   start(): RecordingSnapshot {
     return this.startWithSource(null)
   }
@@ -60,7 +69,7 @@ class RecordingStateManager {
    * stale nativeSource，renderer 会误判为 native 模式而不驱动浏览器采集
    */
   private startWithSource(source: NativeRecordingSource | null): RecordingSnapshot {
-    if (this.phase !== 'idle' && this.phase !== 'stopped') {
+    if (this.phase !== 'idle') {
       return this.snapshot
     }
 
@@ -126,6 +135,15 @@ class RecordingStateManager {
   }
 
   reset(): RecordingSnapshot {
+    return this.resetState(true)
+  }
+
+  /** 原生录音已结束或异常退出：只清状态，不再向已终止的 helper 补发 stop */
+  finishNative(): RecordingSnapshot {
+    return this.resetState(false)
+  }
+
+  private resetState(notifyNative: boolean): RecordingSnapshot {
     const prev = this.phase
     console.log('[rec-state] → idle (reset)')
     this.phase = 'idle'
@@ -139,6 +157,9 @@ class RecordingStateManager {
      * Discard 走 reset → idle，若先清 nativeSource 会被其 `!nativeSource` 早退拦掉），
      * 再清来源标记并广播最终快照
      */
+    if (!notifyNative)
+      this._nativeSource = null
+
     this.notifyPhase(prev, 'idle')
 
     this._nativeSource = null

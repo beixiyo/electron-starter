@@ -78,8 +78,10 @@ export class NativeBridge<T extends Record<string, any>> {
       this.child.stderr?.on('data', (data: string) => {
         for (const line of data.split('\n')) {
           const trimmed = line.trim()
-          if (trimmed)
+          if (trimmed) {
             console.log(`[${this.config.name}] ${trimmed}`)
+            this.config.onStderrLine?.(trimmed)
+          }
         }
       })
     }
@@ -134,6 +136,8 @@ type NativeBridgeConfig<T extends Record<string, any>> = {
   args?: string[]
   writable?: boolean
   logStderr?: boolean
+  /** stderr 逐行回调（logStderr 开启时生效），供产品接入自己的持久化诊断日志 */
+  onStderrLine?: (line: string) => void
   onUnexpectedExit?: (code: number | null, signal: NodeJS.Signals | null) => void
   parseLine: (line: string, bus: EventBus<T>) => void
 }

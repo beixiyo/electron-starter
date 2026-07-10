@@ -13,8 +13,8 @@ export type RecordingStatePayload = {
 }
 
 export type RecordingCompletePayload = {
+  taskId: string
   name: string
-  path: string
   duration: number
   mimeType: string
 }
@@ -22,17 +22,22 @@ export type RecordingCompletePayload = {
 export type MeetingDetectionContract = IpcContract<
   {
     dismiss: (appId: string, pid: number) => void
-    startRecording: (appId: string, pid: number) => void
+    startRecording: (appId: string, pid: number, displayName?: string) => void
     pauseRecording: () => void
     resumeRecording: () => void
     stopRecording: () => void
-    readRecordingFile: (filePath: string) => ArrayBuffer
-    deleteRecordingFile: (filePath: string) => void
   },
   {
     'detected': MeetingDetectedPayload
     'ended': MeetingDetectedPayload
     'recording-state': RecordingStatePayload
     'recording-complete': RecordingCompletePayload
+    'recording-error': RecordingErrorPayload
+    'mic-degraded': { detail?: string }
   }
 >
+
+export type RecordingErrorPayload = {
+  code: string
+  detail?: string
+}

@@ -89,7 +89,9 @@
     "captureInterrupted": "Audio capture was interrupted. The recording ended automatically and audio before the interruption was saved",
     "noAudioContent": "No audio content captured: the selected source produced no sound",
     "emptyAudio": "No valid audio was written. Check your microphone and input device, then try again",
-    "unreadableAudio": "Failed to write the recording file. Please record again"
+    "unreadableAudio": "Failed to write the recording file. Please record again",
+    "micDegraded": "The microphone disconnected and could not be restored. System audio recording continues",
+    "meetingFailed": "Meeting recording failed: {{code}}",
+    "recovered": "Recovered recordings from the previous session were imported"
   }
 }
-

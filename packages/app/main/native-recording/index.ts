@@ -2,17 +2,16 @@ import type { NativeRecordingSource, RecordingPhase } from '@shared'
 import type { NativeRecordingSession } from './session'
 import { stat, unlink } from 'node:fs/promises'
 import { onRecorderEvent, pauseRecording, resumeRecording, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { deleteRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { app } from 'electron'
-import { clearNativeRecordingSession, consumeNativeRecordingSession } from './session'
+import { clearNativeRecordingSession, consumeNativeRecordingSession, peekNativeRecordingSession } from './session'
 
 /**
  * Native 录音通用管线：状态机相位 → 子进程命令的转发，以及 recorder 事件的统一收尾
  *
- * 手动混系统音频录音（tap 引擎）走这条管线
- * meeting-detection 自行驱动、不走本管线——两者共用同一 audio-recorder 子进程，
- * 靠 recordingState.nativeSource 互斥：本管线只在 nativeSource 为 'manual' 时动作，
- * meeting-detection 的 recorder 事件处理器则在 nativeSource==='manual' 时早退（见其守卫）
+ * 手动混系统音频录音（tap）与会议录音（ScreenCaptureKit）都走这条管线，
+ * 两者共用同一 audio-recorder 子进程，并由 recordingState.nativeSource 做互斥和收尾路由
  */
 
 let syncing = false
@@ -74,6 +73,26 @@ export function initNativeRecordingPipeline(): void {
     discardPending = false
   })
 
+  onRecorderEvent('mic_degraded', ({ detail }) => {
+    /** 麦克风自愈失败不是整场录音失败，系统音轨仍继续录制 */
+    console.warn(`[native-recording] microphone capture degraded${detail
+      ? `: ${detail}`
+      : ''}`)
+    const source = recordingState.nativeSource
+    if (source)
+      handlersBySource[source]?.onMicDegraded?.(detail)
+  })
+
+  onRecorderEvent('exited', ({ code, signal }) => {
+    const source = recordingState.nativeSource
+    if (!source)
+      return
+
+    clearNativeRecordingSession()
+    recordingState.finishNative()
+    handlersBySource[source]?.onError('helper_exited', `code=${code} signal=${signal}`)
+  })
+
   onRecorderEvent('error', ({ code, detail }) => {
     /**
      * 录音中 Swift 子进程报错（权限被拒、设备异常、无样本）：仅手动 native 录音处理，
@@ -118,22 +137,35 @@ export function initNativeRecordingPipeline(): void {
       ? ` (${detail})`
       : ''}`)
     clearNativeRecordingSession()
-    recordingState.reset()
+    recordingState.finishNative()
     handlersBySource[source]?.onError(code, detail)
   })
 
   onRecorderEvent('stopped', async ({ path: filePath, duration }) => {
     console.log(`[native-recording] audio-recorder → stopped: ${filePath} (${duration}s)`)
 
-    /** Discard 产物：删除文件且不发完成事件。消费标记后复位 */
-    if (discardPending) {
-      discardPending = false
-      clearNativeRecordingSession()
-      unlink(filePath).catch(() => { /* ignore */ })
+    const stoppedSession = peekNativeRecordingSession()
+    if (stoppedSession && stoppedSession.outputPath !== filePath) {
+      console.warn('[native-recording] stale stopped event ignored, file left for recovery', {
+        stoppedPath: filePath,
+        activePath: stoppedSession.outputPath,
+      })
       return
     }
 
-    const session = consumeNativeRecordingSession()
+    /** Discard 产物：删除文件且不发完成事件。消费标记后复位 */
+    if (discardPending) {
+      discardPending = false
+      const discardedSession = peekNativeRecordingSession()
+      clearNativeRecordingSession()
+      if (discardedSession)
+        await deleteRecoveryRecording(discardedSession.taskId)
+      else
+        await unlink(filePath).catch(() => { /* ignore */ })
+      return
+    }
+
+    const session = consumeNativeRecordingSession(filePath)
     if (!session) {
       /** 无本管线会话（如会议录音的 stopped）：交由其它订阅者处理，本管线跳过 */
       return
@@ -150,10 +182,16 @@ export function initNativeRecordingPipeline(): void {
       console.warn('[native-recording] invalid recording file, skip completion', err)
       unlink(filePath).catch(() => { /* ignore */ })
       handlersBySource[session.source]?.onError('empty_recording')
+      recordingState.finishNative()
       return
     }
 
-    await handlersBySource[session.source]?.onComplete(session, filePath, duration)
+    try {
+      await handlersBySource[session.source]?.onComplete(session, filePath, duration)
+    }
+    finally {
+      recordingState.finishNative()
+    }
   })
 
   app.on('before-quit', () => {
@@ -179,4 +217,6 @@ export type NativeRecordingHandlers = {
    * @param message 诊断详情（Swift 侧采集统计 / writer 错误码 / 设备快照），仅用于展示与日志
    */
   onError: (code: string, message?: string) => void
+  /** 麦克风自愈失败但系统音轨仍继续录制 */
+  onMicDegraded?: (detail?: string) => void
 }

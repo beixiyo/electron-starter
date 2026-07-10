@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { formatDate } from '@jl-org/tool'
+import { appendNativeDiagnosticLine } from '@main/native-diagnostic-log'
 import { app } from 'electron'
 import { NativeBridge } from '../native-bridge'
 
@@ -8,6 +9,10 @@ const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
   writable: true,
   logStderr: true,
+  onStderrLine: line => appendNativeDiagnosticLine('audio-recorder', line),
+  onUnexpectedExit: (code, signal) => {
+    bridge.events.emit('exited', { code, signal })
+  },
   parseLine(line, bus) {
     try {
       const msg: RecorderMessage = JSON.parse(line)
@@ -32,6 +37,16 @@ const bridge = new NativeBridge<RecorderEvents>({
       else if (msg.status === 'stopped') {
         console.log(`[audio-recorder] stopped (${msg.duration ?? 0}s) → ${msg.path}`)
         bus.emit('stopped', { path: msg.path, duration: msg.duration ?? 0 })
+      }
+      else if (msg.status === 'mic_degraded') {
+        /** 非致命：麦克风掉线且未能自愈，录音继续保留系统音轨 */
+        console.warn(`[audio-recorder] mic degraded${msg.detail
+          ? ` (${msg.detail})`
+          : ''}`)
+        void appendNativeDiagnosticLine('audio-recorder', `mic_degraded${msg.detail
+          ? `: ${msg.detail}`
+          : ''}`)
+        bus.emit('mic_degraded', { detail: msg.detail })
       }
     }
     catch {
@@ -135,6 +150,8 @@ type RecorderEvents = {
   mixing: { path: string }
   stopped: { path: string, duration: number }
   error: { code: string, detail?: string }
+  mic_degraded: { detail?: string }
+  exited: { code: number | null, signal: NodeJS.Signals | null }
 }
 
 type RecorderMessage
@@ -142,4 +159,5 @@ type RecorderMessage
     | { status: 'paused', path: string, duration?: never, detail?: never }
     | { status: 'mixing', path: string, duration?: never, detail?: never }
     | { status: 'stopped', path: string, duration?: number, detail?: never }
+    | { status: 'mic_degraded', detail?: string, path?: never, duration?: never }
     | { error: string, detail?: string, status?: never }

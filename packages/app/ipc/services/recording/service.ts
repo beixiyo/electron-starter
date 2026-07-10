@@ -1,6 +1,6 @@
-import type { ManualRecordingErrorPayload, RecordingContract } from './contract'
-import { readFile, unlink } from 'node:fs/promises'
+import type { AudioAppItem, ManualRecordingErrorPayload, RecordingContract } from './contract'
 import { createIpcService } from '@ipc/core'
+import { getAudioProcessSnapshot, onAudioProcessChange, startAudioMonitor } from '@main/meeting-detection/audio-monitor-bridge'
 import { registerNativeRecordingHandlers } from '@main/native-recording'
 import {
   isSystemAudioRecordingSupported,
@@ -8,10 +8,23 @@ import {
   setManualRecordingPrefs,
   startManualRecording,
 } from '@main/native-recording/manual'
+import { peekNativeRecordingSession } from '@main/native-recording/session'
+import { deleteRecoveryRecording, listRecoverableRecordings, readRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
+import { getSelfProcessPids } from '@main/utils/self-pids'
 import { windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 import { Notification } from 'electron'
+
+function listAudioApps(): AudioAppItem[] {
+  const selfPids = new Set(getSelfProcessPids())
+  return getAudioProcessSnapshot()
+    .filter(process => process.isRunningOutput && !selfPids.has(process.pid))
+    .map(process => ({
+      pid: process.pid,
+      name: process.name,
+    }))
+}
 
 /**
  * 手动 native tap 录音 IPC 服务（主进程实现）
@@ -36,6 +49,11 @@ export const recordingService = createIpcService<RecordingContract>('recording',
     return setAudioSourceCapture(options)
   },
 
+  async getAudioApps() {
+    startAudioMonitor()
+    return listAudioApps()
+  },
+
   async getSystemAudioSupport() {
     return isSystemAudioRecordingSupported()
   },
@@ -56,16 +74,23 @@ export const recordingService = createIpcService<RecordingContract>('recording',
     return recordingState.reset()
   },
 
-  /** 录音可达几十 MB，必须异步读取，避免阻塞主进程事件循环 */
-  async readRecordingFile(_event, filePath: string) {
-    const buf = await readFile(filePath)
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+  async listRecoverableRecordings() {
+    return listRecoverableRecordings(peekNativeRecordingSession()?.outputPath)
   },
 
-  async deleteRecordingFile(_event, filePath: string) {
-    try { await unlink(filePath) }
-    catch { /* ignore */ }
+  async readRecordingFile(_event, taskId: string) {
+    return readRecoveryRecording(taskId)
   },
+
+  async deleteRecordingFile(_event, taskId: string) {
+    await deleteRecoveryRecording(taskId)
+  },
+})
+
+onAudioProcessChange(() => {
+  const mainWin = windowManager.get(WindowType.MAIN)
+  if (mainWin && !mainWin.isDestroyed())
+    recordingService.emit('audioAppsChanged', listAudioApps(), mainWin)
 })
 
 recordingState.setBroadcast((snapshot) => {
@@ -98,7 +123,7 @@ export function emitManualRecordingError(payload: ManualRecordingErrorPayload): 
 
 /** 手动 native 录音的完成 / 错误收尾：native 通用管线按 source 路由到这里 */
 registerNativeRecordingHandlers('manual', {
-  onComplete(session, filePath, duration) {
+  onComplete(session, _filePath, duration) {
     const mainWin = windowManager.get(WindowType.MAIN)
     if (!mainWin || mainWin.isDestroyed()) {
       console.warn('[recording] main window missing, skip manualRecordingComplete')
@@ -106,12 +131,15 @@ registerNativeRecordingHandlers('manual', {
     }
 
     recordingService.emit('manualRecordingComplete', {
-      path: filePath,
+      taskId: session.taskId,
       duration,
       mimeType: session.mimeType,
     }, mainWin)
   },
   onError(code, message) {
     emitManualRecordingError({ reason: 'recorder-error', detail: code, message })
+  },
+  onMicDegraded(detail) {
+    recordingService.emit('micDegraded', { source: 'manual', detail })
   },
 })

@@ -8,6 +8,7 @@ import { isElectron } from '@/utils/env'
  *
  * - `micEnabled`：麦克风源（localStorage 持久化，默认开）
  * - `systemAudioMixEnabled`：系统音轨源「所有软件」（localStorage 持久化，默认关——权限语义较重须显式开启）
+ * - `systemAudioSelectedPids`：系统音轨仅混入这些软件；空数组表示所有软件
  * - 录音快照（phase / elapsed / nativeSource）由主进程 stateChanged 事件推送
  *
  * 编排收口在此：组件只 dispatch（toggleMicSource / toggleAllAppsSource）并提示失败
@@ -28,6 +29,8 @@ export interface RecordingSourceState {
   micEnabled: boolean
   /** 「所有软件」系统音轨音源开关 */
   systemAudioMixEnabled: boolean
+  /** 系统音轨仅混入这些进程；空数组表示所有软件 */
+  systemAudioSelectedPids: number[]
   /** 录音中热切正在等待 native / 授权结果（UI 据此锁定音源条，防重复点击堆积） */
   audioSourceSwitching: boolean
   /** 本机是否支持混系统音频（null = 未查询；false = 不支持，隐藏音源条） */
@@ -40,6 +43,7 @@ let state: RecordingSourceState = {
   nativeSource: undefined,
   micEnabled: getLocalStorage<boolean>(MIC_ENABLED_STORAGE_KEY) ?? true,
   systemAudioMixEnabled: getLocalStorage<boolean>(SYSTEM_AUDIO_MIX_STORAGE_KEY) ?? false,
+  systemAudioSelectedPids: [],
   audioSourceSwitching: false,
   systemAudioSupport: null,
 }
@@ -81,8 +85,8 @@ export function isManualNativeRecordingActive(): boolean {
   return isElectron() && state.nativeSource === 'manual' && isRecordingBusy()
 }
 
-function applyAudioSourceState(mic: boolean, system: boolean): void {
-  setState({ micEnabled: mic, systemAudioMixEnabled: system })
+function applyAudioSourceState(mic: boolean, system: boolean, pids: number[]): void {
+  setState({ micEnabled: mic, systemAudioMixEnabled: system, systemAudioSelectedPids: pids })
   setLocalStorage(MIC_ENABLED_STORAGE_KEY, mic)
   setLocalStorage(SYSTEM_AUDIO_MIX_STORAGE_KEY, system)
   void pushManualRecordingPrefs()
@@ -95,7 +99,7 @@ function applyAudioSourceState(mic: boolean, system: boolean): void {
  * - 手动 native 录音进行中：先乐观落 state，再下发热挂/卸（可能弹系统授权框），
  *   失败回滚 state 并按 reason 提示，保证 UI 与 native 实际状态一致
  */
-async function commitAudioSources(mic: boolean, system: boolean): Promise<AudioSourceSwitchResult> {
+async function commitAudioSources(mic: boolean, system: boolean, pids: number[]): Promise<AudioSourceSwitchResult> {
   if (!mic && !system) {
     return { ok: false, reason: 'need-one-source' }
   }
@@ -103,15 +107,16 @@ async function commitAudioSources(mic: boolean, system: boolean): Promise<AudioS
   const prev = {
     mic: state.micEnabled,
     system: state.systemAudioMixEnabled,
+    pids: state.systemAudioSelectedPids,
   }
-  applyAudioSourceState(mic, system)
+  applyAudioSourceState(mic, system, pids)
 
   if (!isManualNativeRecordingActive()) {
     return { ok: true }
   }
 
   if (state.audioSourceSwitching) {
-    applyAudioSourceState(prev.mic, prev.system)
+    applyAudioSourceState(prev.mic, prev.system, prev.pids)
     return { ok: false, reason: 'switching' }
   }
 
@@ -120,15 +125,16 @@ async function commitAudioSources(mic: boolean, system: boolean): Promise<AudioS
     const result = await $ipc.recording.setAudioSourceCapture({
       micEnabled: mic,
       systemEnabled: system,
+      pids,
     })
     if (!result.ok) {
-      applyAudioSourceState(prev.mic, prev.system)
+      applyAudioSourceState(prev.mic, prev.system, prev.pids)
       return { ok: false, reason: result.reason ?? 'failed' }
     }
     return { ok: true }
   }
   catch {
-    applyAudioSourceState(prev.mic, prev.system)
+    applyAudioSourceState(prev.mic, prev.system, prev.pids)
     return { ok: false, reason: 'failed' }
   }
   finally {
@@ -138,12 +144,27 @@ async function commitAudioSources(mic: boolean, system: boolean): Promise<AudioS
 
 /** 切换麦克风源 */
 export function toggleMicSource(): Promise<AudioSourceSwitchResult> {
-  return commitAudioSources(!state.micEnabled, state.systemAudioMixEnabled)
+  return commitAudioSources(!state.micEnabled, state.systemAudioMixEnabled, state.systemAudioSelectedPids)
 }
 
 /** 切换「所有软件」系统音轨源 */
 export function toggleAllAppsSource(): Promise<AudioSourceSwitchResult> {
-  return commitAudioSources(state.micEnabled, !state.systemAudioMixEnabled)
+  const active = state.systemAudioMixEnabled && state.systemAudioSelectedPids.length === 0
+  return active
+    ? commitAudioSources(state.micEnabled, false, [])
+    : commitAudioSources(state.micEnabled, true, [])
+}
+
+/** 切换一个指定软件；取消最后一个软件时关闭系统音轨，不静默扩大为所有软件 */
+export function toggleAppSource(pid: number): Promise<AudioSourceSwitchResult> {
+  const selected = state.systemAudioSelectedPids
+  const next = selected.includes(pid)
+    ? selected.filter(item => item !== pid)
+    : [...selected, pid]
+
+  return next.length === 0
+    ? commitAudioSources(state.micEnabled, false, [])
+    : commitAudioSources(state.micEnabled, true, next)
 }
 
 /** 把手动录音偏好（麦克风 / 混入系统音频开关）同步到主进程（开录瞬间读取最近一次同步值） */
@@ -156,6 +177,7 @@ export async function pushManualRecordingPrefs(): Promise<void> {
     await $ipc.recording.setManualRecordingPrefs({
       micEnabled: state.micEnabled,
       mixSystemAudio: state.systemAudioMixEnabled,
+      pids: state.systemAudioSelectedPids,
     })
   }
   catch {

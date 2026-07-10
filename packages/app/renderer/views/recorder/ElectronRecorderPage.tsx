@@ -19,6 +19,7 @@ import { useMeetingRecordingSaver } from './hooks/useMeetingRecordingSaver'
 import { useNativeManualRecording } from './hooks/useNativeManualRecording'
 import { useRecorderController } from './hooks/useRecorderController'
 import { useRecordingTimer } from './hooks/useRecordingTimer'
+import { useRecoverableRecordings } from './hooks/useRecoverableRecordings'
 import { useSourceManager } from './hooks/useSourceManager'
 import { RecorderDetail } from './web/RecorderDetail'
 import { RecorderList } from './web/RecorderList'
@@ -101,7 +102,10 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     setListRefreshKey(prev => prev + 1)
     Message.success(t('meetingRecording.saved', '录音已保存'))
   })
-  const { systemAudioMixEnabled } = useRecordingSourceState()
+  useRecoverableRecordings(() => {
+    setListRefreshKey(prev => prev + 1)
+  })
+  const { micEnabled, systemAudioMixEnabled } = useRecordingSourceState()
 
   const nativeMode = native.supported && audioOnly
 
@@ -115,18 +119,23 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     ? native.isBusy
     : isBusy
 
-  /** 原生录音开录：先 ensure 麦克风（应用内说明弹窗），混系统音频时再触发系统「仅系统音频录制」授权框 */
+  /** 原生录音开录：只申请用户实际选择的音源权限 */
   const handleStartNative = useLatestCallback(async () => {
-    const micOk = await permissions.ensure(['microphone'], {
-      title: t('permission.recordingTitle', '允许应用录制你的会议'),
-      subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
-    })
-    if (!micOk)
-      return
+    if (micEnabled) {
+      const micOk = await permissions.ensure(['microphone'], {
+        title: t('permission.recordingTitle', '允许应用录制你的会议'),
+        subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
+      })
+      if (!micOk)
+        return
+    }
 
     if (systemAudioMixEnabled) {
-      /** 被拒则主进程降级为纯麦克风录音，不阻断开录 */
-      await $ipc.permission.request('system-audio')
+      const status = await $ipc.permission.request('system-audio')
+      if (status !== 'granted' && status !== 'unknown') {
+        Message.warning(t('audioSource.permissionDenied'))
+        return
+      }
     }
     native.start()
   })

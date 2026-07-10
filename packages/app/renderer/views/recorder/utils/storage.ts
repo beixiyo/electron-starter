@@ -43,9 +43,10 @@ export class RecorderStorage {
    */
   async saveRecord(
     blob: Blob,
-    metadata: Omit<RecorderRecordMetadata, 'id' | 'createdAt' | 'size' | 'mimeType'>,
+    metadata: Omit<RecorderRecordMetadata, 'id' | 'createdAt' | 'size' | 'mimeType'> & { id?: string },
   ): Promise<string> {
-    const id = crypto.randomUUID()
+    const { id: providedId, ...recordMetadata } = metadata
+    const id = providedId || crypto.randomUUID()
     const createdAt = Date.now()
     const size = blob.size
     const mimeType = blob.type || 'application/octet-stream'
@@ -55,7 +56,7 @@ export class RecorderStorage {
       createdAt,
       size,
       mimeType,
-      ...metadata,
+      ...recordMetadata,
     }
 
     /** 保存 blob */
@@ -66,8 +67,10 @@ export class RecorderStorage {
 
     /** 更新索引 */
     const index = await this.getMetadataIndex()
-    index.push(id)
-    await this.store.setItem(this.getMetadataIndexKey(), index)
+    if (!index.includes(id)) {
+      index.push(id)
+      await this.store.setItem(this.getMetadataIndexKey(), index)
+    }
 
     return id
   }

@@ -1,40 +1,59 @@
 import type { MeetingDetectionContract } from './contract'
-import { readFile, unlink } from 'node:fs/promises'
 import { createIpcService } from '@ipc/core'
-import { pauseRecording, resumeRecording, startRecording, stopRecording } from '@main/audio-recorder'
+import { startRecording as startNativeRecorder } from '@main/audio-recorder'
 import { dismissSession, suppressSession } from '@main/meeting-detection/meeting-detector'
+import { registerNativeRecordingHandlers } from '@main/native-recording'
+import { setNativeRecordingSession } from '@main/native-recording/session'
+import { createRecordingRecoverySession } from '@main/recording-recovery'
+import { recordingState } from '@main/recording-state'
 
 export const meetingDetectionService = createIpcService<MeetingDetectionContract>('meeting-detection', {
   async dismiss(_event, appId: string, pid: number) {
     dismissSession(appId, pid)
   },
 
-  async startRecording(_event, appId: string, pid: number) {
+  async startRecording(_event, appId: string, pid: number, displayName?: string) {
+    if (!recordingState.canStart)
+      return
+
     suppressSession(appId, pid)
-    startRecording()
+    const session = createRecordingRecoverySession('meeting', displayName || appId, {
+      micAudio: true,
+      systemAudio: true,
+    })
+    setNativeRecordingSession(session)
+    recordingState.startMeetingNative()
+    startNativeRecorder(session.outputPath)
     console.log(`[meeting-detection] recording started for: ${appId} pid=${pid}`)
   },
 
   async pauseRecording() {
-    pauseRecording()
+    recordingState.pause()
   },
 
   async resumeRecording() {
-    resumeRecording()
+    recordingState.resume()
   },
 
   async stopRecording() {
-    stopRecording()
+    recordingState.stop()
   },
+})
 
-  /** 录音可达几十 MB，必须异步读取，避免阻塞主进程事件循环 */
-  async readRecordingFile(_event, filePath: string) {
-    const buf = await readFile(filePath)
-    return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
+registerNativeRecordingHandlers('meeting', {
+  onComplete(session, _filePath, duration) {
+    meetingDetectionService.emit('recording-complete', {
+      taskId: session.taskId,
+      name: session.name || 'meeting-recording',
+      duration,
+      mimeType: session.mimeType,
+    })
   },
-
-  async deleteRecordingFile(_event, filePath: string) {
-    try { await unlink(filePath) }
-    catch { /* ignore */ }
+  onError(code, detail) {
+    meetingDetectionService.emit('recording-error', { code, detail })
+    meetingDetectionService.emit('recording-state', { status: 'stopped' })
+  },
+  onMicDegraded(detail) {
+    meetingDetectionService.emit('mic-degraded', { detail })
   },
 })
