@@ -84,10 +84,29 @@ export class NativeBridge<T extends Record<string, any>> {
       })
     }
 
+    let childClosed = false
+
     this.child.on('exit', (code, signal) => {
-      if (signal !== 'SIGTERM' && signal !== 'SIGINT')
-        console.warn(`[${this.config.name}] unexpected exit: code=${code} signal=${signal}`)
+      if (childClosed)
+        return
+
+      childClosed = true
+      const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
       this.child = null
+      if (unexpected) {
+        console.warn(`[${this.config.name}] unexpected exit: code=${code} signal=${signal}`)
+        this.config.onUnexpectedExit?.(code, signal)
+      }
+    })
+
+    this.child.on('error', (error) => {
+      if (childClosed)
+        return
+
+      childClosed = true
+      console.warn(`[${this.config.name}] failed to start:`, error)
+      this.child = null
+      this.config.onUnexpectedExit?.(null, null)
     })
   }
 
@@ -115,5 +134,6 @@ type NativeBridgeConfig<T extends Record<string, any>> = {
   args?: string[]
   writable?: boolean
   logStderr?: boolean
+  onUnexpectedExit?: (code: number | null, signal: NodeJS.Signals | null) => void
   parseLine: (line: string, bus: EventBus<T>) => void
 }

@@ -1,8 +1,16 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import type { ShortcutBindings, ShortcutConfigContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { resumeFnShortcuts, startRecordShortcutDetection, stopRecordShortcutDetection, suspendFnShortcuts } from '@main/keyboard'
+import {
+  filterPersistableShortcutBindings,
+  getElectronShortcutCapabilities,
+  resumeFnShortcuts,
+  startRecordShortcutDetection,
+  stopRecordShortcutDetection,
+  suspendFnShortcuts,
+} from '@main/shortcuts'
 import { readShortcutBindings, writeShortcutBindings } from '@main/store/shortcut-bindings'
+import { normalizeShortcutBindings, resolveShortcutBindingConflicts } from '@shared/shortcuts'
 import { BrowserWindow } from 'electron'
 
 /**
@@ -13,20 +21,33 @@ export function createShortcutConfigService(
 ): void {
   const service = createIpcService<ShortcutConfigContract>('shortcut-config', {
     async getBindings(_e) {
-      return readShortcutBindings()
+      return filterPersistableShortcutBindings(readShortcutBindings())
     },
 
     async setBindings(_e, bindings) {
-      writeShortcutBindings(bindings)
-      onReapply(bindings)
+      const nextBindings = filterPersistableShortcutBindings(
+        resolveShortcutBindingConflicts(normalizeShortcutBindings(bindings)),
+      )
+      writeShortcutBindings(nextBindings)
+      onReapply(nextBindings)
+    },
+
+    async getCapabilities(_e) {
+      return getElectronShortcutCapabilities()
     },
 
     async pauseForRecord(e) {
       suspendFnShortcuts()
       const win = BrowserWindow.fromWebContents((e as IpcMainInvokeEvent).sender)
-      startRecordShortcutDetection((recordEvent) => {
-        service.emit('record', recordEvent, win ?? undefined)
-      })
+      try {
+        startRecordShortcutDetection((recordEvent) => {
+          service.emit('record', recordEvent, win ?? undefined)
+        })
+      }
+      catch (error) {
+        resumeFnShortcuts()
+        throw error
+      }
     },
 
     async resumeAfterRecord(_e) {

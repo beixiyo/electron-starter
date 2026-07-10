@@ -1,7 +1,7 @@
 import type { VoiceImeReleaseResult } from '@shared'
 import type { LiveWaveAudioProps, RecordingControls, VoiceRecorderStatus } from 'comps'
 import { convertToWav, formatDuration } from '@jl-org/tool'
-import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUTS, WindowType } from '@shared'
+import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, WindowType } from '@shared'
 import { useGetState, useLatestCallback } from 'hooks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -61,7 +61,7 @@ export function useVoiceIme() {
     try {
       if (!blob && forcedError) {
         const result: VoiceImeReleaseResult = { duration: pending.duration, error: forcedError }
-        await $ipc.window.release(SHORTCUTS.HOLD_VOICE_IME.windowType, result)
+        await $ipc.window.release(WindowType.VOICE_IME, result)
       }
       else if (blob) {
         const wavBlob = await convertToWav(blob, { sampleRate: 16000, channels: 1 })
@@ -72,7 +72,7 @@ export function useVoiceIme() {
           size: wavBlob.size,
           audioBuffer,
         }
-        await $ipc.window.release(SHORTCUTS.HOLD_VOICE_IME.windowType, result)
+        await $ipc.window.release(WindowType.VOICE_IME, result)
       }
 
       pendingReleaseRef.current = null

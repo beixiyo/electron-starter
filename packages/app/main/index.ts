@@ -1,7 +1,7 @@
 import type { FocusPayload } from '@ipc/services/focus/contract'
-import type { FnComboKey, ShortcutBinding, ShortcutBindings, ShortcutModifier } from '@ipc/services/shortcut-config/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
-import type { KeyboardHotkeyEvent } from './keyboard'
+import type { ShortcutRuntimeEvent } from '@shared/shortcuts'
+import type { ShortcutRuntimeHandlers } from './shortcuts'
 
 import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
@@ -15,22 +15,26 @@ import {
   FOCUS_NATIVE_WINDOW_SIZE,
   HOLD_MIN_DURATION_MS,
   HOLD_SHORT_ERROR_MESSAGE,
-  SHORTCUTS,
   WindowType,
 } from '@shared'
 import { app, BrowserWindow, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { checkFocusedTextInput } from './focus-check'
-import { holdStateManager, registerFnShortcuts, registerHoldGlobalShortcut, registerHotkeyShortcuts, resetShortcutHandlers, setupFnKeyIpc, startFnKeyListener, unregisterHotkeyShortcuts } from './keyboard'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
-import { registerScreenshotShortcut } from './screenshot'
+import { startCaptureFromShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
+import {
+  holdStateManager,
+  onShortcutRuntimeSyncRequested,
+  reapplyShortcutRuntime,
+  setupFnKeyIpc,
+} from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
@@ -54,24 +58,18 @@ if (process.platform === 'darwin') {
 initDeeplink(() => {
   setupAppIdentity()
   setupDisplayMediaHandler()
-  setupVoiceImeHoldShortcut()
   setupBrowserWindowLifecycle()
   setupAppActivation()
 
   createMainWindow()
 
-  const initialBindings = readShortcutBindings()
-  setupFnKeyShortcuts(initialBindings)
-  registerHotkeyShortcuts(initialBindings, HOTKEY_HANDLERS)
+  reapplyAppShortcutRuntime()
   createShortcutConfigService((bindings) => {
-    resetShortcutHandlers()
-    unregisterHotkeyShortcuts()
-    setupFnKeyShortcuts(bindings)
-    registerHotkeyShortcuts(bindings, HOTKEY_HANDLERS)
+    reapplyShortcutRuntime(bindings, SHORTCUT_ACTION_HANDLERS)
   })
+  onShortcutRuntimeSyncRequested(reapplyAppShortcutRuntime)
 
   initSelectionHook()
-  registerScreenshotShortcut(SHORTCUTS.SCREENSHOT.accelerator)
 
   /**
    * 初始化自动更新：桥接 autoUpdater 事件 → IPC，并默认启动后 ~10s 首检、每 4h 轮询
@@ -160,19 +158,6 @@ async function handleVoiceImeRelease(raw: unknown): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
-// Cmd+E 长按快捷键
-// ─────────────────────────────────────────────
-
-function setupVoiceImeHoldShortcut(): void {
-  registerHoldGlobalShortcut({
-    accelerator: SHORTCUTS.HOLD_VOICE_IME.accelerator,
-    windowType: SHORTCUTS.HOLD_VOICE_IME.windowType,
-    canStart: () => ensureMicrophonePermissionOrExplain('voice-ime'),
-    onRelease: handleVoiceImeRelease,
-  })
-}
-
-// ─────────────────────────────────────────────
 // Focus Demo / Shortcut Test — 通过 contract service 发送事件
 // ─────────────────────────────────────────────
 
@@ -211,6 +196,7 @@ function setupBrowserWindowLifecycle(): void {
  */
 function setupAppActivation(): void {
   app.on('activate', () => {
+    reapplyAppShortcutRuntime()
     showOrCreateMainWindow()
   })
 }
@@ -265,7 +251,6 @@ function createMainWindow(): void {
   })!
 
   if (process.platform === 'darwin') {
-    startFnKeyListener()
     setupFnKeyIpc(mainWindow)
   }
 
@@ -299,9 +284,13 @@ function createMainWindow(): void {
   })
 }
 
-// ─────────────────────────────────────────────
-// Fn 键状态机快捷键
-// ─────────────────────────────────────────────
+/**
+ * 快捷键 runtime
+ */
+
+function reapplyAppShortcutRuntime(): void {
+  reapplyShortcutRuntime(readShortcutBindings(), SHORTCUT_ACTION_HANDLERS)
+}
 
 function showShortcutTestWindow(
   label: string,
@@ -314,29 +303,53 @@ function showShortcutTestWindow(
 }
 
 /** hotkey 绑定的触发处理器，按 action id 索引 */
-const HOTKEY_HANDLERS: Record<string, (event: KeyboardHotkeyEvent) => void> = {
-  recording: event => showKeyboardShortcutTestWindow('Recording', event),
-  askAssistant: event => showKeyboardShortcutTestWindow('Ask', event),
-  voiceDictation: handleVoiceDictationHotkey,
-  bookmark: event => showKeyboardShortcutTestWindow('Bookmark', event),
+const SHORTCUT_ACTION_HANDLERS: ShortcutRuntimeHandlers = {
+  recording: handleShortcutAction,
+  askAssistant: handleShortcutAction,
+  voiceDictation: handleShortcutAction,
+  bookmark: handleShortcutAction,
+  screenshot: handleShortcutAction,
 }
 
-function showKeyboardShortcutTestWindow(label: string, event: KeyboardHotkeyEvent): void {
+function handleShortcutAction(event: ShortcutRuntimeEvent): void {
+  switch (event.id) {
+    case 'recording':
+      showShortcutActionTestWindow('Recording', event)
+      return
+    case 'askAssistant':
+      showShortcutActionTestWindow('Ask', event)
+      return
+    case 'voiceDictation':
+      handleVoiceDictationShortcut(event)
+      return
+    case 'bookmark':
+      showShortcutActionTestWindow('Bookmark', event)
+      return
+    case 'screenshot':
+      handleScreenshotShortcut(event)
+      return
+  }
+}
+
+function showShortcutActionTestWindow(label: string, event: ShortcutRuntimeEvent): void {
   if (event.phase !== 'trigger')
     return
 
   const { gesture } = event
   showShortcutTestWindow(
     `${label} (${formatKeyboardGestureLabel(gesture)})`,
-    gesture === 'doublePress'
-      ? 'doublePress'
-      : gesture === 'hold'
-        ? 'hold'
-        : 'hotkey',
+    getShortcutTestTriggerType(event),
   )
 }
 
-function formatKeyboardGestureLabel(gesture: KeyboardHotkeyEvent['gesture']): string {
+function handleScreenshotShortcut(event: ShortcutRuntimeEvent): void {
+  if (event.phase !== 'trigger')
+    return
+
+  void startCaptureFromShortcut()
+}
+
+function formatKeyboardGestureLabel(gesture: ShortcutRuntimeEvent['gesture']): string {
   switch (gesture) {
     case 'press':
       return 'hotkey'
@@ -347,9 +360,19 @@ function formatKeyboardGestureLabel(gesture: KeyboardHotkeyEvent['gesture']): st
   }
 }
 
-function handleVoiceDictationHotkey(event: KeyboardHotkeyEvent): void {
+function getShortcutTestTriggerType(event: ShortcutRuntimeEvent): 'combo' | 'doublePress' | 'hold' | 'hotkey' {
+  if (event.gesture === 'doublePress')
+    return 'doublePress'
+  if (event.gesture === 'hold')
+    return 'hold'
+  if (event.binding.chord.source === 'fn' && event.binding.chord.key !== 'Fn')
+    return 'combo'
+  return 'hotkey'
+}
+
+function handleVoiceDictationShortcut(event: ShortcutRuntimeEvent): void {
   if (event.gesture !== 'hold') {
-    showKeyboardShortcutTestWindow('Voice Dictation', event)
+    showShortcutActionTestWindow('Voice Dictation', event)
     return
   }
 
@@ -378,7 +401,6 @@ async function startVoiceImeKeyboardHold(): Promise<void> {
   holdStateManager.startHold({
     type: WindowType.VOICE_IME,
     onRelease: handleVoiceImeRelease,
-    showWindow: true,
   })
 
   const win = windowManager.get(WindowType.VOICE_IME) || windowManager.create(WindowType.VOICE_IME)
@@ -411,77 +433,8 @@ function finishVoiceImeKeyboardHold(): void {
   sendHoldEndEvent(WindowType.VOICE_IME)
 }
 
+/** keyboard hold 的本地按下态；防止权限检查 await 期间用户已松开但之后又启动录音 */
 let keyboardVoiceImeHoldActive = false
-
-function setupFnKeyShortcuts(bindings: ShortcutBindings): void {
-  if (process.platform !== 'darwin')
-    return
-
-  let holdBinding: ShortcutBinding | null = null
-  let doublePressBinding: ShortcutBinding | null = null
-
-  const combos = Object.entries(bindings).flatMap(([id, b]) => {
-    if (!b || b.chord.source !== 'fn')
-      return []
-
-    if (b.chord.key === 'Fn') {
-      if (b.gesture === 'hold' && id === 'voiceDictation')
-        holdBinding = b
-      if (b.gesture === 'doublePress' && id === 'askAssistant')
-        doublePressBinding = b
-      return []
-    }
-
-    if (b.gesture !== 'press' && b.gesture !== 'doublePress')
-      return []
-
-    const { key, modifiers } = b.chord
-    return [{
-      key: key as FnComboKey,
-      modifiers: normalizeFnModifiers(modifiers),
-      gesture: b.gesture,
-      intervalMs: b.intervalMs,
-      onTrigger: () => {
-        console.log(`[fn:${b.gesture}] ✅ Fn+${key} → ${id}`)
-        showShortcutTestWindow(
-          b.gesture === 'doublePress'
-            ? `Double Fn + ${key}`
-            : `Fn + ${key}`,
-          b.gesture === 'doublePress'
-            ? 'doublePress'
-            : 'combo',
-        )
-      },
-    }]
-  })
-
-  registerFnShortcuts({
-    hold: holdBinding
-      ? {
-          windowType: WindowType.VOICE_IME,
-          canStart: () => ensureMicrophonePermissionOrExplain('voice-ime'),
-          onRelease: handleVoiceImeRelease,
-        }
-      : undefined,
-
-    doublePress: doublePressBinding
-      ? {
-          onTrigger: () => {
-            console.log('[fn:double] ✅ 双击触发')
-            showShortcutTestWindow('Ask (double fn)', 'doublePress')
-          },
-        }
-      : undefined,
-
-    combos,
-  })
-}
-
-function normalizeFnModifiers(modifiers: ShortcutModifier[] | undefined): Exclude<ShortcutModifier, 'Primary'>[] {
-  return (modifiers ?? []).filter((modifier): modifier is Exclude<ShortcutModifier, 'Primary'> => {
-    return modifier !== 'Primary'
-  })
-}
 
 function startFocusCheckPolling(): void {
   let prevKey = ''

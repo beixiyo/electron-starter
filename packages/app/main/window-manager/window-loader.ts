@@ -33,7 +33,7 @@ export async function createWindowsSequentially(
      * 继续往下走只会白等 timeoutMs 并重复执行 onLoaded
      */
     if (windowManager.exists(task.type)) {
-      console.log(`[dock-test] ${task.type}: 已存在，跳过（修复前这里会空等 ${timeoutMs}ms）`)
+      console.log(`[window-loader] skip preload type=${task.type}: already exists`)
       continue
     }
 
@@ -62,14 +62,14 @@ export async function createWindowsSequentially(
       }
 
       const onLoad = (): void => {
-        done(`[dock-test] ${task.type}: did-finish-load 正常加载（耗时 ${Date.now() - startedAt}ms）`)
+        done(`[window-loader] loaded type=${task.type} duration=${Date.now() - startedAt}ms`)
       }
       const onClosed = (): void => {
-        done(`[dock-test] ${task.type}: 窗口已关闭，停止等待 did-finish-load`)
+        done(`[window-loader] stop waiting type=${task.type}: window closed`)
       }
       const timer = setTimeout(() => {
         /** 超时放行时移除监听器，避免在长寿命 webContents 上累积 */
-        done(`[dock-test] ${task.type}: 等待 did-finish-load 超时放行（${timeoutMs}ms，监听器已移除）`)
+        done(`[window-loader] preload timeout type=${task.type} timeout=${timeoutMs}ms`)
       }, timeoutMs)
       webContents.once('did-finish-load', onLoad)
       win.once('closed', onClosed)

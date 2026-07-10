@@ -1,14 +1,26 @@
-import type { ShortcutBinding, ShortcutChord, ShortcutGestureType, ShortcutModifier } from '@ipc/services/shortcut-config/contract'
-import { DEFAULT_BINDINGS, shortcutChordsEqual } from '@ipc/services/shortcut-config/contract'
+import type {
+  ShortcutBinding,
+  ShortcutChord,
+  ShortcutGestureBinding,
+  ShortcutGestureType,
+  ShortcutModifier,
+  ShortcutScope,
+} from '@shared/shortcuts'
+import { SHORTCUT_ACTIONS, shortcutBindingsConflict } from '@shared/shortcuts'
 
 export type { ShortcutBinding }
-export type { FnComboKey } from '@ipc/services/fn/contract'
+export type { FnComboKey, ShortcutGestureBinding, ShortcutScope } from '@shared/shortcuts'
 
+/** 设置页可录制的手势类型 */
 export type GestureType = ShortcutGestureType
 
+/** 设置页展示的快捷键 action */
 export type ShortcutAction = {
+  /** action id */
   id: string
+  /** 展示名称 */
   label: string
+  /** 当前绑定，null 表示禁用 */
   binding: ShortcutBinding | null
   /** 该 action 允许录制的手势类型 */
   supportedGestures: GestureType[]
@@ -63,9 +75,7 @@ const HOTKEY_DISPLAY: Record<string, string> = {
   ArrowDown: '↓',
 }
 
-const ALL_GESTURES: GestureType[] = ['press', 'doublePress', 'hold']
-
-export function formatBinding(binding: ShortcutBinding): string {
+export function formatBinding(binding: ShortcutGestureBinding): string {
   const chord = formatChord(binding.chord)
 
   switch (binding.gesture) {
@@ -78,15 +88,14 @@ export function formatBinding(binding: ShortcutBinding): string {
   }
 }
 
+export function getScopeLabel(scope: ShortcutScope): string {
+  return scope === 'global'
+    ? '全局'
+    : '窗口内'
+}
+
 export function bindingsConflict(a: ShortcutBinding, b: ShortcutBinding): boolean {
-  if (!shortcutChordsEqual(a.chord, b.chord))
-    return false
-
-  if (a.chord.source === 'fn' && b.chord.source === 'fn' && a.chord.key === 'Fn') {
-    return a.gesture === b.gesture
-  }
-
-  return true
+  return shortcutBindingsConflict(a, b)
 }
 
 function formatChord(chord: ShortcutChord): string {
@@ -102,29 +111,9 @@ function formatChord(chord: ShortcutChord): string {
   return `${mods}${key}`
 }
 
-export const DEFAULT_ACTIONS: ShortcutAction[] = [
-  {
-    id: 'recording',
-    label: '录音',
-    binding: DEFAULT_BINDINGS.recording,
-    supportedGestures: ALL_GESTURES,
-  },
-  {
-    id: 'askAssistant',
-    label: 'Ask',
-    binding: DEFAULT_BINDINGS.askAssistant,
-    supportedGestures: ALL_GESTURES,
-  },
-  {
-    id: 'voiceDictation',
-    label: '语音听写',
-    binding: DEFAULT_BINDINGS.voiceDictation,
-    supportedGestures: ALL_GESTURES,
-  },
-  {
-    id: 'bookmark',
-    label: '标记',
-    binding: DEFAULT_BINDINGS.bookmark,
-    supportedGestures: ALL_GESTURES,
-  },
-]
+export const DEFAULT_ACTIONS: ShortcutAction[] = SHORTCUT_ACTIONS.map(action => ({
+  id: action.id,
+  label: action.label,
+  binding: action.binding,
+  supportedGestures: [...action.supportedGestures],
+}))

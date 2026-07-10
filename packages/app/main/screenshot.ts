@@ -15,7 +15,6 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
-  globalShortcut,
   nativeImage,
   screen,
   webContents,
@@ -151,13 +150,6 @@ export async function startCaptureFromShortcut(): Promise<string> {
     targetWindowType: WindowType.MAIN,
     fallback: 'main',
     requester: 'global-shortcut',
-  })
-}
-
-/** 注册全局快捷键截图（模板仍走 globalShortcut；下游可迁移到绑定配置体系） */
-export function registerScreenshotShortcut(accelerator: string): void {
-  globalShortcut.register(accelerator, () => {
-    startCaptureFromShortcut()
   })
 }
 

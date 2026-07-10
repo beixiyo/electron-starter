@@ -26,11 +26,8 @@ const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
  */
 export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
   if (kind === 'accessibility') {
-    /** 非 macOS 无此概念，视为已授予 */
-    if (process.platform !== 'darwin') {
-      return 'granted'
-    }
-    return systemPreferences.isTrustedAccessibilityClient(false) && isFnListenerAccessibilityTrusted()
+    return getAppAccessibilityStatus() === 'granted'
+      && getFnListenerAccessibilityStatus() === 'granted'
       ? 'granted'
       : 'denied'
   }
@@ -43,6 +40,28 @@ export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
   }
 
   return getMediaAccessStatus(kind)
+}
+
+/** 当前 Electron App 进程的辅助功能授权；普通 keyboard 全局监听依赖它 */
+export function getAppAccessibilityStatus(): PermissionStatus {
+  /** 非 macOS 无此概念，视为已授予 */
+  if (process.platform !== 'darwin')
+    return 'granted'
+
+  return systemPreferences.isTrustedAccessibilityClient(false)
+    ? 'granted'
+    : 'denied'
+}
+
+/** Fn listener helper 的辅助功能授权；Fn/Globe 捕获 backend 依赖它 */
+export function getFnListenerAccessibilityStatus(): PermissionStatus {
+  /** 非 macOS 无此概念；Fn backend 仍由平台能力单独判断 */
+  if (process.platform !== 'darwin')
+    return 'granted'
+
+  return isFnListenerAccessibilityTrusted()
+    ? 'granted'
+    : 'denied'
 }
 
 /**

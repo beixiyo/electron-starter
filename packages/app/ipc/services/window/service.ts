@@ -1,7 +1,7 @@
 import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { holdStateManager } from '@main/keyboard'
+import { holdStateManager } from '@main/shortcuts'
 import { getShortcutTestWindowBounds, logicalWindowManager, windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
 

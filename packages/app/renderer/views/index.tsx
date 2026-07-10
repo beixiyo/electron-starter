@@ -4,6 +4,7 @@ import { Bell, Camera, DownloadCloud, Keyboard } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccessibilityGate, PermissionModal, usePermissions } from '../components/permission'
+import { isElectron } from '../utils/env'
 
 /**
  * 主布局组件，包含侧边栏导航
@@ -12,6 +13,7 @@ export default function Layout() {
   const { t } = useTranslation('layout')
   const { t: tApp } = useTranslation('app')
   const permissionGate = usePermissions()
+  const { ensure } = permissionGate
   const [isCollapsed, setIsCollapsed] = useState(false)
   const location = useLocation()
 
@@ -22,20 +24,25 @@ export default function Layout() {
     { key: 'update', path: '/update', icon: <DownloadCloud size={ 18 } />, label: t('menu.update') },
   ]
 
-  useEffect(() => $ipc.permission.on('required', ({ kinds, reason }) => {
-    const title = reason === 'voice-ime'
-      ? tApp('permission.voiceImeMicrophoneTitle', '允许语音输入使用麦克风')
-      : tApp('permission.recordingMicrophoneTitle', '允许录音使用麦克风')
+  useEffect(() => {
+    if (!isElectron())
+      return
 
-    const subtitle = reason === 'voice-ime'
-      ? tApp('permission.voiceImeMicrophoneSubtitle', '唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。')
-      : tApp('permission.recordingMicrophoneSubtitle', '开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。')
+    return $ipc.permission.on('required', ({ kinds, reason }) => {
+      const title = reason === 'voice-ime'
+        ? tApp('permission.voiceImeMicrophoneTitle', '允许语音输入使用麦克风')
+        : tApp('permission.recordingMicrophoneTitle', '允许录音使用麦克风')
 
-    permissionGate.ensure(kinds, {
-      title,
-      subtitle,
+      const subtitle = reason === 'voice-ime'
+        ? tApp('permission.voiceImeMicrophoneSubtitle', '唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。')
+        : tApp('permission.recordingMicrophoneSubtitle', '开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。')
+
+      ensure(kinds, {
+        title,
+        subtitle,
+      })
     })
-  }), [permissionGate.ensure, tApp])
+  }, [ensure, tApp])
 
   return (
     <main className="h-screen bg-white dark:bg-zinc-950">

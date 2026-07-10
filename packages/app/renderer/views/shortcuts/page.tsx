@@ -1,47 +1,110 @@
+import type { ShortcutScope } from '@shared/shortcuts'
+import { canUseShortcutScope } from '@shared/shortcuts'
 import { useLatestCallback } from 'hooks'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { getShortcutCapabilities, pauseShortcutRecord, resumeShortcutRecord } from '@/shortcuts/shortcutConfigAdapter'
 import { ShortcutRow } from './ShortcutRow'
 import { bindingsConflict } from './types'
 import { useRecordBinding } from './useRecordBinding'
 import { useShortcutsList } from './useShortcutsList'
 
 export default function ShortcutsPage() {
-  const { actions, updateBinding, resetToDefault } = useShortcutsList()
+  const { actions, updateBinding, updateBindingScope, resetToDefault } = useShortcutsList()
   const recorder = useRecordBinding()
   const [recordingId, setRecordingId] = useState<string | null>(null)
+  const [recordingScope, setRecordingScope] = useState<ShortcutScope>('local')
+  const [canUseGlobalScope, setCanUseGlobalScope] = useState(false)
+  const mountedRef = useRef(true)
+  const recorderRef = useRef(recorder)
+  const recordStartSeqRef = useRef(0)
+
+  recorderRef.current = recorder
+
+  const defaultScope: ShortcutScope = canUseGlobalScope
+    ? 'global'
+    : 'local'
+  const resolveScope = (scope: ShortcutScope): ShortcutScope => canUseGlobalScope
+    ? scope
+    : 'local'
+
+  useEffect(() => {
+    let disposed = false
+
+    getShortcutCapabilities().then((capabilities) => {
+      if (disposed)
+        return
+
+      setCanUseGlobalScope(canUseShortcutScope(capabilities, 'global'))
+    })
+
+    return () => {
+      disposed = true
+    }
+  }, [])
 
   const handleStart = useLatestCallback((id: string) => {
+    if (recordingId)
+      return
+
     const action = actions.find(a => a.id === id)
     if (!action)
       return
-    window.$ipc.shortcutConfig.pauseForRecord()
-    setRecordingId(id)
-    recorder.start(action.supportedGestures)
+
+    const seq = ++recordStartSeqRef.current
+    void pauseShortcutRecord()
+      .then(() => {
+        if (!mountedRef.current || seq !== recordStartSeqRef.current) {
+          void resumeShortcutRecord()
+          return
+        }
+
+        setRecordingId(id)
+        setRecordingScope(resolveScope(action.binding?.scope ?? defaultScope))
+        recorder.start(action.supportedGestures)
+      })
+      .catch(() => {
+        void resumeShortcutRecord()
+      })
   })
 
   const handleConfirm = useLatestCallback(() => {
+    recordStartSeqRef.current++
+
     const id = recordingId
     const binding = recorder.detected
     if (id && binding) {
+      const scopedBinding = {
+        ...binding,
+        scope: resolveScope(recordingScope),
+      }
       /** 新绑定优先：清空同 chord 下会互相抢占的绑定 */
       const evicted = actions.filter((a) => {
         if (a.id === id || !a.binding)
           return false
-        return bindingsConflict(binding, a.binding)
+        return bindingsConflict(scopedBinding, a.binding)
       })
       for (const a of evicted) updateBinding(a.id, null)
-      updateBinding(id, binding)
+      updateBinding(id, scopedBinding)
     }
     recorder.cancel()
     setRecordingId(null)
-    window.$ipc.shortcutConfig.resumeAfterRecord()
+    void resumeShortcutRecord()
   })
 
   const handleCancel = useLatestCallback(() => {
+    recordStartSeqRef.current++
     recorder.cancel()
     setRecordingId(null)
-    window.$ipc.shortcutConfig.resumeAfterRecord()
+    void resumeShortcutRecord()
   })
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      recorderRef.current.cancel()
+      void resumeShortcutRecord()
+    }
+  }, [])
 
   useEffect(() => {
     if (!recordingId)
@@ -52,7 +115,7 @@ export default function ShortcutsPage() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [recordingId])
+  }, [handleCancel, recordingId])
 
   return (
     <div className="px-8 py-8">
@@ -69,10 +132,22 @@ export default function ShortcutsPage() {
               isRecording={ recordingId === action.id && recorder.isRecording }
               isDetected={ recordingId === action.id && recorder.isDetected }
               isUnsupported={ recordingId === action.id && recorder.isUnsupported }
+              scope={ recordingId === action.id
+                ? recordingScope
+                : resolveScope(action.binding?.scope ?? defaultScope) }
+              canUseGlobalScope={ canUseGlobalScope }
               detected={ recordingId === action.id
                 ? recorder.detected
                 : null }
               onStartRecord={ () => handleStart(action.id) }
+              onScopeChange={ (scope) => {
+                const nextScope = resolveScope(scope)
+                if (recordingId === action.id) {
+                  setRecordingScope(nextScope)
+                  return
+                }
+                updateBindingScope(action.id, nextScope)
+              } }
               onConfirm={ handleConfirm }
               onCancel={ handleCancel }
               onReset={ () => resetToDefault(action.id) }

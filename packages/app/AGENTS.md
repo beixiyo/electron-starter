@@ -27,7 +27,7 @@
 packages/app/
 ├── main/              # Electron 主进程
 │   ├── index.ts       # 应用入口
-│   ├── keyboard/      # 键盘监听与快捷键（含 macOS Fn 子进程管理）
+│   ├── shortcuts/     # 快捷键捕获与运行时（含 macOS Fn 子进程管理）
 │   ├── audio-recorder/# 原生录音子进程桥接
 │   ├── window-manager/# 窗口生命周期管理
 │   ├── media/         # 媒体捕获权限与工具
@@ -221,7 +221,7 @@ type BroadcastMessage<T> = {
 - 主进程管理子进程生命周期，通过 stdout 协议接收事件：`FN_DOWN` / `FN_UP` / `FN_COMBO_<key>`
 - 300ms 状态机支持三种模式：**Hold**（长按）/ **DoublePress**（双击）/ **Combo**（组合键）
 - Swift 源码：`native/mac/fn-listener.swift`
-- 代码入口：`main/keyboard/fn/core.ts`（子进程管理）、`main/keyboard/fn/state-machine.ts`（状态机）
+- 代码入口：`main/shortcuts/fn/core.ts`（子进程管理）、`main/shortcuts/fn/state-machine.ts`（状态机）
 - **注意 50ms 缓冲**：HID 事件存在时序抖动，详见 `docs/fn-key.md`
 
 ### 文本焦点检测（focus-check）

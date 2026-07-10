@@ -1,0 +1,14 @@
+/** 注册应用退出时的快捷键清理逻辑（副作用导入） */
+import './cleanup'
+
+export * from './capabilities'
+export * from './fn'
+export * from './global'
+export * from './hold'
+export * from './providers'
+export * from './record'
+export * from './runtime'
+export * from './runtime-backend'
+export * from './runtime-sync'
+export * from './scope'
+export * from './uiohook-lifecycle'

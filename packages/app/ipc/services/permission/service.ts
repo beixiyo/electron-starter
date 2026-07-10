@@ -1,19 +1,19 @@
 import type { PermissionKind } from '@shared'
 import type { PermissionContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { isFnKeyListenerRunning, startFnKeyListener } from '@main/keyboard/fn/core'
 import { getPermissionStatus, openPrivacySettings, requestPermission } from '@main/permissions'
+import { requestShortcutRuntimeSync } from '@main/shortcuts/runtime-sync'
 
 export const permissionService = createIpcService<PermissionContract>('permission', {
   async get(_event, kind: PermissionKind) {
     const status = getPermissionStatus(kind)
-    syncAccessibilityRuntime(kind, status)
+    syncAccessibilityRuntime(kind)
     return status
   },
 
   async request(_event, kind: PermissionKind) {
     const status = await requestPermission(kind)
-    syncAccessibilityRuntime(kind, status)
+    syncAccessibilityRuntime(kind)
     return status
   },
 
@@ -22,12 +22,10 @@ export const permissionService = createIpcService<PermissionContract>('permissio
   },
 })
 
-function syncAccessibilityRuntime(kind: PermissionKind, status: string): void {
-  if (kind !== 'accessibility' || status !== 'granted') {
+function syncAccessibilityRuntime(kind: PermissionKind): void {
+  if (kind !== 'accessibility') {
     return
   }
 
-  if (!isFnKeyListenerRunning()) {
-    startFnKeyListener()
-  }
+  requestShortcutRuntimeSync()
 }

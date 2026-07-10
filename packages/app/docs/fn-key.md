@@ -114,8 +114,8 @@ window.$ipc.fn.onUp(() => console.log('fn released'))
 |------|------|
 | `native/mac/fn-listener.swift` | HID 层监听 Fn + 键盘事件，输出协议事件 |
 | `resources/native/mac/fn-listener` | 编译后的 macOS helper 二进制 |
-| `main/keyboard/fn/core.ts` | 管理 Swift 子进程，解析 stdout，分发 key/combo 监听器 |
-| `main/keyboard/fn/state-machine.ts` | 300ms 状态机，裁决 Hold / DoublePress / Combo |
+| `main/shortcuts/fn/core.ts` | 管理 Swift 子进程，解析 stdout，分发 key/combo 监听器 |
+| `main/shortcuts/fn/state-machine.ts` | 300ms 状态机，裁决 Hold / DoublePress / Combo |
 | `main/index.ts` | 注册具体业务行为 |
 
 ## 兼容性

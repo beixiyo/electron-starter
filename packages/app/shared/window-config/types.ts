@@ -2,32 +2,6 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 import type { WindowType } from '../types/window'
 
 /**
- * 内部使用的虚拟 WindowType，用于没有窗口的长按状态
- * 这个值不应该在实际的窗口操作中使用
- */
-export const INTERNAL_HOLD_NO_WINDOW = '__INTERNAL_HOLD_NO_WINDOW__' as const
-
-/** 长按开始配置 */
-export interface HoldStartConfig {
-  /** 窗口类型，可选。如果不提供，则使用内部虚拟类型，不会打开窗口 */
-  type?: WindowType
-  /** 松开时的回调函数，接收结果数据 */
-  onRelease?: (result: unknown) => void
-  /** 是否显示窗口，默认为 true。如果 type 未提供，此选项无效 */
-  showWindow?: boolean
-}
-
-/** 长按结束配置 */
-export interface HoldEndConfig {
-  /** 窗口类型，可选。如果不提供，则使用内部虚拟类型 */
-  type?: WindowType
-  /** 结果数据 */
-  result?: unknown
-  /** 是否隐藏窗口，默认为 true。如果 type 未提供，此选项无效 */
-  hideWindow?: boolean
-}
-
-/**
  * 窗口位置策略
  */
 export type WindowPosition
@@ -92,51 +66,6 @@ export interface WindowBounds {
   y: number
   width: number
   height: number
-}
-
-/** 长按状态信息 */
-export interface HoldState {
-  isHolding: boolean
-  startTime: number
-  windowType: WindowType | typeof INTERNAL_HOLD_NO_WINDOW
-  /** 仅在主进程中使用，不通过 IPC 传输 */
-  onRelease?: (result: unknown) => void
-}
-
-/** 可通过 IPC 传输的长按状态信息（不包含函数） */
-export interface SerializableHoldState {
-  isHolding: boolean
-  startTime: number
-  windowType: WindowType | typeof INTERNAL_HOLD_NO_WINDOW
-}
-
-/**
- * registerFnShortcuts 的统一配置
- *
- * hold / doublePress / combos 三者互斥，
- * 通过 300ms DECIDING 窗口自动裁决用户意图
- */
-export type FnShortcutsConfig = {
-  hold?: {
-    windowType?: WindowType
-    showWindow?: boolean
-    canStart?: () => boolean | Promise<boolean>
-    onRelease?: (result: any) => void
-  }
-  doublePress?: {
-    windowType?: WindowType
-    onTrigger: () => void
-  }
-  combos?: Array<{
-    key: string
-    /** 额外要求同时按住的修饰符（空 / undefined = 无修饰符） */
-    modifiers?: import('@ipc/services/fn/contract').Modifier[]
-    /** @default "press" */
-    gesture?: 'press' | 'doublePress'
-    /** @default 300 */
-    intervalMs?: number
-    onTrigger: () => void
-  }>
 }
 
 export interface WindowMetadata {

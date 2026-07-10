@@ -1,8 +1,13 @@
-import type { ShortcutBindings } from '@ipc/services/shortcut-config/contract'
-import { DEFAULT_BINDINGS } from '@ipc/services/shortcut-config/contract'
+import type { ShortcutBindings } from '@shared/shortcuts'
+import { DEFAULT_BINDINGS, normalizeShortcutBindings, resolveShortcutBindingConflicts } from '@shared/shortcuts'
 import { createStore } from '.'
 
 const store = createStore<ShortcutBindings>('shortcut-bindings.json', DEFAULT_BINDINGS)
 
-export const readShortcutBindings = store.read
-export const writeShortcutBindings = store.write
+export function readShortcutBindings(): ShortcutBindings {
+  return resolveShortcutBindingConflicts(normalizeShortcutBindings(store.read()))
+}
+
+export function writeShortcutBindings(bindings: ShortcutBindings): void {
+  store.write(resolveShortcutBindingConflicts(normalizeShortcutBindings(bindings)))
+}

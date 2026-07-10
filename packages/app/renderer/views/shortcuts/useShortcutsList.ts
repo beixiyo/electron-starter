@@ -1,22 +1,47 @@
+import type { ShortcutScope } from '@shared/shortcuts'
 import type { ShortcutAction, ShortcutBinding } from './types'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useState } from 'react'
+import { getShortcutBindings, getShortcutDefaultBindings, setShortcutBindings } from '@/shortcuts/shortcutConfigAdapter'
 import { DEFAULT_ACTIONS } from './types'
 
 export function useShortcutsList() {
+  const [defaultActions, setDefaultActions] = useState<ShortcutAction[]>(
+    () => DEFAULT_ACTIONS.map(a => ({ ...a })),
+  )
   const [actions, setActions] = useState<ShortcutAction[]>(
     () => DEFAULT_ACTIONS.map(a => ({ ...a })),
   )
 
   useEffect(() => {
-    window.$ipc.shortcutConfig.getBindings().then((bindings) => {
-      setActions(DEFAULT_ACTIONS.map(a => ({
+    let disposed = false
+
+    Promise.all([
+      getShortcutDefaultBindings(),
+      getShortcutBindings(),
+    ]).then(([defaultBindings, bindings]) => {
+      if (disposed)
+        return
+
+      const nextDefaultActions = DEFAULT_ACTIONS.map(a => ({
+        ...a,
+        binding: a.id in defaultBindings
+          ? defaultBindings[a.id]
+          : a.binding,
+      }))
+
+      setDefaultActions(nextDefaultActions)
+      setActions(nextDefaultActions.map(a => ({
         ...a,
         binding: a.id in bindings
           ? bindings[a.id]
           : a.binding,
       })))
     })
+
+    return () => {
+      disposed = true
+    }
   }, [])
 
   const updateBinding = useLatestCallback((id: string, binding: ShortcutBinding | null) => {
@@ -24,7 +49,20 @@ export function useShortcutsList() {
       const next = prev.map(a => a.id === id
         ? { ...a, binding }
         : a)
-      window.$ipc.shortcutConfig.setBindings(
+      void setShortcutBindings(
+        Object.fromEntries(next.map(a => [a.id, a.binding])),
+      )
+      return next
+    })
+  })
+
+  const updateBindingScope = useLatestCallback((id: string, scope: ShortcutScope) => {
+    setActions((prev) => {
+      const next = prev.map(a => a.id === id && a.binding
+        ? { ...a, binding: { ...a.binding, scope } }
+        : a)
+
+      void setShortcutBindings(
         Object.fromEntries(next.map(a => [a.id, a.binding])),
       )
       return next
@@ -32,10 +70,10 @@ export function useShortcutsList() {
   })
 
   const resetToDefault = useLatestCallback((id: string) => {
-    const def = DEFAULT_ACTIONS.find(a => a.id === id)
+    const def = defaultActions.find(a => a.id === id)
     if (def)
       updateBinding(id, def.binding)
   })
 
-  return { actions, updateBinding, resetToDefault }
+  return { actions, updateBinding, updateBindingScope, resetToDefault }
 }

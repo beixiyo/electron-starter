@@ -2,6 +2,7 @@ import type { PermissionKind, PermissionStatus } from '@shared'
 import type { PermissionEnsureOptions, PermissionStatusMap } from './types'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useState } from 'react'
+import { isElectron } from '@/utils/env'
 import { isPermissionSatisfied } from './constants'
 
 /**
@@ -19,6 +20,12 @@ export function usePermissions(): PermissionGate {
   const [subtitle, setSubtitle] = useState<string>()
 
   const refresh = useLatestCallback(async (list: PermissionKind[]) => {
+    if (!isElectron()) {
+      const map = createGrantedPermissionMap(list)
+      setStatuses(prev => ({ ...prev, ...map }))
+      return map
+    }
+
     const entries = await Promise.all(
       list.map(async kind => [kind, await $ipc.permission.get(kind)] as const),
     )
@@ -28,12 +35,21 @@ export function usePermissions(): PermissionGate {
   })
 
   const requestOne = useLatestCallback(async (kind: PermissionKind) => {
+    if (!isElectron()) {
+      const status: PermissionStatus = 'granted'
+      setStatuses(prev => ({ ...prev, [kind]: status }))
+      return status
+    }
+
     const status = await $ipc.permission.request(kind)
     setStatuses(prev => ({ ...prev, [kind]: status }))
     return status
   })
 
   const openSettings = useLatestCallback((kind: PermissionKind) => {
+    if (!isElectron())
+      return Promise.resolve(false)
+
     return $ipc.permission.openSettings(kind)
   })
 
@@ -85,6 +101,10 @@ export function usePermissions(): PermissionGate {
     refresh,
     close,
   }
+}
+
+function createGrantedPermissionMap(list: PermissionKind[]): PermissionStatusMap {
+  return Object.fromEntries(list.map(kind => [kind, 'granted'])) as PermissionStatusMap
 }
 
 export type PermissionGate = {
