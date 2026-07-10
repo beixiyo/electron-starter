@@ -253,6 +253,12 @@ function createMainWindow(): void {
   const splash = createSplashWindow()
 
   const mainWindow = windowManager.create(WindowType.MAIN, {
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hidden' as const,
+          trafficLightPosition: { x: 14, y: 14 },
+        }
+      : {}),
     ...(process.platform === 'linux'
       ? { icon }
       : {}),

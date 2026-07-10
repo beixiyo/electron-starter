@@ -31,6 +31,15 @@ export function isWeb(): boolean {
 }
 
 /**
+ * 判断当前是否运行在 macOS Electron 端
+ *
+ * Web 环境没有 preload 暴露的 `$electron`，固定返回 false
+ */
+export function isMac(): boolean {
+  return isElectron() && window.$electron.process.platform === 'darwin'
+}
+
+/**
  * 类型守卫：确保当前环境是 Electron
  * 用于 TypeScript 类型收窄
  *

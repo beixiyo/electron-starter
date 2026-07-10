@@ -4,7 +4,13 @@ import { Bell, Camera, DownloadCloud, Keyboard } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccessibilityGate, PermissionModal, usePermissions } from '../components/permission'
-import { isElectron } from '../utils/env'
+import { isElectron, isMac } from '../utils/env'
+
+const SIDEBAR_LAYOUT = {
+  expandedWidth: 180,
+  collapsedWidth: 64,
+  macCollapsedWidth: 72,
+} as const
 
 /**
  * 主布局组件，包含侧边栏导航
@@ -16,6 +22,7 @@ export default function Layout() {
   const { ensure } = permissionGate
   const [isCollapsed, setIsCollapsed] = useState(false)
   const location = useLocation()
+  const showMacTrafficLights = isMac()
 
   const menu = [
     { key: 'recorder', path: '/recorder', icon: <Camera size={ 18 } />, label: t('menu.recorder') },
@@ -45,19 +52,27 @@ export default function Layout() {
   }, [ensure, tApp])
 
   return (
-    <main className="h-screen bg-white dark:bg-zinc-950">
+    <main className="h-screen bg-background">
       <div className="flex h-full">
         {/* 左侧折叠菜单 */ }
         <CollapsibleSidebar
           isCollapsed={ isCollapsed }
           onToggle={ () => setIsCollapsed(!isCollapsed) }
           position="left"
-          expandedWidth={ 180 }
-          collapsedWidth={ 64 }
+          expandedWidth={ SIDEBAR_LAYOUT.expandedWidth }
+          collapsedWidth={ showMacTrafficLights
+            ? SIDEBAR_LAYOUT.macCollapsedWidth
+            : SIDEBAR_LAYOUT.collapsedWidth }
           header={ {
             title: t('title'),
+            className: showMacTrafficLights
+              ? 'pt-10 [-webkit-app-region:drag]'
+              : undefined,
           } }
-          className="border-r border-zinc-200 dark:border-zinc-800"
+          toggleButtonClassName={ showMacTrafficLights
+            ? '[-webkit-app-region:no-drag]'
+            : undefined }
+          className="border-r border-border"
           contentClassName="p-2"
         >
           <nav className="space-y-1">
@@ -70,8 +85,8 @@ export default function Layout() {
                   className={ [
                     'w-full flex items-center rounded-lg px-3 py-2 transition-colors',
                     isActive
-                      ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100'
-                      : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800',
+                      ? 'bg-background2 text-text'
+                      : 'text-text2 hover:bg-background2 hover:text-text',
                   ].join(' ') }
                   aria-current={ isActive
                     ? 'page'
@@ -88,7 +103,7 @@ export default function Layout() {
         </CollapsibleSidebar>
 
         {/* 右侧内容区 */ }
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-y-auto">
           <Outlet />
         </div>
       </div>
