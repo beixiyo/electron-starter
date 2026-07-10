@@ -1,10 +1,10 @@
 import type { UpdateContract, UpdateInfoLite, UpdateStatus, UpdateStatusEvent } from './contract'
 import { readdir, stat } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { createIpcService } from '@ipc/core'
 import { loadEnv } from '@jl-org/tool/node'
+import { getUpdaterCacheStorageAreaPath } from '@main/storage'
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
 
@@ -14,12 +14,6 @@ import electronUpdater from 'electron-updater'
  * 按官方建议从 default 导出解构（electron-builder#7976）
  */
 const { autoUpdater } = electronUpdater
-/**
- * electron-updater 的本地缓存目录名，pending 安装包落在 `<cache>/<此目录>/pending/`
- * 默认由 electron-builder 按 package.json 的 `name` 推导为 `<name>-updater`（本项目 name=`app` → `app-updater`），
- * 仅用于「原生 download-progress 不触发时」的落盘进度兜底；必须与打包产物 app-update.yml 里的 `updaterCacheDirName` 一致
- */
-const UPDATER_CACHE_DIR_NAME = 'app-updater'
 
 /**
  * 应用更新 IPC 服务（主进程实现）
@@ -284,7 +278,7 @@ async function emitPendingDownloadProgress(): Promise<void> {
 }
 
 async function findPendingDownloadFile(): Promise<string | null> {
-  const pendingDir = join(getAppCacheDir(), UPDATER_CACHE_DIR_NAME, 'pending')
+  const pendingDir = getUpdaterCacheStorageAreaPath('updater-cache')
   const targetFileName = pendingDownloadTarget?.fileName
   if (targetFileName) {
     const targetPath = join(pendingDir, `temp-${targetFileName}`)
@@ -303,16 +297,6 @@ async function findPendingDownloadFile(): Promise<string | null> {
   return tempInstaller
     ? join(pendingDir, tempInstaller.name)
     : null
-}
-
-function getAppCacheDir(): string {
-  if (process.platform === 'win32')
-    return process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local')
-
-  if (process.platform === 'darwin')
-    return join(homedir(), 'Library', 'Caches')
-
-  return process.env.XDG_CACHE_HOME || join(homedir(), '.cache')
 }
 
 function getPendingDownloadTarget(info: UpdateInfoWithFiles): PendingDownloadTarget | null {

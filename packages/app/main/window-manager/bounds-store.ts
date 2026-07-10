@@ -1,8 +1,6 @@
 import type { WindowBounds, WindowType } from '@shared'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { debounce } from '@jl-org/tool'
-import { app } from 'electron'
+import { getUserDataStorageAreaPath, readJsonFileSync, writeJsonFileSync } from '@main/storage'
 
 /**
  * 窗口 bounds 持久化
@@ -12,7 +10,6 @@ import { app } from 'electron'
  * - 写入做 300ms 防抖（resize 期间会高频触发），合并写整个 map
  */
 
-const FILE_NAME = 'window-bounds.json'
 const WRITE_DEBOUNCE = 300
 
 type BoundsMap = Partial<Record<WindowType, WindowBounds>>
@@ -20,21 +17,14 @@ type BoundsMap = Partial<Record<WindowType, WindowBounds>>
 let cache: BoundsMap | null = null
 
 function filePath(): string {
-  return join(app.getPath('userData'), FILE_NAME)
+  return getUserDataStorageAreaPath('window-bounds')
 }
 
 function load(): BoundsMap {
   if (cache)
     return cache
 
-  try {
-    cache = existsSync(filePath())
-      ? JSON.parse(readFileSync(filePath(), 'utf-8'))
-      : {}
-  }
-  catch {
-    cache = {}
-  }
+  cache = readJsonFileSync<BoundsMap>(filePath(), {})
 
   return cache!
 }
@@ -45,7 +35,7 @@ const flushToDisk = debounce(() => {
     return
 
   try {
-    writeFileSync(filePath(), JSON.stringify(cache, null, 2))
+    writeJsonFileSync(filePath(), cache)
   }
   catch {
     /** 落盘失败不致命，忽略 */

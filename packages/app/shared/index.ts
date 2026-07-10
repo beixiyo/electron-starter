@@ -1,5 +1,6 @@
 export * from './constants'
 export * from './ipc-types'
 export * from './shortcuts'
+export * from './storage'
 export * from './types'
 export * from './window-config'

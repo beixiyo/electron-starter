@@ -1,9 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
+import { getAppStorageAreaPath, readJsonFileSync, writeJsonFileSync } from '@main/storage'
 
-// TODO: customize DEFAULT_DIR for your app, e.g. join(homedir(), '.my-app')
-const DEFAULT_DIR = join(homedir(), '.electron-app')
+const DEFAULT_DIR = getAppStorageAreaPath('main-json-store')
 
 export type StoreOptions = {
   /** @default "~/.electron-app" */
@@ -30,22 +28,12 @@ export function createStore<T extends object>(
   const filePath = join(dir, filename)
 
   const read = (): T => {
-    try {
-      if (!existsSync(filePath))
-        return { ...defaults }
-      /** 与 defaults 浅合并：版本升级新增的键，老配置文件也能拿到默认值 */
-      const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as Partial<T>
-      return { ...defaults, ...parsed }
-    }
-    catch {
-      return { ...defaults }
-    }
+    return readJsonFileSync(filePath, defaults)
   }
 
   const write = (data: T): void => {
     try {
-      mkdirSync(dirname(filePath), { recursive: true })
-      writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+      writeJsonFileSync(filePath, data)
     }
     catch (error) {
       console.error(`[store] write failed (${filePath}):`, error)

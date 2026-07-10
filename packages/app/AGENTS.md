@@ -32,6 +32,7 @@ packages/app/
 │   ├── window-manager/# 窗口生命周期管理
 │   ├── media/         # 媒体捕获权限与工具
 │   ├── selection/     # 文本选区功能
+│   ├── storage/       # 主进程路径与 JSON 文件读写入口
 │   ├── utils/         # logger、error-handler、paste-text
 │   └── api/           # 外部 API（ASR 语音识别）
 │
@@ -44,6 +45,7 @@ packages/app/
 │   ├── views/         # 页面组件（login / recorder）
 │   ├── locales/       # i18n 翻译文件（zh-CN / en-US）
 │   ├── api/           # HTTP 客户端实例
+│   ├── services/storage/ # renderer IndexedDB 实例声明入口
 │   └── [*.html/tsx]   # 多窗口入口（voiceIme, selection, screenshot…）
 │
 ├── ipc/               # IPC 通信层（contract-driven 架构）
@@ -53,6 +55,7 @@ packages/app/
 ├── shared/            # 主进程与渲染进程共享代码（禁止引入 electron / react 等端专属模块）
 │   ├── constants/     # 快捷键、协议、Fn 键等常量
 │   ├── ipc-types/     # IPC 消息 payload 类型（screenshot / selection / voice-ime，主进程与渲染进程都用）
+│   ├── storage/       # 跨进程安全的持久化地图与 owner 校验
 │   ├── types/         # TypeScript 类型（window / media / oauth）
 │   └── window-config/ # 各窗口类型的配置（WINDOW_CONFIGS）
 │

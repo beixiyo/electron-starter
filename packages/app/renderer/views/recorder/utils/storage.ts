@@ -1,55 +1,4 @@
-import localforage from 'localforage'
-
-/**
- * 通用存储服务接口
- */
-export interface StorageService<T> {
-  save: (key: string, value: T) => Promise<void>
-  get: (key: string) => Promise<T | null>
-  remove: (key: string) => Promise<void>
-  clear: () => Promise<void>
-  getAllKeys: () => Promise<string[]>
-}
-
-/**
- * 基础存储服务类
- */
-export class BaseStorageService<T = any> implements StorageService<T> {
-  private store: LocalForage
-
-  constructor(config: LocalForageOptions = {}) {
-    this.store = localforage.createInstance({
-      name: 'BaseStorage',
-      storeName: 'data',
-      description: '通用数据存储',
-      ...config,
-    })
-  }
-
-  async save(key: string, value: T): Promise<void> {
-    await this.store.setItem(key, value)
-  }
-
-  async get(key: string): Promise<T | null> {
-    return await this.store.getItem<T>(key)
-  }
-
-  async remove(key: string): Promise<void> {
-    await this.store.removeItem(key)
-  }
-
-  async clear(): Promise<void> {
-    await this.store.clear()
-  }
-
-  async getAllKeys(): Promise<string[]> {
-    return await this.store.keys()
-  }
-
-  async length(): Promise<number> {
-    return await this.store.length()
-  }
-}
+import { recorderDB } from '@/services/storage'
 
 /**
  * 录屏记录元信息
@@ -87,15 +36,7 @@ export interface RecorderRecord {
  * 录屏数据存储服务
  */
 export class RecorderStorage {
-  private store: LocalForage
-
-  constructor() {
-    this.store = localforage.createInstance({
-      name: 'RecorderStorage',
-      storeName: 'records',
-      description: '录屏数据存储',
-    })
-  }
+  private readonly store = recorderDB
 
   /**
    * 保存录屏记录
