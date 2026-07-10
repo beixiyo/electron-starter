@@ -36,7 +36,7 @@ export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
     if (process.platform !== 'darwin') {
       return 'granted'
     }
-    return getAudioCaptureStatus()
+    return getSystemAudioPermissionStatus()
   }
 
   return getMediaAccessStatus(kind)
@@ -66,9 +66,9 @@ export function getFnListenerAccessibilityStatus(): PermissionStatus {
 
 /**
  * 主动申请权限
- * - microphone / camera：弹系统授权框；未授予则打开隐私设置
+ * - microphone / camera：未请求过时弹系统授权框；已拒绝 / 受限时打开隐私设置
  * - screen：先触发系统屏幕录制请求，把 App / helper 注册进 TCC 列表；仍未授权时下次点击再打开隐私设置
- * - accessibility：先触发系统授权弹窗；仍未授权时下次点击再打开隐私设置
+ * - accessibility：直接打开辅助功能隐私设置面板
  *
  * 原则：同一次点击只走一种系统入口，避免“原生权限弹窗”和“手动打开设置页”同时出现
  */
@@ -83,21 +83,8 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
       return 'granted'
     }
 
-    if (shouldOpenSettingsFallback('accessibility')) {
-      openPrivacySettings('accessibility')
-      return 'denied'
-    }
-
-    markNativePromptRequested('accessibility')
-
-    /** 传 true 会触发系统授权弹窗（首次）；非首次需用户去设置勾选 */
-    const trusted = systemPreferences.isTrustedAccessibilityClient(true)
-    const helperTrusted = requestFnListenerAccessibility()
-    if (!trusted || !helperTrusted) {
-      return 'denied'
-    }
-    clearSettingsFallback('accessibility')
-    return 'granted'
+    openPrivacySettings('accessibility')
+    return getPermissionStatus('accessibility')
   }
 
   if (kind === 'system-audio') {
@@ -105,7 +92,7 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
       return 'granted'
     }
 
-    if (getAudioCaptureStatus() === 'granted') {
+    if (getSystemAudioPermissionStatus() === 'granted') {
       clearSettingsFallback('system-audio')
       return 'granted'
     }
@@ -113,14 +100,15 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     /** 已发起过一次原生弹窗（被拒 / 未决）→ 二次点击改开隐私设置引导 */
     if (shouldOpenSettingsFallback('system-audio')) {
       openPrivacySettings('system-audio')
-      return getAudioCaptureStatus()
+      return getSystemAudioPermissionStatus()
     }
 
     markNativePromptRequested('system-audio')
 
     const status = await requestAudioCaptureAccess()
-    if (status === 'granted') {
+    if (status === 'granted' || getSystemAudioPermissionStatus() === 'granted') {
       clearSettingsFallback('system-audio')
+      return 'granted'
     }
     return status
   }
@@ -158,8 +146,9 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
       : status
   }
 
+  const currentStatus = getMediaAccessStatus(kind)
   const result = await ensureMediaAccess(kind)
-  if (result !== 'granted') {
+  if (result !== 'granted' && currentStatus !== 'not-determined') {
     openPrivacySettings(kind)
   }
   return result
@@ -189,18 +178,6 @@ function isFnListenerAccessibilityTrusted(): boolean {
   }
 }
 
-function requestFnListenerAccessibility(): boolean {
-  try {
-    execFileSync(getNativeBinaryPath('fn-listener'), ['--prompt-accessibility'], {
-      stdio: 'ignore',
-    })
-    return true
-  }
-  catch {
-    return false
-  }
-}
-
 /**
  * system-audio 探测要同步 spawn 子进程（~10-30ms 阻塞主进程事件循环），
  * 而权限弹窗打开期间以 1s 轮询 permission.get——必须加短 TTL 缓存；
@@ -208,6 +185,19 @@ function requestFnListenerAccessibility(): boolean {
  */
 const AUDIO_CAPTURE_STATUS_TTL_MS = 3000
 let audioCaptureStatusCache: { status: PermissionStatus, at: number } | null = null
+
+/**
+ * macOS 当前把「录屏 + 系统音频」放在同一个 Screen & System Audio Recording 面板：
+ * 用户可授权“屏幕和音频”，也可只授权“音频”。Core Audio tap 还可走
+ * kTCCServiceAudioCapture 的 audio-only 探测；两者任一已授权，都满足系统音频录制
+ */
+function getSystemAudioPermissionStatus(): PermissionStatus {
+  if (getMediaAccessStatus('screen') === 'granted') {
+    return 'granted'
+  }
+
+  return getAudioCaptureStatus()
+}
 
 function getAudioCaptureStatus(): PermissionStatus {
   if (audioCaptureStatusCache && Date.now() - audioCaptureStatusCache.at < AUDIO_CAPTURE_STATUS_TTL_MS) {
@@ -217,6 +207,19 @@ function getAudioCaptureStatus(): PermissionStatus {
   const status = probeAudioCaptureStatus()
   audioCaptureStatusCache = { status, at: Date.now() }
   return status
+}
+
+/**
+ * 录音前确保麦克风权限：
+ * - 已授予 → 直接放行
+ * - 未授予 → 弹系统授权框（not-determined）/ 打开隐私设置（denied），最终仍未授予返回 false
+ */
+export async function ensureMicrophonePermission(): Promise<boolean> {
+  if (getPermissionStatus('microphone') === 'granted') {
+    return true
+  }
+
+  return (await requestPermission('microphone')) === 'granted'
 }
 
 /**
