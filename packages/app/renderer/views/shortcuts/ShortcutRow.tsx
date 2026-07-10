@@ -1,7 +1,7 @@
 import type { ShortcutScope } from '@shared/shortcuts'
 import type { GestureType, ShortcutAction, ShortcutGestureBinding } from './types'
 import { Button } from 'comps'
-import { Globe2, PanelTop } from 'lucide-react'
+import { Globe2, PanelTop, RotateCcw } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
@@ -60,14 +60,14 @@ export const ShortcutRow = memo<Props>((props) => {
   return (
     <div
       className={ cn(
-        'group flex items-center justify-between px-5 py-4 transition-colors duration-150',
-        stateKey !== 'idle' && 'bg-background2',
+        'group flex min-h-14 items-center gap-4 px-5 py-3 transition-colors duration-150',
+        stateKey !== 'idle' && 'bg-background2/60',
       ) }
     >
       <span className="text-sm text-text">{ action.label }</span>
 
       <div className="flex items-center gap-2">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={ false }>
           { stateKey === 'recording' && (
             <motion.div
               key="recording"
@@ -139,7 +139,12 @@ export const ShortcutRow = memo<Props>((props) => {
               exit={ { opacity: 0 } }
               transition={ { duration: 0.1 } }
             >
-              <button type="button" className="rounded-md focus:outline-none" onClick={ onStartRecord }>
+              <button
+                type="button"
+                className="flex h-10 w-36 items-center rounded-lg border border-border/40 px-3 transition-colors hover:border-brand/50 hover:bg-background2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+                aria-label={ `录制 ${action.label} 快捷键` }
+                onClick={ onStartRecord }
+              >
                 <ShortcutBadge binding={ action.binding } />
               </button>
               { action.binding && (
@@ -153,11 +158,11 @@ export const ShortcutRow = memo<Props>((props) => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  tooltip="重置为默认"
-                  className="opacity-0 transition-opacity group-hover:opacity-100"
+                  tooltip="重置为默认快捷键"
+                  className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   onClick={ onReset }
                 >
-                  重置
+                  <RotateCcw size={ 14 } aria-hidden />
                 </Button>
               ) }
             </motion.div>

@@ -20,8 +20,8 @@ export const ShortcutBadge = memo<Props>(({ binding, className }) => {
   return (
     <span
       className={ cn(
-        'inline-flex items-center rounded-md px-2.5 py-1',
-        'bg-background2 border border-border text-sm font-mono text-text2',
+        'inline-flex items-center rounded-md border border-border/40 bg-background2 px-2.5 py-1',
+        'text-sm leading-5.5 text-text',
         className,
       ) }
     >
