@@ -170,6 +170,7 @@ function pad(value: number): string {
 /** 主进程诊断日志模块名 */
 export type MainDiagnosticModule
   = | 'app.lifecycle'
+    | 'app.power'
     | 'ipc.service'
     | 'meeting.detection'
     | 'native.bridge'

@@ -29,6 +29,7 @@ import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
+import { initPowerSaveBlockers } from './power-save-blocker'
 import { startCaptureFromShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
 import {
@@ -59,6 +60,7 @@ if (process.platform === 'darwin') {
 
 initDeeplink(() => {
   initAppLogging(ipcMain)
+  initPowerSaveBlockers()
   const ipcLog = createMainDiagnosticLogger('ipc.service')
   setIpcServiceErrorLogger((error, meta) => {
     ipcLog.error('invoke.failed', 'IPC handler failed', error, meta)
