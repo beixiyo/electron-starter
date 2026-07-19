@@ -1,6 +1,6 @@
+import type { OAuthCallbackParams } from '@shared'
 import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
 import { useNavigate } from '@jl-org/react-router'
-import type { OAuthCallbackParams } from '@shared'
 import { WindowType } from '@shared'
 import { Button, Message } from 'comps'
 import { ClientType } from 'http-api'

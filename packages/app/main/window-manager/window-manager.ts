@@ -6,11 +6,27 @@ import { screen } from 'electron'
 import { getSavedBounds, saveBounds } from './bounds-store'
 import { createBrowserWindow } from './window-factory'
 
+/**
+ * 空闲销毁目标：仅「冷」窗口（MENUBAR / 会议浮窗池）
+ * 二者所有展示路径均为懒建（create-if-missing），销毁后下次触发可完整重建；
+ * VOICE_IME / SELECTION 等延迟敏感窗口保持常驻（内存审计 F2）
+ */
+const IDLE_DESTROY_WINDOW_TYPES: ReadonlySet<WindowType> = new Set([
+  WindowType.MENUBAR,
+  WindowType.FLOATING_STATUS_POOL,
+])
+
+/** 隐藏后驻留超过该时长即销毁，释放常驻渲染进程 */
+const IDLE_DESTROY_DELAY_MS = 20 * 60 * 1000
+
 class WindowManager {
   private windows: Map<WindowType, BrowserWindow> = new Map()
   private metadata: Map<WindowType, WindowMetadata> = new Map()
+  private idleDestroyTimers: Map<WindowType, ReturnType<typeof setTimeout>> = new Map()
 
   create(type: WindowType, configOverride?: Partial<WindowConfig>, parent?: BrowserWindow): BrowserWindow | null {
+    this.clearIdleDestroy(type)
+
     const existingWindow = this.windows.get(type)
     if (existingWindow && !existingWindow.isDestroyed()) {
       if (configOverride?.initialUrl) {
@@ -70,6 +86,7 @@ class WindowManager {
       if (this.windows.get(type) === window) {
         this.windows.delete(type)
         this.metadata.delete(type)
+        this.clearIdleDestroy(type)
       }
     })
 
@@ -95,6 +112,8 @@ class WindowManager {
     if (!window) {
       return false
     }
+
+    this.clearIdleDestroy(type)
 
     const meta = this.metadata.get(type)
     if (meta?.config.setAlwaysOnTopOnShow) {
@@ -124,6 +143,8 @@ class WindowManager {
       return false
     }
 
+    this.clearIdleDestroy(type)
+
     const meta = this.metadata.get(type)
     if (meta?.config.setAlwaysOnTopOnShow) {
       window.setAlwaysOnTop(true)
@@ -146,6 +167,7 @@ class WindowManager {
     }
 
     window.hide()
+    this.scheduleIdleDestroy(type)
     return true
   }
 
@@ -166,6 +188,8 @@ class WindowManager {
   }
 
   destroy(type: WindowType): boolean {
+    this.clearIdleDestroy(type)
+
     const window = this.windows.get(type)
     if (!window) {
       return false
@@ -197,6 +221,11 @@ class WindowManager {
   }
 
   destroyAll(): void {
+    for (const timer of this.idleDestroyTimers.values()) {
+      clearTimeout(timer)
+    }
+    this.idleDestroyTimers.clear()
+
     for (const [type] of this.windows) {
       this.destroy(type)
     }
@@ -283,6 +312,41 @@ class WindowManager {
     if (window.isMinimized()) {
       window.restore()
     }
+  }
+
+  /**
+   * 冷窗口隐藏后启动空闲销毁计时：到点仍存在且不可见才销毁
+   * 任何 show / create 路径都会清掉计时，重新展示走懒建重建
+   */
+  private scheduleIdleDestroy(type: WindowType): void {
+    if (!IDLE_DESTROY_WINDOW_TYPES.has(type)) {
+      return
+    }
+
+    this.clearIdleDestroy(type)
+
+    const timer = setTimeout(() => {
+      this.idleDestroyTimers.delete(type)
+
+      const window = this.windows.get(type)
+      if (!window || window.isDestroyed() || window.isVisible()) {
+        return
+      }
+
+      window.destroy()
+    }, IDLE_DESTROY_DELAY_MS)
+
+    this.idleDestroyTimers.set(type, timer)
+  }
+
+  private clearIdleDestroy(type: WindowType): void {
+    const timer = this.idleDestroyTimers.get(type)
+    if (!timer) {
+      return
+    }
+
+    clearTimeout(timer)
+    this.idleDestroyTimers.delete(type)
   }
 }
 

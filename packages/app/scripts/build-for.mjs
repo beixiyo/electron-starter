@@ -92,7 +92,7 @@ try {
 
   // 2. 执行构建和准备（除非跳过）
   if (!args.skipBuild) {
-    // 仅 mac 目标才编 swift 原生二进制（swift 只能在 macOS 编，
+    /** 仅 mac 目标才编 swift 原生二进制（swift 只能在 macOS 编， */
     const needsNative = args.platform === 'mac'
       || (args.platform === 'dir' && process.platform === 'darwin')
     if (needsNative) {
@@ -151,8 +151,10 @@ catch (error) {
 }
 
 async function writeLocalUpdatePayload() {
-  // 与 --localUpdate 解耦：只要显式传了正数 payloadKb 就写随机内容，
-  // 这样签名公证的真实更新包也能制造相邻版本差异，模拟增量下载
+  /**
+   * 与 --localUpdate 解耦：只要显式传了正数 payloadKb 就写随机内容，
+   * 这样签名公证的真实更新包也能制造相邻版本差异，模拟增量下载
+   */
   const payloadKb = Number(args.localUpdatePayloadKb)
   if (!Number.isFinite(payloadKb) || payloadKb <= 0)
     return

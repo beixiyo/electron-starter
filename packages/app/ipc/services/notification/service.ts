@@ -2,8 +2,17 @@ import type { NativeCloseReason, NativeNotifyPayload, NotificationContract } fro
 import { createIpcService } from '@ipc/core'
 import { BrowserWindow, Notification } from 'electron'
 
+/** 存活中的通知条目，记录 tag 供同 tag 顶替时定位并关闭旧实例 */
+interface AliveEntry {
+  notification: Notification
+  tag?: string
+}
+
 /** 存活中的通知实例，用于按 id 关闭与清理 */
-const alive = new Map<string, Notification>()
+const alive = new Map<string, AliveEntry>()
+
+/** 安全上限：'close' 事件不保证触发（macOS 顶替/静默丢弃），超限删最旧防 Map 无界增长 */
+const MAX_ALIVE = 50
 
 export const notificationService = createIpcService<NotificationContract>('notification', {
   async isSupported() {
@@ -12,6 +21,28 @@ export const notificationService = createIpcService<NotificationContract>('notif
 
   async show(event, payload: NativeNotifyPayload) {
     const { id } = payload
+
+    /**
+     * 同 tag 顶替：系统层用 tag 作 id 替换旧通知，但旧实例不可靠回发 'close'，
+     * 这里主动 close+delete，避免 alive 表累积失去系统对应关系的僵尸条目
+     */
+    if (payload.tag) {
+      for (const [aliveId, entry] of alive) {
+        if (entry.tag === payload.tag) {
+          entry.notification.close()
+          alive.delete(aliveId)
+        }
+      }
+    }
+
+    /** 超限删最旧（Map 按插入序遍历），close 使 'close' 事件仍有机会回传渲染进程清理注册项 */
+    while (alive.size >= MAX_ALIVE) {
+      const oldestId = alive.keys().next().value
+      if (oldestId == null)
+        break
+      alive.get(oldestId)?.notification.close()
+      alive.delete(oldestId)
+    }
 
     /** 事件只回传给发起的窗口，避免广播到所有窗口 */
     const owner = BrowserWindow.fromWebContents(
@@ -42,7 +73,7 @@ export const notificationService = createIpcService<NotificationContract>('notif
       actions: payload.actions?.map(action => ({ type: 'button', text: action.text })),
     })
 
-    alive.set(id, notification)
+    alive.set(id, { notification, tag: payload.tag })
 
     notification.on('show', () => notificationService.emit('event', { id, type: 'show' }, owner))
     notification.on('click', () => notificationService.emit('event', { id, type: 'click' }, owner))
@@ -62,7 +93,7 @@ export const notificationService = createIpcService<NotificationContract>('notif
   },
 
   async close(_event, id: string) {
-    alive.get(id)?.close()
+    alive.get(id)?.notification.close()
     alive.delete(id)
   },
 })

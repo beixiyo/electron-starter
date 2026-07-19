@@ -52,7 +52,7 @@ export const WINDOW_SIZE = {
 ```
 
 ```tsx
-<div style={{ padding: SHADOW_INSET }}>
+<div style={ { padding: SHADOW_INSET } }>
   <div className="rounded-2xl shadow-[...]">
     ...
   </div>
@@ -109,7 +109,7 @@ const dragHandlers = useWindowDrag(WindowType.FOCUS_NATIVE)
 
 return (
   <section
-    {...dragHandlers}
+    { ...dragHandlers }
     className="cursor-grab active:cursor-grabbing"
   >
     <button data-no-window-drag="true">关闭</button>
@@ -128,16 +128,16 @@ data-no-window-drag="true"
 可缩放透明窗口使用 `<ResizeHandles>`。手柄对齐可见实体边缘，不依赖原生透明边框热区：
 
 ```tsx
-<div className="relative h-screen w-screen" style={{ padding: SHADOW_INSET }}>
+<div className="relative h-screen w-screen" style={ { padding: SHADOW_INSET } }>
   <div className="h-full w-full rounded-2xl shadow-[...]">
     ...
   </div>
 
   <ResizeHandles
-    windowType={WindowType.SHORTCUT_TEST}
-    inset={SHADOW_INSET}
-    minWidth={280 + SHADOW_INSET * 2}
-    minHeight={180 + SHADOW_INSET * 2}
+    windowType={ WindowType.SHORTCUT_TEST }
+    inset={ SHADOW_INSET }
+    minWidth={ 280 + SHADOW_INSET * 2 }
+    minHeight={ 180 + SHADOW_INSET * 2 }
   />
 </div>
 ```

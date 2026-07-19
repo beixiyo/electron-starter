@@ -70,7 +70,8 @@ export function attachWindowDiagnostics(window: BrowserWindow, type?: WindowType
     if (level < 2)
       return
 
-    const key = `${windowLabel}:${level}:${sourceId}:${line}:${message}`
+    /** 去重 key 只取 message 长度 + 前 200 字符,避免超长堆栈把 Map 的 key 撑到数百 KB */
+    const key = `${windowLabel}:${level}:${sourceId}:${line}:${message.length}:${message.slice(0, 200)}`
     const now = Date.now()
     const lastAt = recentConsoleMessages.get(key)
     if (lastAt && now - lastAt < CONSOLE_MESSAGE_DEDUPE_MS)

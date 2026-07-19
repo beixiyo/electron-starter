@@ -50,7 +50,7 @@ keychain group 的值必须和 `keychain-access-groups` entitlement **一字不�
 
 ```ts
 // shared/constants/app-protocol.ts
-export const APP_BUNDLE_ID = '<app-id>'      // 与 electron-builder.yml 的 appId 一致
+export const APP_BUNDLE_ID = '<app-id>' // 与 electron-builder.yml 的 appId 一致
 export const APPLE_TEAM_ID = '<team-id>'
 
 /** macOS WebAuthn / Touch ID 凭据存储使用的 Keychain Access Group */
@@ -73,8 +73,8 @@ export const WEB_AUTHN_KEYCHAIN_ACCESS_GROUP = `${APPLE_TEAM_ID}.${APP_BUNDLE_ID
 在 **app ready 之后**调用（`configureWebAuthn` 需要 app 已就绪）。放在你现有的 ready 回调里：
 
 ```ts
-import { app, session } from 'electron'
 import { WEB_AUTHN_KEYCHAIN_ACCESS_GROUP } from '@shared'
+import { app, session } from 'electron'
 
 function setupWebAuthn(): void {
   if (process.platform !== 'darwin') {
@@ -85,13 +85,13 @@ function setupWebAuthn(): void {
     app.configureWebAuthn({
       touchID: {
         keychainAccessGroup: WEB_AUTHN_KEYCHAIN_ACCESS_GROUP,
-        // 弹窗文案：macOS 渲染成 `"<App Name>" is trying to <promptReason>`
+        /** 弹窗文案：macOS 渲染成 `"<App Name>" is trying to <promptReason>` */
         // $1 会被替换成请求的 RP ID（如 example.com）
         promptReason: 'sign in to $1',
       },
     })
 
-    // 有多个可选 passkey 时，系统通过这个事件让你选一个账号
+    /** 有多个可选 passkey 时，系统通过这个事件让你选一个账号 */
     session.defaultSession.on('select-webauthn-account', (_event, details, callback) => {
       // details.relyingPartyId：本次请求的 RP ID
       // details.accounts：WebAuthnAccount[]，每个含 credentialId / name / displayName
@@ -99,12 +99,12 @@ function setupWebAuthn(): void {
         ? details.accounts[0]?.credentialId
         : undefined
 
-      // 必须且只能调用一次；传 undefined/null 视为取消（NotAllowedError）
+      /** 必须且只能调用一次；传 undefined/null 视为取消（NotAllowedError） */
       callback(credentialId)
     })
   }
   catch (error) {
-    // 旧版 Electron 无此 API，或配置失败：降级，不影响其余启动流程
+    /** 旧版 Electron 无此 API，或配置失败：降级，不影响其余启动流程 */
     log.warn('[webauthn] setup failed', error)
   }
 }
@@ -120,10 +120,10 @@ function setupWebAuthn(): void {
 登录页里就是普通的 Web WebAuthn 调用，Chromium 会自动路由到 Touch ID：
 
 ```js
-// 注册（创建 passkey）
+/** 注册（创建 passkey） */
 await navigator.credentials.create({ publicKey: { /* rp / user / challenge ... */ } })
 
-// 登录（使用 passkey）
+/** 登录（使用 passkey） */
 await navigator.credentials.get({ publicKey: { /* challenge / rpId ... */ } })
 ```
 

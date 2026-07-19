@@ -58,6 +58,8 @@ if (process.platform === 'darwin') {
   )
 }
 
+setupHttpCachePolicy()
+
 initDeeplink(() => {
   initAppLogging(ipcMain)
   initPowerSaveBlockers()
@@ -103,6 +105,25 @@ app.on('window-all-closed', () => {
 
 function setupAppIdentity(): void {
   electronApp.setAppUserModelId(`com.${APP_PROTOCOL}`)
+}
+
+/**
+ * HTTP 磁盘缓存治理。Chromium HTTP 缓存（userData/Cache）默认上限按剩余磁盘
+ * 启发式计算、可达数 GB，长期使用会无限膨胀（Chromium 按「完整 URL」做缓存 key，
+ * 带易变 query 的资源只写不复用）：
+ * - dev：Vite 依赖重优化会给模块 URL 换 `?v=hash`，旧条目永不再命中；
+ *   且资源本就来自本机 dev server（内存服务），磁盘缓存零收益 → 整个禁用
+ * - prod：封顶 256MB 交给 LRU 淘汰，只设磁盘上限、不改变缓存语义
+ *
+ * 须在 app ready 前调用：Electron 的 Session 没有 setCacheSize API，只能走命令行开关
+ */
+function setupHttpCachePolicy(): void {
+  if (is.dev) {
+    app.commandLine.appendSwitch('disable-http-cache')
+    return
+  }
+
+  app.commandLine.appendSwitch('disk-cache-size', String(256 * 1024 * 1024))
 }
 
 // ─────────────────────────────────────────────
@@ -254,6 +275,19 @@ function createSplashWindow(): BrowserWindow {
 function createMainWindow(): void {
   const splash = createSplashWindow()
 
+  /**
+   * splash 兜底销毁：正常路径是主窗 ready-to-show，但主窗加载失败/渲染进程崩溃/先被关闭时
+   * ready-to-show 永不触发，置顶透明 splash 及其渲染进程会永活。三路兜底共用此幂等销毁
+   */
+  const destroySplash = (): void => {
+    clearTimeout(splashFallbackTimer)
+    if (!splash.isDestroyed())
+      splash.destroy()
+  }
+
+  /** 渲染进程挂死等一切未覆盖异常路径的最后兜底 */
+  const splashFallbackTimer = setTimeout(destroySplash, 15_000)
+
   const mainWindow = windowManager.create(WindowType.MAIN, {
     ...(process.platform === 'darwin'
       ? {
@@ -272,8 +306,17 @@ function createMainWindow(): void {
 
   setupOAuthInterceptor(mainWindow)
 
+  /** 主窗先于 ready-to-show 被关闭（启动即退出/崩溃销毁）时回收 splash */
+  mainWindow.on('closed', destroySplash)
+
+  /** 主框架加载失败后不再有 ready-to-show；-3（ERR_ABORTED，如导航中断/重试）不算失败，等后续加载 */
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
+    if (isMainFrame && errorCode !== -3)
+      destroySplash()
+  })
+
   mainWindow.once('ready-to-show', () => {
-    splash.destroy()
+    destroySplash()
     mainWindow.show()
 
     /** 主窗口显示后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
@@ -406,7 +449,7 @@ async function startVoiceImeKeyboardHold(): Promise<void> {
   if (holdStateManager.isHolding(WindowType.VOICE_IME))
     return
 
-  if (!(await ensureMicrophonePermissionOrExplain('voice-ime'))) {
+  if (!(ensureMicrophonePermissionOrExplain('voice-ime'))) {
     keyboardVoiceImeHoldActive = false
     return
   }

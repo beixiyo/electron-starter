@@ -54,10 +54,24 @@ function resolveDesktop(options: NotifyOptions): ResolvedDesktop {
 interface RegistryEntry {
   options: NotifyOptions
   desktop: ResolvedDesktop
+  /** 注册时间戳，供陈旧条目清扫（原生 close 事件不保证回传） */
+  createdAt: number
 }
 
 /** id → 注册项（含回调），收到对应事件时查表回调 */
 const registry = new Map<string, RegistryEntry>()
+
+/** 超过该时长仍未清理的条目视为陈旧，下次 show 时顺手清扫（不引入常驻定时器） */
+const STALE_ENTRY_MS = 24 * 60 * 60 * 1000
+
+/** 清扫陈旧条目：macOS 点击/顶替后 'close' 不保证回传，注册项及其闭包会永久滞留，靠此兜底 */
+function sweepStaleEntries(): void {
+  const now = Date.now()
+  for (const [id, entry] of registry) {
+    if (now - entry.createdAt > STALE_ENTRY_MS)
+      registry.delete(id)
+  }
+}
 
 /** 全局只订阅一次主进程事件 */
 let subscribed = false
@@ -81,6 +95,13 @@ function ensureSubscribed(): void {
         break
       case 'click':
         options.onClick?.(ctx)
+        /**
+         * macOS 点击即消失但不保证回发 'close'，点击后条目不再有后续事件，直接删除防闭包累积；
+         * 声明了 actions/reply 的条目例外：'action'/'reply' 事件可能在 click 之外单独到达，
+         * 保留注册项等 close/失败/陈旧清扫兜底
+         */
+        if (!desktop.actions?.length && desktop.reply == null)
+          registry.delete(e.id)
         break
       case 'action':
         desktop.onAction?.(e.actionIndex ?? -1, ctx)
@@ -103,9 +124,11 @@ function ensureSubscribed(): void {
 export function electronNotify(options: NotifyOptions): NotifyHandle {
   ensureSubscribed()
 
+  sweepStaleEntries()
+
   const id = nextId()
   const desktop = resolveDesktop(options)
-  registry.set(id, { options, desktop })
+  registry.set(id, { options, desktop, createdAt: Date.now() })
 
   $ipc.notification.show({
     id,

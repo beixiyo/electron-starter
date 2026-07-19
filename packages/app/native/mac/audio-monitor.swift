@@ -205,23 +205,36 @@ func getInputDeviceIDs() -> [AudioObjectID] {
   }
 }
 
-var monitoredDevices = Set<AudioObjectID>()
+/// 已注册设备 → listener block（移除监听须传同一 block 实例，故必须存下来配对）
+var deviceListenerBlocks: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
+
+func makeRunningAddress() -> AudioObjectPropertyAddress {
+  AudioObjectPropertyAddress(
+    mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+}
 
 func registerDeviceListeners() {
   let inputDevices = getInputDeviceIDs()
+  let currentDevices = Set(inputDevices)
+
+  // 先摘掉已消失设备的监听：蓝牙耳机每次重连拿新 AudioObjectID，不清理会无限累积注册项
+  for (deviceID, block) in deviceListenerBlocks where !currentDevices.contains(deviceID) {
+    var runningAddress = makeRunningAddress()
+    AudioObjectRemovePropertyListenerBlock(deviceID, &runningAddress, DispatchQueue.main, block)
+    deviceListenerBlocks.removeValue(forKey: deviceID)
+  }
 
   for deviceID in inputDevices {
-    guard !monitoredDevices.contains(deviceID) else { continue }
-    monitoredDevices.insert(deviceID)
+    guard deviceListenerBlocks[deviceID] == nil else { continue }
 
-    var runningAddress = AudioObjectPropertyAddress(
-      mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
-      mScope: kAudioObjectPropertyScopeGlobal,
-      mElement: kAudioObjectPropertyElementMain
-    )
-    AudioObjectAddPropertyListenerBlock(deviceID, &runningAddress, DispatchQueue.main) { _, _ in
-      poll()
-    }
+    let block: AudioObjectPropertyListenerBlock = { _, _ in poll() }
+    deviceListenerBlocks[deviceID] = block
+
+    var runningAddress = makeRunningAddress()
+    AudioObjectAddPropertyListenerBlock(deviceID, &runningAddress, DispatchQueue.main, block)
   }
 }
 

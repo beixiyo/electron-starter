@@ -1,6 +1,6 @@
+import { formatDuration } from '@jl-org/tool'
 import { memo } from 'react'
 import { cn } from 'utils'
-import { formatDuration } from '@jl-org/tool'
 
 export type RecordingTimerProps = {
   /**

@@ -9,8 +9,8 @@ import {
   startManualRecording,
 } from '@main/native-recording/manual'
 import { peekNativeRecordingSession } from '@main/native-recording/session'
-import { deleteRecoveryRecording, listRecoverableRecordings, readRecoveryRecording } from '@main/recording-recovery'
 import { setRecordingPowerSaveBlocker } from '@main/power-save-blocker'
+import { deleteRecoveryRecording, listRecoverableRecordings, readRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable, onRecordingStorageInsufficient, openStorageSettings, reportRecordingStorageInsufficient } from '@main/recording-storage'
 import { getSelfProcessPids } from '@main/utils/self-pids'

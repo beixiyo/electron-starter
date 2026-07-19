@@ -102,10 +102,11 @@ import { checkFocusedTextInput } from '@main/focus-check'
 const result = await checkFocusedTextInput()
 
 if (result.focused) {
-  // 有文本焦点 → 直接注入文字到光标位置
+  /** 有文本焦点 → 直接注入文字到光标位置 */
   pasteText(transcription)
-} else {
-  // 无文本焦点 → 展示 Transcription Result UI
+}
+else {
+  /** 无文本焦点 → 展示 Transcription Result UI */
   showResultWindow(transcription)
 }
 ```
@@ -114,9 +115,9 @@ if (result.focused) {
 
 ```ts
 type FocusCheckResult = {
-  focused: boolean      // 是否有文本输入焦点
-  role: string | null   // AX 角色
-  app: string | null    // 前台应用名称
+  focused: boolean // 是否有文本输入焦点
+  role: string | null // AX 角色
+  app: string | null // 前台应用名称
 }
 
 function checkFocusedTextInput(): Promise<FocusCheckResult>

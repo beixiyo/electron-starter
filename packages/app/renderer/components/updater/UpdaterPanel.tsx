@@ -1,5 +1,5 @@
-import { Button, Message, ProgressBar } from 'comps'
 import { formatFileSize } from '@jl-org/tool'
+import { Button, Message, ProgressBar } from 'comps'
 import { AlertTriangle, CheckCircle2, DownloadCloud, RefreshCw, RotateCw } from 'lucide-react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'

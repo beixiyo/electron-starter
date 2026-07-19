@@ -25,15 +25,17 @@ export function getElectronShortcutConfigurationCapabilities(): ShortcutRuntimeC
 
 /** Electron 当前运行时快捷键能力；按平台、权限和 native backend 状态判断 */
 export function getElectronShortcutRuntimeCapabilities(): ShortcutRuntimeCapabilities {
+  const fnBackendAvailable = canUseFnShortcutBackend()
+
   return createElectronShortcutCapabilities({
     providers: getElectronShortcutRuntimeProviders(),
     global: {
       keyboard: canUseGlobalKeyboardShortcutBackend(),
-      fn: canUseFnShortcutBackend(),
+      fn: fnBackendAvailable,
     },
     local: {
       keyboard: canUseLocalKeyboardShortcutBackend(),
-      fn: canUseFnShortcutBackend(),
+      fn: fnBackendAvailable,
     },
   })
 }

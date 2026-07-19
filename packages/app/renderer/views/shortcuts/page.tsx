@@ -25,7 +25,9 @@ export default function ShortcutsPage() {
               isUnsupported={ session.recordingId === action.id && recorder.isUnsupported }
               scope={ session.recordingId === action.id
                 ? session.recordingScope
-                : session.resolveScope(action.binding?.scope ?? (session.canUseGlobalScope ? 'global' : 'local')) }
+                : session.resolveScope(action.binding?.scope ?? (session.canUseGlobalScope
+                    ? 'global'
+                    : 'local')) }
               canUseGlobalScope={ session.canUseGlobalScope }
               detected={ session.recordingId === action.id
                 ? recorder.detected

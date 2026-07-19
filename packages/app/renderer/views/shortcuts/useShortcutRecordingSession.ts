@@ -36,10 +36,14 @@ export function useShortcutRecordingSession(
   }, [])
 
   const resolveScope = useLatestCallback((scope: ShortcutScope): ShortcutScope => {
-    return canUseGlobalScope ? scope : 'local'
+    return canUseGlobalScope
+      ? scope
+      : 'local'
   })
 
-  const defaultScope: ShortcutScope = canUseGlobalScope ? 'global' : 'local'
+  const defaultScope: ShortcutScope = canUseGlobalScope
+    ? 'global'
+    : 'local'
 
   const start = useLatestCallback((id: string) => {
     if (recordingId)

@@ -183,7 +183,7 @@ pnpm build:native:mac   # 显式编译 macOS native helper
 ### 核心 API
 
 ```ts
-import { createWindowBroadcast } from '../broadcast'   // 在 renderer 内相对路径导入
+import { createWindowBroadcast } from '../broadcast' // 在 renderer 内相对路径导入
 
 const bc = createWindowBroadcast<{ theme: string }>('theme-sync')
 ```
@@ -199,9 +199,9 @@ const bc = createWindowBroadcast<{ theme: string }>('theme-sync')
 
 ```ts
 type BroadcastMessage<T> = {
-  payload: T          // 消息内容
-  from: WindowType    // 发送方窗口类型
-  to?: WindowType[]   // 目标列表；undefined = 全体广播
+  payload: T // 消息内容
+  from: WindowType // 发送方窗口类型
+  to?: WindowType[] // 目标列表；undefined = 全体广播
 }
 ```
 

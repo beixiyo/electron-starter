@@ -1,9 +1,13 @@
 import type { LogLevel } from '@jl-org/log'
 import type { IpcMain } from 'electron'
+import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { listenElectronLogs, NodeLogger } from '@jl-org/log/node'
 import { getAppStorageAreaPath } from '@main/storage'
 import { app } from 'electron'
+
+/** 日志根目录保留的最近 session 目录数（含当前 session） */
+const MAX_SESSION_LOG_DIRS = 100
 
 let logger: NodeLogger | null = null
 let sessionId: string | null = null
@@ -31,6 +35,57 @@ export function initAppLogging(ipcMain: IpcMain): void {
       debug: isDiagnosticDebugEnabled(),
     },
   )
+
+  void pruneStaleSessionLogDirs()
+}
+
+/**
+ * 启动时修剪日志根目录的历史 session 目录，仅保留最近 MAX_SESSION_LOG_DIRS 个
+ * 目录名 sessionYYYYMMDD-HHMMSS-pid 按字典序即时间序；永不删除当前 session；
+ * 任何失败只 warn，不阻塞启动
+ */
+async function pruneStaleSessionLogDirs(): Promise<void> {
+  const log = createMainDiagnosticLogger('app.lifecycle')
+
+  try {
+    const root = getDiagnosticLogRootDir()
+    const entries = await readdir(root, { withFileTypes: true })
+    const sessionDirs = entries
+      .filter(entry => entry.isDirectory() && entry.name.startsWith('session'))
+      .map(entry => entry.name)
+      .sort()
+
+    const currentSession = getSessionId()
+    const staleDirs = sessionDirs
+      .slice(0, Math.max(0, sessionDirs.length - MAX_SESSION_LOG_DIRS))
+      .filter(name => name !== currentSession)
+
+    if (staleDirs.length === 0)
+      return
+
+    let removedCount = 0
+    for (const name of staleDirs) {
+      const removed = await rm(join(root, name), { recursive: true, force: true })
+        .then(() => true)
+        .catch(() => false)
+
+      if (removed)
+        removedCount += 1
+    }
+
+    log.info('logging.prune', 'pruned stale diagnostic session directories', {
+      removedCount,
+      failedCount: staleDirs.length - removedCount,
+      keptCount: sessionDirs.length - removedCount,
+    })
+  }
+  catch (error) {
+    log.warn('logging.prune-failed', 'failed to prune diagnostic session directories', {
+      error: error instanceof Error
+        ? error.message
+        : String(error),
+    })
+  }
 }
 
 /** 创建带稳定 module/event 字段的主进程日志入口 */

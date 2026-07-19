@@ -91,9 +91,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    */
   private var micRequested = false
   /**
-   * 系统默认输入设备变更监听(CoreAudio HAL 层,独立于 mic 引擎生命周期)。
+   * 系统默认输入设备变更监听(CoreAudio HAL 层,独立于 mic 引擎生命周期)
    * 关键:engine 销毁后其自身通知也随之消失,只有 HAL 监听在整场录音存活 → 设备复联时仍能拉起重挂,
-   * 这是「重挂失败后不永久失去麦克风」的兜底(engine 绑定的监听做不到,见审查 #1865 反馈)
+   * 这是「重挂失败后不永久失去麦克风」的兜底(engine 绑定的监听做不到)
    */
   private var defaultInputListenerBlock: AudioObjectPropertyListenerBlock?
   private let deviceListenerQueue = DispatchQueue(label: "tap-recorder-device-listener", qos: .utility)
@@ -108,6 +108,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   private var tapFormatDescription: CMAudioFormatDescription?
   /** VPIO mic 格式引擎生命周期内恒定,建一次缓存复用,避免每 buffer 重建 CMAudioFormatDescription（音频渲染线程反模式） */
   private var micFormatDescription: CMAudioFormatDescription?
+  /** mic sidecar 转换器缓存(同 micFormatDescription 模式):AVAudioConverter 含重采样滤波器缓冲,每 buffer 新建是音频回调路径反模式;source format 变化才重建 */
+  private var micSidecarConverter: AVAudioConverter?
+  private var micSidecarConverterSourceFormat: AVAudioFormat?
 
   /**
    * 静音诊断:未授权时 tap 管线各层全部 noErr、回调照常,但样本恒为 0(已被多源证实),
@@ -204,7 +207,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    * - mic：micEnabled 切换 mic 采集引擎挂/卸（mic 轨恒预建，只切进样）
    * - tap：tapEnabled=false 拆 tap 管线；true 且未挂载则新建；true 且已挂载则重建（变更进程集合）
    *
-   * writer 两轨恒不动，PTS 用 host time 天然连续，切换只产生几十毫秒的音源间隙。
+   * writer 两轨恒不动，PTS 用 host time 天然连续，切换只产生几十毫秒的音源间隙
    * 新描述构造失败（如目标进程已退出）时旧管线原样保留，仅记日志不打断录音
    */
   func update(tapEnabled: Bool, micEnabled: Bool, pids: [pid_t], excludePids: [pid_t]) {
@@ -260,7 +263,10 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       log("tap attached: pids=[\(pids.map(String.init).joined(separator: ","))]")
     }
     catch {
-      /** 罕见:旧管线已拆、新管线失败——mic 轨继续录,系统音轨静默缺失,只能日志留痕 */
+      /** 罕见:旧管线已拆、新管线失败——mic 轨继续录,系统音轨静默缺失,只能日志留痕
+       * 分阶段失败(tap 建成后 aggregate/IOProc 抛错)会留下半建的内核对象句柄,
+       * 必须拆干净(teardown 对 kAudioObjectUnknown 幂等),否则下次重试覆盖 ID 永久泄漏 */
+      teardownTapPipeline()
       log("tap update failed after teardown: \((error as? TapRecorderError)?.message ?? error.localizedDescription)")
     }
   }
@@ -536,7 +542,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    * - 断流看门狗:mic 静默超阈值的兜底(监听未覆盖的僵尸态,如同设备内静默停流)
    *
    * 重挂串到命令链上执行 → 与 start / stop / update 天然互斥,复用 detach + attach 现有拆建逻辑;
-   * `micRecoveryScheduled` 合并排队期间的重复请求,避免每个 tick 都堆一次重挂。
+   * `micRecoveryScheduled` 合并排队期间的重复请求,避免每个 tick 都堆一次重挂
    * 自愈状态(scheduled / attempts / degradedEmitted)横跨 HAL 队列、sampleQueue、命令链三处访问,
    * 一律经下方持 `micRecoveryLock` 的同步方法读写,杜绝数据竞争
    */
@@ -619,7 +625,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     log("tap: mic recovery failed (attempt \(attempts)/\(MIC_RECOVERY_MAX_ATTEMPTS), micCb=\(micCallbackCount)), devices: \(describeDefaultAudioDevices())")
 
     /**
-     * 连续失败达上限:停看门狗周期重试(仍留 HAL 设备变更监听待复联拉起),并发一次非致命降级诊断。
+     * 连续失败达上限:停看门狗周期重试(仍留 HAL 设备变更监听待复联拉起),并发一次非致命降级诊断
      * 否则最终仍可能正常出卡 / 转写成功 / 清本地文件,产品层表现为「录音成功但后半段无人声」的静默数据损失
      */
     if shouldEmitDegraded {
@@ -675,7 +681,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   // ── 采集管线搭建 ──
 
   /**
-   * pids 非空 → 仅混入这些进程(include);为空 → 全系统混音并排除 excludePids(exclude)。
+   * pids 非空 → 仅混入这些进程(include);为空 → 全系统混音并排除 excludePids(exclude)
    * translate 对「从未注册 CoreAudio」的进程会失败(实测结论):
    * include 模式全部失败才报错;exclude 模式静默跳过——没在出声的进程本就无需排除
    */
@@ -804,7 +810,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
   /**
    * 系统音轨与 mic 轨**恒预建**(即使对应音源未开=零样本):AVAssetWriter 开写后不能再加轨,
-   * 预建才支持「录音中热挂/卸 tap 与 mic」。零样本空轨由 mixTracks 零时长过滤剔除。
+   * 预建才支持「录音中热挂/卸 tap 与 mic」。零样本空轨由 mixTracks 零时长过滤剔除
    * AAC 仅支持 8k~48k;tap 原生采样率跟随输出设备,罕见值(96k 等)与未挂 tap 的缺省均落 48k,写入器重采样
    */
   private func setupWriter(outputPath: String) throws {
@@ -843,7 +849,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   }
 
   /**
-   * 起 mic 采集引擎（VPIO AEC 或裸采集）;mic 轨恒预建,此处只负责「开始进样」。
+   * 起 mic 采集引擎（VPIO AEC 或裸采集）;mic 轨恒预建,此处只负责「开始进样」
    *
    * 录音中热挂时:VPIO 启动会重配置输出设备,可能扰动正在跑的 tap——若实测有此问题,
    * 需改为「tap 正跑时挂 mic 强制走裸采集」或「重挂 tap」策略。返回是否成功挂上
@@ -882,6 +888,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     micActive = false
     /** 排空采样队列里 detach 前已入队的 mic 回调，避免其与随后 attachMic 的时间轴状态重置跨线程并发 */
     sampleQueue.sync {}
+    /** 排空后再清转换器缓存:队列里残留的 sidecar 写入会按需重建它,先清会被写回 */
+    micSidecarConverter = nil
+    micSidecarConverterSourceFormat = nil
   }
 
   /**
@@ -1137,7 +1146,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   // ── 采样回调 ──
 
   /**
-   * tap PCM(AudioBufferList)→ CMSampleBuffer → 系统音轨;PTS 用 host time,与 mic 轨同时基。
+   * tap PCM(AudioBufferList)→ CMSampleBuffer → 系统音轨;PTS 用 host time,与 mic 轨同时基
    *
    * IOProc 的 ABL 含聚合设备全部输入流,不止 tap 一路:VPIO(mic AEC)开启时,
    * 输出子设备会多出一条回声参考流(实测 4ch,排在 tap 之前),必须按 tap 格式的
@@ -1367,7 +1376,13 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       micSidecarFormatConversionLogged = true
     }
 
-    guard let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else {
+    /** 复用缓存的转换器;仅 source format 变化(设备切换)才重建。target 绑定 micAudioFile.processingFormat,文件生命周期内恒定 */
+    if micSidecarConverter == nil
+      || micSidecarConverterSourceFormat.map({ !isSameAudioFormat($0, buffer.format) }) ?? true {
+      micSidecarConverter = AVAudioConverter(from: buffer.format, to: targetFormat)
+      micSidecarConverterSourceFormat = buffer.format
+    }
+    guard let converter = micSidecarConverter else {
       if micDropCount == 0 {
         log("tap: mic sidecar converter unavailable source=\(describeAudioFormat(buffer.format)) target=\(describeAudioFormat(targetFormat))")
       }
@@ -1588,14 +1603,14 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   }
 
   /**
-   * mic 轨统一时间轴修正。
+   * mic 轨统一时间轴修正
    *
    * 真实机器上见到两类塌缩:
-   * - VPIO 7ch/9ch: mic 数据持续到达,但 hostTime 基本不前进。
-   * - fallback raw AVCapture: 系统给的 CMSampleBuffer append 成功,最终 track 仍只有 0.064s。
+   * - VPIO 7ch/9ch: mic 数据持续到达,但 hostTime 基本不前进
+   * - fallback raw AVCapture: 系统给的 CMSampleBuffer append 成功,最终 track 仍只有 0.064s
    *
    * 因此 mic 写入不直接信任来源 PTS。来源 PTS 只作为首帧锚点和异常检测输入;一旦发现冻结/回退/压缩,
-   * 后续按「上一帧 PTS + sampleCount / sampleRate」递推,保住真实录制时长。
+   * 后续按「上一帧 PTS + sampleCount / sampleRate」递推,保住真实录制时长
    */
   private func retimedMicSample(_ sampleBuffer: CMSampleBuffer) -> CMSampleBuffer {
     guard let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
@@ -1736,6 +1751,8 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     tapFormat = nil
     tapFormatDescription = nil
     micFormatDescription = nil
+    micSidecarConverter = nil
+    micSidecarConverterSourceFormat = nil
     receivedNonSilentBuffer = false
     silentBufferCount = 0
     tapCallbackCount = 0

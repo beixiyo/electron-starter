@@ -52,7 +52,8 @@ export class NativeBridge<T extends Record<string, any>> {
     if (this.child !== null)
       return
 
-    this.child = spawn(getNativeBinaryPath(this.config.name), this.config.args ?? [], {
+    /** 局部捕获本次 spawn 的实例：exit/error 异步回调只清理自己这一代，避免 restart 后误清新 child */
+    const child = spawn(getNativeBinaryPath(this.config.name), this.config.args ?? [], {
       stdio: [
         this.config.writable
           ? 'pipe'
@@ -64,14 +65,16 @@ export class NativeBridge<T extends Record<string, any>> {
       ],
     })
 
-    this.child.stdout?.setEncoding('utf8')
+    this.child = child
+
+    child.stdout?.setEncoding('utf8')
     log.info('process.started', 'native helper process started', {
       helper: this.config.name,
-      pid: this.child.pid,
+      pid: child.pid,
     })
 
     let buffer = ''
-    this.child.stdout?.on('data', (data: string) => {
+    child.stdout?.on('data', (data: string) => {
       buffer += data
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
@@ -84,8 +87,8 @@ export class NativeBridge<T extends Record<string, any>> {
     })
 
     if (this.config.logStderr) {
-      this.child.stderr?.setEncoding('utf8')
-      this.child.stderr?.on('data', (data: string) => {
+      child.stderr?.setEncoding('utf8')
+      child.stderr?.on('data', (data: string) => {
         for (const line of data.split('\n')) {
           const trimmed = line.trim()
           if (trimmed) {
@@ -98,13 +101,14 @@ export class NativeBridge<T extends Record<string, any>> {
 
     let childClosed = false
 
-    this.child.on('exit', (code, signal) => {
+    child.on('exit', (code, signal) => {
       if (childClosed)
         return
 
       childClosed = true
       const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
-      this.child = null
+      if (this.child === child)
+        this.child = null
       if (unexpected) {
         log.warn('process.unexpected-exit', 'native helper exited unexpectedly', {
           helper: this.config.name,
@@ -115,13 +119,14 @@ export class NativeBridge<T extends Record<string, any>> {
       }
     })
 
-    this.child.on('error', (error) => {
+    child.on('error', (error) => {
       if (childClosed)
         return
 
       childClosed = true
       log.error('process.start.failed', 'native helper failed to start', error, { helper: this.config.name })
-      this.child = null
+      if (this.child === child)
+        this.child = null
       this.config.onUnexpectedExit?.(null, null)
     })
   }

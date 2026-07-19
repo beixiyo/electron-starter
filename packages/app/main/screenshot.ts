@@ -186,17 +186,50 @@ async function beginCaptureSession(
     const win = createOverlayWindow(result.bounds)
     overlayWindows.push(win)
 
-    const base64 = result.pngBuffer.toString('base64')
-
     win.once('ready-to-show', async () => {
       win.show()
       win.focus()
+      /** base64 发送点按需派生，对应截图已被兜底清理时跳过 */
+      const capture = captures.get(result.displayId)
+      if (!capture)
+        return
+
       const service = await getScreenshotService()
       service.emit('init', {
-        base64,
+        base64: capture.imageBuffer.toString('base64'),
         displayId: result.displayId,
         scaleFactor: result.scaleFactor,
       }, win)
+    })
+
+    /**
+     * 兜底（E4）：overlay 异常消失（渲染端崩溃等）时无人走 closeAllOverlays，
+     * 全屏 PNG Buffer 会驻留到下次截图。closeAllOverlays 主动销毁前已把窗口
+     * 移出 overlayWindows，此处 indexOf 命中即为异常关闭
+     */
+    win.once('closed', () => {
+      const index = overlayWindows.indexOf(win)
+      if (index === -1)
+        return
+
+      overlayWindows.splice(index, 1)
+      captures.delete(result.displayId)
+      console.warn(`[screenshot] overlay window closed outside normal teardown (displayId=${result.displayId})`)
+
+      if (overlayWindows.length === 0 && currentSession) {
+        closeAllOverlays()
+        void cancelCurrentSession()
+      }
+    })
+
+    /**
+     * 渲染进程崩溃/被 kill 时窗口不会自动关闭（只留空白覆盖层拦截鼠标），
+     * 'closed' 兜底不会触发；主动 destroy 桥接到上面的 closed handler 统一清理
+     */
+    win.webContents.once('render-process-gone', (_event, details) => {
+      console.warn(`[screenshot] overlay renderer gone, destroying window (displayId=${result.displayId}, reason=${details.reason})`)
+      if (!win.isDestroyed())
+        win.destroy()
     })
   }
 
@@ -399,13 +432,16 @@ async function cropImage(capture: CaptureStore, rect: ScreenshotBounds): Promise
 }
 
 function closeAllOverlays(): void {
-  for (const win of overlayWindows) {
+  /** 先摘下再销毁：destroy 会同步触发 closed，摘下后兜底 handler 查不到窗口即知是主动销毁 */
+  const wins = overlayWindows
+  overlayWindows = []
+  captures.clear()
+
+  for (const win of wins) {
     if (!win.isDestroyed()) {
       win.destroy()
     }
   }
-  overlayWindows = []
-  captures.clear()
 
   for (const win of dimmedWindows) {
     if (!win.isDestroyed()) {

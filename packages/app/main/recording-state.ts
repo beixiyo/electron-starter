@@ -18,6 +18,8 @@ class RecordingStateManager {
   private maxDurationReachedFn: (() => void) | null = null
   private phaseListeners = new Set<(prev: RecordingPhase, next: RecordingPhase) => void>()
   private _nativeSource: NativeRecordingSource | null = null
+  /** 上次实际广播出去的快照摘要（null = 尚未广播过，首帧必发） */
+  private lastSentDigest: string | null = null
 
   get snapshot(): RecordingSnapshot {
     return {
@@ -270,8 +272,22 @@ class RecordingStateManager {
     }
   }
 
+  /**
+   * 内容去重广播：快照内容与上次广播相同则跳过 emit，避免空转 IPC 击穿隐藏窗口的
+   * backgroundThrottling。摘要必须覆盖 RecordingSnapshot 的全部字段（phase/elapsed/nativeSource），
+   * 漏字段 = 该字段变化被吞；phase 在摘要内，暂停/恢复/停止跳变天然立即广播
+   */
   private broadcast(): void {
-    this.broadcastFn?.(this.snapshot)
+    if (!this.broadcastFn)
+      return
+
+    const snap = this.snapshot
+    const digest = `${snap.phase}|${snap.elapsed}|${snap.nativeSource ?? ''}`
+    if (digest === this.lastSentDigest)
+      return
+
+    this.lastSentDigest = digest
+    this.broadcastFn(snap)
   }
 }
 

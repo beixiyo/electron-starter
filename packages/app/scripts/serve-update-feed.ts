@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { existsSync, readdirSync, statSync } from 'node:fs'
-import { extname, join, relative, resolve, sep } from 'node:path'
+import { extname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 

@@ -18,8 +18,12 @@ export function setupOAuthInterceptor(mainWindow: BrowserWindow): void {
   const rawApple = import.meta.env.VITE_ELECTRON_APPLE_REDIRECT_URI
   const rawGoogle = import.meta.env.VITE_ELECTRON_GOOGLE_REDIRECT_URI
 
-  const appleRedirectOrigin = rawApple ? getUrl(rawApple) : null
-  const googleRedirectOrigin = rawGoogle ? getUrl(rawGoogle) : null
+  const appleRedirectOrigin = rawApple
+    ? getUrl(rawApple)
+    : null
+  const googleRedirectOrigin = rawGoogle
+    ? getUrl(rawGoogle)
+    : null
 
   const filterUrls: string[] = []
   appleRedirectOrigin && filterUrls.push(`${appleRedirectOrigin}/*`)

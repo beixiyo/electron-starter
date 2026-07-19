@@ -86,6 +86,7 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     }
 
     openPrivacySettings('accessibility')
+    fnAccessibilityTrustedCache = null
     return getPermissionStatus('accessibility')
   }
 
@@ -168,7 +169,25 @@ function clearSettingsFallback(kind: PermissionKind): void {
   nativePromptRequestedKinds.delete(kind)
 }
 
+/**
+ * fn-listener 辅助功能探测要同步 spawn 子进程（~10-50ms 阻塞主进程事件循环），
+ * 而权限弹窗打开期间以 1s 轮询 permission.get——与 audioCaptureStatusCache 同理加短 TTL 缓存；
+ * requestPermission 打开设置页引导授权时主动失效，保证用户决策后尽快反映
+ */
+const FN_ACCESSIBILITY_TRUSTED_TTL_MS = 3000
+let fnAccessibilityTrustedCache: { trusted: boolean, at: number } | null = null
+
 function isFnListenerAccessibilityTrusted(): boolean {
+  if (fnAccessibilityTrustedCache && Date.now() - fnAccessibilityTrustedCache.at < FN_ACCESSIBILITY_TRUSTED_TTL_MS) {
+    return fnAccessibilityTrustedCache.trusted
+  }
+
+  const trusted = probeFnListenerAccessibilityTrusted()
+  fnAccessibilityTrustedCache = { trusted, at: Date.now() }
+  return trusted
+}
+
+function probeFnListenerAccessibilityTrusted(): boolean {
   try {
     execFileSync(getNativeBinaryPath('fn-listener'), ['--check-accessibility'], {
       stdio: 'ignore',

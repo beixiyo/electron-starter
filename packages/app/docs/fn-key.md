@@ -90,7 +90,7 @@ registerFnShortcuts({
 
   combos: [
     {
-      key: 'Space',  // 键名需与 Swift COMBO_KEYS 一致
+      key: 'Space', // 键名需与 Swift COMBO_KEYS 一致
       onTrigger: () => { /* Fn+Space 业务逻辑 */ },
     },
   ],

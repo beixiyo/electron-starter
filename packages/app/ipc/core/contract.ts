@@ -64,11 +64,11 @@ export type IpcEmitter<C extends IpcContract> = {
    * @param payload 事件数据（从契约 events 值推导）
    * @param target 目标窗口，不传则广播到所有窗口
    */
-  emit<K extends string & keyof C['events']>(
+  emit: <K extends string & keyof C['events']>(
     event: K,
     payload: C['events'][K],
     target?: Electron.BrowserWindow,
-  ): void
+  ) => void
 }
 
 /** invoke 方法 → renderer 侧类型（直接调用，返回 Promise） */
@@ -86,10 +86,10 @@ type EventSubscription<C extends IpcContract> = {
    * @param callback 回调
    * @returns 取消订阅函数
    */
-  on<K extends string & keyof C['events']>(
+  on: <K extends string & keyof C['events']>(
     event: K,
     callback: (payload: C['events'][K]) => void,
-  ): () => void
+  ) => () => void
 }
 
 /**
