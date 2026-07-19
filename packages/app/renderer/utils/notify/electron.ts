@@ -13,10 +13,10 @@ import type {
  * Electron 适配器
  *
  * 回调留在渲染进程：以 `id` 关联，主进程仅回传可序列化的事件，
- * 这里维护 `id → 注册项` 表并按 id 路由到对应回调。
+ * 这里维护 `id → 注册项` 表并按 id 路由到对应回调
  *
  * 运行时根据当前系统（`$electron.process.platform`）只取 `mac` / `windows` / `linux`
- * 三者之一，扁平化成与平台无关的内部结构后再发给主进程。
+ * 三者之一，扁平化成与平台无关的内部结构后再发给主进程
  */
 
 /** 用强随机 id，避免多窗口（各自独立 realm）生成相同自增 id 而互相干扰 */
@@ -100,8 +100,15 @@ function ensureSubscribed(): void {
          * 声明了 actions/reply 的条目例外：'action'/'reply' 事件可能在 click 之外单独到达，
          * 保留注册项等 close/失败/陈旧清扫兜底
          */
-        if (!desktop.actions?.length && desktop.reply == null)
+        if (!desktop.actions?.length && desktop.reply == null) {
+          /**
+           * 删表前补发 onClose：点击已经让通知消失，而真正的 'close' 事件到达时
+           * 条目已不在表里，onClose 将永远不触发，与 web 适配器的契约不一致
+           * 补发后条目即刻删除，随后真的收到 'close' 也不会重复回调
+           */
+          options.onClose?.(ctx)
           registry.delete(e.id)
+        }
         break
       case 'action':
         desktop.onAction?.(e.actionIndex ?? -1, ctx)

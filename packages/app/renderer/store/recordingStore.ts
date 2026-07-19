@@ -251,8 +251,24 @@ export function initRecordingStore(): void {
     return
   }
 
-  void $ipc.recording.getState().then(ingestSnapshot)
-  unsubscribeIpc = $ipc.recording.on('stateChanged', ingestSnapshot)
+  /**
+   * 拉取与订阅存在覆盖竞态：on 同步生效，getState 要一次 IPC 往返
+   * 若往返期间状态变化（典型是录音结束），事件先写入新状态，随后 resolve 的
+   * 陈旧快照会把它覆盖回去；而停止后主进程的 tick 已停，不会再有广播来纠正，
+   * UI 就卡在错误的录音态。事件一到就作废这次拉取——订阅永远比拉取更新
+   */
+  let receivedPush = false
+
+  void $ipc.recording.getState().then((s) => {
+    if (receivedPush)
+      return
+    ingestSnapshot(s)
+  })
+
+  unsubscribeIpc = $ipc.recording.on('stateChanged', (s) => {
+    receivedPush = true
+    ingestSnapshot(s)
+  })
 }
 
 export function disposeRecordingStore(): void {
