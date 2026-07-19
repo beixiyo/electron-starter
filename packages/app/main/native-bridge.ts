@@ -27,6 +27,12 @@ function getNativePlatformDir(): string {
 
 export class NativeBridge<T extends Record<string, any>> {
   private child: ChildProcess | null = null
+  /**
+   * 已结算的子进程。用 child 实例本身做代际身份：
+   * exit / error 据此保证每代只处理一次；stop() 主动登记待杀的那代，
+   * 令其滞后到达的退出事件不再被判成意外退出
+   */
+  private readonly settledChildren = new WeakSet<ChildProcess>()
   readonly events = new EventBus<T>()
 
   constructor(private config: NativeBridgeConfig<T>) {}
@@ -99,13 +105,11 @@ export class NativeBridge<T extends Record<string, any>> {
       })
     }
 
-    let childClosed = false
-
     child.on('exit', (code, signal) => {
-      if (childClosed)
+      if (this.settledChildren.has(child))
         return
 
-      childClosed = true
+      this.settledChildren.add(child)
       const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
       if (this.child === child)
         this.child = null
@@ -120,10 +124,10 @@ export class NativeBridge<T extends Record<string, any>> {
     })
 
     child.on('error', (error) => {
-      if (childClosed)
+      if (this.settledChildren.has(child))
         return
 
-      childClosed = true
+      this.settledChildren.add(child)
       log.error('process.start.failed', 'native helper failed to start', error, { helper: this.config.name })
       if (this.child === child)
         this.child = null
@@ -140,6 +144,15 @@ export class NativeBridge<T extends Record<string, any>> {
   stop(): void {
     if (this.child === null)
       return
+
+    /**
+     * 先登记再 kill：exit 事件异步到达，届时 restart 可能已 spawn 新进程。
+     * 不登记则老进程的退出会被判成意外退出——helper 若自行捕获 SIGTERM 后 exit(0)，
+     * signal 为 null 恰好绕过 SIGTERM / SIGINT 判断，从而在健康的新一代上
+     * 触发一次多余的 onUnexpectedExit（全量快捷键重注册）
+     */
+    this.settledChildren.add(this.child)
+
     this.child.kill()
     log.info('process.stopped', 'native helper process stopped', { helper: this.config.name })
     this.child = null
