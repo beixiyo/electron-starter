@@ -59,6 +59,7 @@ if (process.platform === 'darwin') {
 }
 
 setupHttpCachePolicy()
+setupDevParentExitCleanup()
 
 initDeeplink(() => {
   initAppLogging(ipcMain)
@@ -124,6 +125,51 @@ function setupHttpCachePolicy(): void {
   }
 
   app.commandLine.appendSwitch('disk-cache-size', String(256 * 1024 * 1024))
+}
+
+/** dev 父进程存活探测间隔 */
+const DEV_PARENT_CHECK_INTERVAL_MS = 2000
+
+/**
+ * dev 残留实例回收。electron-vite 以 `stdio: 'inherit'` spawn 本进程，却只在「主进程重建」
+ * 时 kill 子进程——Ctrl-C 结束 dev server 时不回收，本进程会变成孤儿：
+ * 窗口留在屏幕上（renderer 连的 vite server 已死，悬停即转圈），
+ * 更要命的是它占着 requestSingleInstanceLock，下次 dev 起的新实例拿不到锁直接 quit，
+ * 表现为 dev 卡在 `starting electron app...` 且永不建窗
+ *
+ * 两路兜底：
+ * - 信号：终端 Ctrl-C 把 SIGINT 发给整个前台进程组，本进程在组内，走这条即可
+ * - 轮询 ppid：信号未送达时（dev server 被单独 kill 或自身崩溃）本进程会被 reparent，
+ *   ppid 变化即判定父进程已死。注意 stdio 是 'inherit'，stdin 就是终端 TTY 本身、
+ *   不会随父进程关闭而 EOF，因此监听 stdin 无效（实测不触发）
+ *
+ * 走 app.quit() 而非 exit()，以触发既有的 before-quit 销毁窗口、will-quit 停 powerSaveBlocker
+ * 与 native helper 清理，避免 helper 子进程反过来变成孤儿
+ */
+function setupDevParentExitCleanup(): void {
+  if (!is.dev)
+    return
+
+  const quitOnce = (): void => {
+    process.exitCode = 0
+    app.quit()
+  }
+
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.on(signal, quitOnce)
+  }
+
+  const parentPid = process.ppid
+  const timer = setInterval(() => {
+    if (process.ppid === parentPid)
+      return
+
+    clearInterval(timer)
+    quitOnce()
+  }, DEV_PARENT_CHECK_INTERVAL_MS)
+
+  /** 不因这个心跳把进程钉在事件循环里，正常退出路径不受影响 */
+  timer.unref?.()
 }
 
 // ─────────────────────────────────────────────
