@@ -85,7 +85,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "comps": "workspace:*",
     "config": "workspace:*",
-    "electron": "^42.2.0",
+    "electron": "^43.1.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "6.0.0-beta.1",
     "hooks": "workspace:*",
