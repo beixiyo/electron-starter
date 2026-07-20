@@ -69,7 +69,6 @@
   "dependencies": {
     "@jl-org/log": "^2.1.1",
     "@nut-tree-fork/nut-js": "4.2.6",
-    "electron-screenshots": "^0.6.1",
     "electron-updater": "^6.8.9",
     "node-screenshots": "^0.2.8",
     "rotating-file-stream": "^3.2.9",

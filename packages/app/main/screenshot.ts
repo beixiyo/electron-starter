@@ -109,7 +109,7 @@ async function cropCaptureForSession(
   if (!capture || !session)
     return null
 
-  const cropped = await cropImage(capture, rect)
+  const cropped = cropImage(capture, rect)
   closeAllOverlays()
 
   if (!cropped) {
@@ -396,34 +396,35 @@ async function captureAllDisplays(displays: Electron.Display[]) {
   return results
 }
 
-async function cropImage(capture: CaptureStore, rect: ScreenshotBounds): Promise<Buffer | null> {
+/**
+ * 从会话缓存的整屏图裁剪选区
+ *
+ * 必须复用 capture.imageBuffer，不可重新抓屏：overlay 展示的是发起截图那一刻的冻结画面，
+ * 用户是对着冻结画面框选的。若在确认时二次 captureImage()，取到的是「点确定那一刻」的屏幕，
+ * 期间任何变化（通知弹出、光标闪烁、视频播放、动画）都会让出图与用户所见不一致，
+ * 且白白多一次全屏抓取开销。
+ *
+ * 坐标系：rect 来自渲染层，是 DIP；createFromBuffer 默认 scaleFactor 为 1，
+ * crop 按原始像素计算，故需乘 capture.scaleFactor 转成物理像素。
+ */
+function cropImage(capture: CaptureStore, rect: ScreenshotBounds): Buffer | null {
   try {
-    const { Monitor } = await import('node-screenshots')
-
-    const monitors = Monitor.all()
-    const monitor = monitors.find((m) => {
-      const cx = Math.round(m.x() + m.width() / 2)
-      const cy = Math.round(m.y() + m.height() / 2)
-      const point = process.platform === 'win32'
-        ? screen.screenToDipPoint({ x: cx, y: cy })
-        : { x: cx, y: cy }
-      const display = screen.getDisplayNearestPoint(point)
-      return display.id === capture.displayId
-    })
-
-    if (!monitor)
+    const image = nativeImage.createFromBuffer(capture.imageBuffer)
+    if (image.isEmpty())
       return null
 
-    const image = await monitor.captureImage()
     const sf = capture.scaleFactor
-    const cropped = await image.crop(
-      Math.round(rect.x * sf),
-      Math.round(rect.y * sf),
-      Math.round(rect.width * sf),
-      Math.round(rect.height * sf),
-    )
+    const cropped = image.crop({
+      x: Math.round(rect.x * sf),
+      y: Math.round(rect.y * sf),
+      width: Math.round(rect.width * sf),
+      height: Math.round(rect.height * sf),
+    })
 
-    return Buffer.from(await cropped.toPng())
+    if (cropped.isEmpty())
+      return null
+
+    return cropped.toPNG()
   }
   catch (err) {
     console.error('Screenshot crop failed:', err)
