@@ -244,7 +244,15 @@ async function handleVoiceImeRelease(raw: unknown): Promise<void> {
 
 function setupBrowserWindowLifecycle(): void {
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    /**
+     * `watchWindowShortcuts` 的 zoom 默认是 false，会在 before-input-event 里对
+     * `Cmd/Ctrl + Minus` 和 `Cmd/Ctrl + Shift + Equal` 调 preventDefault。
+     * preventDefault 让 Electron 直接返回 HANDLED，按键既不下发渲染进程也不触发菜单
+     * accelerator，表现为「Cmd+= 能放大、Cmd+0 能恢复，唯独 Cmd+- 无法缩小」
+     * （Digit0 和不带 shift 的 Equal 都不在它的拦截列表里）。
+     * 这里显式放行，把缩放交回 Electron 默认菜单的 zoomIn / zoomOut / resetZoom role
+     */
+    optimizer.watchWindowShortcuts(window, { zoom: true })
 
     const webContentsId = window.webContents?.id
 
