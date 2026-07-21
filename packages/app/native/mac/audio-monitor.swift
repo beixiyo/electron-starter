@@ -21,6 +21,8 @@ struct AudioProcessInfo {
   let pid: Int
   let name: String
   let bundleId: String
+  /// 可执行文件绝对路径，上层据此识别输入法（`*/Library/Input Methods/`）等结构性目录
+  let executablePath: String
   let isRunningInput: Bool
   let isRunningOutput: Bool
 }
@@ -58,12 +60,13 @@ func getAudioProcesses() -> [AudioProcessInfo] {
 
     guard isInput || isOutput else { continue }
 
-    let (name, bundleId) = resolveProcessInfo(pid: pid)
+    let (name, bundleId, executablePath) = resolveProcessInfo(pid: pid)
 
     results.append(AudioProcessInfo(
       pid: pid,
       name: name,
       bundleId: bundleId,
+      executablePath: executablePath,
       isRunningInput: isInput,
       isRunningOutput: isOutput
     ))
@@ -100,23 +103,46 @@ func getBoolProperty(_ objectID: AudioObjectID, _ selector: AudioObjectPropertyS
   return value != 0
 }
 
-func resolveProcessInfo(pid: Int) -> (name: String, bundleId: String) {
-  if let app = NSRunningApplication(processIdentifier: pid_t(pid)) {
-    let name = app.localizedName ?? "pid-\(pid)"
-    let bundleId = app.bundleIdentifier ?? ""
-    return (name, bundleId)
+/// 从可执行文件路径回溯最近的 .app，读出其 CFBundleIdentifier
+///
+/// Electron 应用真正占用麦克风的是 `xxx Helper (Renderer)` 子进程，它不注册到 Launch Services，
+/// NSRunningApplication(processIdentifier:) 返回 nil，导致 bundleId 为空、上层黑名单前缀匹配全部落空
+/// 回溯 `.../Frameworks/xxx Helper.app/Contents/MacOS/xxx Helper` 能拿到 `<主 app id>.helper.*`，
+/// 与主 app id 共享前缀，前缀匹配即可覆盖父子进程
+func bundleIdFromExecutablePath(_ fullPath: String) -> String {
+  var url = URL(fileURLWithPath: fullPath)
+
+  while url.path != "/" {
+    url = url.deletingLastPathComponent()
+    if url.pathExtension == "app", let bundleId = Bundle(url: url)?.bundleIdentifier {
+      return bundleId
+    }
   }
 
+  return ""
+}
+
+func getExecutablePath(pid: Int) -> String {
   let maxPathSize = 4 * Int(MAXPATHLEN)
   var pathBuffer = [CChar](repeating: 0, count: maxPathSize)
-  let pathLength = proc_pidpath(pid_t(pid), &pathBuffer, UInt32(maxPathSize))
-  if pathLength > 0 {
-    let fullPath = String(cString: pathBuffer)
-    let name = (fullPath as NSString).lastPathComponent
-    return (name, "")
+  guard proc_pidpath(pid_t(pid), &pathBuffer, UInt32(maxPathSize)) > 0 else { return "" }
+  return String(cString: pathBuffer)
+}
+
+func resolveProcessInfo(pid: Int) -> (name: String, bundleId: String, executablePath: String) {
+  let executablePath = getExecutablePath(pid: pid)
+
+  if let app = NSRunningApplication(processIdentifier: pid_t(pid)) {
+    let bundleId = app.bundleIdentifier ?? ""
+    if !bundleId.isEmpty {
+      return (app.localizedName ?? "pid-\(pid)", bundleId, executablePath)
+    }
   }
 
-  return ("pid-\(pid)", "")
+  guard !executablePath.isEmpty else { return ("pid-\(pid)", "", "") }
+
+  let name = (executablePath as NSString).lastPathComponent
+  return (name, bundleIdFromExecutablePath(executablePath), executablePath)
 }
 
 func escapeJSON(_ s: String) -> String {
@@ -133,7 +159,7 @@ var lastOutput = ""
 func outputProcesses(_ processes: [AudioProcessInfo]) {
   var entries: [String] = []
   for p in processes {
-    let entry = "{\"pid\":\(p.pid),\"name\":\"\(escapeJSON(p.name))\",\"bundleId\":\"\(escapeJSON(p.bundleId))\",\"isRunningInput\":\(p.isRunningInput),\"isRunningOutput\":\(p.isRunningOutput)}"
+    let entry = "{\"pid\":\(p.pid),\"name\":\"\(escapeJSON(p.name))\",\"bundleId\":\"\(escapeJSON(p.bundleId))\",\"executablePath\":\"\(escapeJSON(p.executablePath))\",\"isRunningInput\":\(p.isRunningInput),\"isRunningOutput\":\(p.isRunningOutput)}"
     entries.append(entry)
   }
   let json = "[" + entries.joined(separator: ",") + "]"

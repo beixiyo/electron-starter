@@ -35,6 +35,8 @@ export type AudioProcess = {
   pid: number
   name: string
   bundleId: string
+  /** 可执行文件绝对路径 */
+  executablePath: string
   isRunningInput: boolean
   isRunningOutput: boolean
 }

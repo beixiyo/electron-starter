@@ -2,13 +2,13 @@ import type { RecordingStatePayload } from '@ipc/services/meeting-detection/cont
 import type { BrowserWindow } from 'electron'
 import type { MeetingSession } from './meeting-detector'
 import { meetingDetectionService } from '@ipc/services/meeting-detection/service'
-import { getRecorderPid, onRecorderEvent, stopRecorder } from '@main/audio-recorder'
+import { onRecorderEvent, stopRecorder } from '@main/audio-recorder'
 import { initNativeRecordingPipeline } from '@main/native-recording'
 import { recordingState } from '@main/recording-state'
 import { WindowType } from '@shared'
 import { app } from 'electron'
 import { logicalWindowManager } from '../window-manager'
-import { addSelfPidSource, onMeetingEvent, startMeetingDetector, stopMeetingDetector } from './meeting-detector'
+import { onMeetingEvent, startMeetingDetector, stopMeetingDetector } from './meeting-detector'
 
 /**
  * MEETING_TOAST 弹窗当前正占用池窗口时返回该窗口，否则 undefined
@@ -69,14 +69,6 @@ function emitRecordingState(payload: RecordingStatePayload): void {
 
 export function initMeetingDetection(): void {
   initNativeRecordingPipeline()
-
-  /** 「会议录制」自身的子进程同时占麦+系统音频，会被误判为会议，排除掉 */
-  addSelfPidSource(() => {
-    const pid = getRecorderPid()
-    return pid
-      ? [pid]
-      : []
-  })
 
   onMeetingEvent((event) => {
     const label = event.type === 'meeting-confirmed'
