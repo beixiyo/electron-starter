@@ -29,6 +29,7 @@ import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
 import { setupOAuthInterceptor } from './oauth-interceptor'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
+import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
 import { startCaptureFromShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
@@ -63,6 +64,7 @@ setupDevParentExitCleanup()
 
 initDeeplink(() => {
   initAppLogging(ipcMain)
+  initPowerEventCleanup()
   initPowerSaveBlockers()
   const ipcLog = createMainDiagnosticLogger('ipc.service')
   setIpcServiceErrorLogger((error, meta) => {

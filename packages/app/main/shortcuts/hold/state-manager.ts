@@ -30,6 +30,17 @@ class HoldStateManager {
     return holdState
   }
 
+  discardHold(type: WindowType | undefined): HoldState | undefined {
+    const holdType = type ?? INTERNAL_HOLD_NO_WINDOW
+    const holdState = this.holdStates.get(holdType)
+
+    if (!holdState)
+      return undefined
+
+    this.holdStates.delete(holdType)
+    return holdState
+  }
+
   isHolding(type?: WindowType): boolean {
     const holdType = type ?? INTERNAL_HOLD_NO_WINDOW
     return this.holdStates.get(holdType)?.isHolding ?? false

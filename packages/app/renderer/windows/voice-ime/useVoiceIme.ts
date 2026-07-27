@@ -1,7 +1,8 @@
+import type { VoiceImeCancelPayload } from '@ipc/services/voice-ime/contract'
 import type { VoiceImeReleaseResult } from '@shared'
 import type { LiveWaveAudioProps, RecordingControls, VoiceRecorderStatus } from 'comps'
 import { convertToWav, formatDuration } from '@jl-org/tool'
-import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, WindowType } from '@shared'
+import { HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, VOICE_IME_MAX_RECORDING_DURATION_MS, WindowType } from '@shared'
 import { useGetState, useLatestCallback } from 'hooks'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -18,6 +19,7 @@ export function useVoiceIme() {
   const releaseErrorRef = useRef<string | null>(null)
   const releaseInFlightRef = useRef(false)
   const timerRef = useRef<number | null>(null)
+  const maxRecordingTimerRef = useRef<number | null>(null)
   const isHoldingRef = useRef(false)
 
   const durationLabel = useMemo(() => formatDuration(durationSeconds), [durationSeconds])
@@ -35,7 +37,16 @@ export function useVoiceIme() {
     timerRef.current = null
   })
 
+  const clearMaxRecordingTimer = useLatestCallback(() => {
+    if (maxRecordingTimerRef.current === null)
+      return
+    window.clearTimeout(maxRecordingTimerRef.current)
+    maxRecordingTimerRef.current = null
+  })
+
   const handleWaveformError = useLatestCallback((payload: Error) => {
+    clearMaxRecordingTimer()
+    void liveWaveRef.current?.destroy()
     const message = payload?.message || '录音失败，请检查麦克风权限'
     setError(message)
     releaseErrorRef.current = message
@@ -93,6 +104,7 @@ export function useVoiceIme() {
     }
     finally {
       releaseInFlightRef.current = false
+      await liveWaveRef.current?.destroy()
     }
   })
 
@@ -114,11 +126,27 @@ export function useVoiceIme() {
     recordingBlobRef.current = null
     recordedDurationMsRef.current = 0
     setDurationSeconds(0)
-    recordingStartAtRef.current = Date.now()
     setStatus('recording')
     startTimer()
     try {
       await controller.start()
+
+      /**
+       * getUserMedia 尚未完成时用户可能已经松开快捷键
+       *
+       * 迟到的 start 没有后续 release 可以关闭，必须在这里立即回收 MediaStream
+       */
+      if (!isHoldingRef.current) {
+        await controller.destroy()
+        return
+      }
+
+      recordingStartAtRef.current = Date.now()
+      clearMaxRecordingTimer()
+      maxRecordingTimerRef.current = window.setTimeout(() => {
+        maxRecordingTimerRef.current = null
+        void handleHoldEnd(true)
+      }, VOICE_IME_MAX_RECORDING_DURATION_MS)
     }
     catch (err) {
       handleWaveformError(err as Error)
@@ -126,6 +154,7 @@ export function useVoiceIme() {
   })
 
   const stopRecording = useLatestCallback(async () => {
+    clearMaxRecordingTimer()
     const controller = liveWaveRef.current
     if (!controller) {
       stopTimer()
@@ -150,8 +179,8 @@ export function useVoiceIme() {
     void startRecording()
   })
 
-  const handleHoldEnd = useLatestCallback(async () => {
-    if (!isHoldingRef.current)
+  const handleHoldEnd = useLatestCallback(async (force = false) => {
+    if (!isHoldingRef.current && !force)
       return
     isHoldingRef.current = false
     setStatus(prev => prev === 'idle'
@@ -167,6 +196,25 @@ export function useVoiceIme() {
     }
     pendingReleaseRef.current = { duration: durationMs }
     await flushPendingResult()
+  })
+
+  const handleSystemCancel = useLatestCallback((reason: VoiceImeCancelPayload['reason']) => {
+    isHoldingRef.current = false
+    pendingReleaseRef.current = null
+    recordingBlobRef.current = null
+    releaseErrorRef.current = null
+    recordingStartAtRef.current = null
+    recordedDurationMsRef.current = 0
+    releaseInFlightRef.current = false
+
+    stopTimer()
+    clearMaxRecordingTimer()
+    setDurationSeconds(0)
+    setError(null)
+    setStatus('idle')
+    void liveWaveRef.current?.destroy()
+
+    console.info(`[voice-ime] cancelled: ${reason}`)
   })
 
   useEffect(() => {
@@ -194,8 +242,15 @@ export function useVoiceIme() {
   }, [])
 
   useEffect(() => {
+    return $ipc.voiceIme.on('cancel', ({ reason }) => {
+      handleSystemCancel(reason)
+    })
+  }, [])
+
+  useEffect(() => {
     return () => {
       stopTimer()
+      clearMaxRecordingTimer()
       if (liveWaveRef.current)
         void liveWaveRef.current.destroy()
     }
