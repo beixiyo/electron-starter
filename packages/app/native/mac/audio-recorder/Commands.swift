@@ -67,12 +67,12 @@ enum ActiveEngine {
 
 var activeEngine: ActiveEngine = .none
 
-func stopActiveRecorder() async {
+func stopActiveRecorder(handoffId: Int? = nil) async {
   if activeEngine == .tap, #available(macOS 14.2, *) {
-    await sharedTapRecorder().stop()
+    await sharedTapRecorder().stop(handoffId: handoffId)
   }
   else {
-    await recorder.stop()
+    await recorder.stop(handoffId: handoffId)
   }
   activeEngine = .none
 }
@@ -148,7 +148,8 @@ func handleCommand(_ line: String) async {
       recorder.resume()
     }
   case "stop":
-    await stopActiveRecorder()
+    let handoffId = (json["handoffId"] as? NSNumber)?.intValue
+    await stopActiveRecorder(handoffId: handoffId)
   default:
     break
   }

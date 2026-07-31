@@ -6,6 +6,10 @@ import { app } from 'electron'
 import { NativeBridge } from '../native-bridge'
 
 const nativeLog = createMainDiagnosticLogger('native.recorder')
+const recycleGenerations = new Set<number>()
+const handoffWatchdogs = new Map<number, ReturnType<typeof setTimeout>>()
+const STOP_HANDOFF_TIMEOUT_MS = 60_000
+const RECYCLE_TERMINAL_TIMEOUT_MS = 2_000
 
 const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
@@ -15,14 +19,34 @@ const bridge = new NativeBridge<RecorderEvents>({
   onUnexpectedExit: (code, signal) => {
     bridge.events.emit('exited', { code, signal })
   },
+  onHandoffComplete: (generation) => {
+    if (generation !== null) {
+      finishHandoffWatchdog(generation)
+      recycleGenerations.delete(generation)
+    }
+  },
+  onHandoffStarted: (generation) => {
+    armHandoffWatchdog(generation, STOP_HANDOFF_TIMEOUT_MS)
+  },
   parseLine(line, bus) {
     try {
       const msg: RecorderMessage = JSON.parse(line)
       if ('error' in msg) {
-        console.warn(`[audio-recorder] error: ${msg.error}${msg.detail
-          ? ` (${msg.detail})`
-          : ''}`)
-        bus.emit('error', { code: msg.error, detail: msg.detail })
+        const emitError = () => {
+          console.warn(`[audio-recorder] error: ${msg.error}${msg.detail
+            ? ` (${msg.detail})`
+            : ''}`)
+          bus.emit('error', {
+            code: msg.error,
+            detail: msg.detail,
+            path: msg.path,
+            terminal: msg.terminal === true,
+          })
+        }
+        if (msg.terminal === true)
+          emitTerminalAfterRequiredRecycle(msg.handoffId, emitError)
+        else
+          emitError()
       }
       else if (msg.status === 'recording') {
         console.log(`[audio-recorder] recording → ${msg.path}`)
@@ -37,8 +61,18 @@ const bridge = new NativeBridge<RecorderEvents>({
         bus.emit('mixing', { path: msg.path })
       }
       else if (msg.status === 'stopped') {
-        console.log(`[audio-recorder] stopped (${msg.duration ?? 0}s) → ${msg.path}`)
-        bus.emit('stopped', { path: msg.path, duration: msg.duration ?? 0 })
+        const emitStopped = () => {
+          console.log(`[audio-recorder] stopped (${msg.duration ?? 0}s) → ${msg.path}`)
+          bus.emit('stopped', { path: msg.path, duration: msg.duration ?? 0 })
+        }
+        emitTerminalAfterRequiredRecycle(msg.handoffId, emitStopped)
+      }
+      else if (msg.status === 'recycle_required') {
+        if (bridge.handoffGeneration === msg.handoffId) {
+          recycleGenerations.add(msg.handoffId)
+          armHandoffWatchdog(msg.handoffId, RECYCLE_TERMINAL_TIMEOUT_MS)
+        }
+        nativeLog.warn('process.recycle-required', 'audio recorder requested process recycle after recording stop')
       }
       else if (msg.status === 'mic_degraded') {
         /** 非致命：麦克风掉线且未能自愈，录音继续保留系统音轨 */
@@ -53,6 +87,56 @@ const bridge = new NativeBridge<RecorderEvents>({
     }
   },
 })
+
+/**
+ * recycle 是 terminal handoff 的一部分：先重建 helper，再发布 stopped/error
+ * 因此业务层在 terminal 回调里开始下一场录音时，命令一定发给新 helper；重启窗口内
+ * 其它来源提前发来的命令由 NativeBridge 暂存并在新进程 spawn 后按序重放
+ */
+function emitTerminalAfterRequiredRecycle(generation: number | undefined, emit: () => void): void {
+  if (generation === undefined || bridge.handoffGeneration !== generation) {
+    emit()
+    return
+  }
+
+  const shouldRecycle = recycleGenerations.delete(generation)
+  finishHandoffWatchdog(generation)
+  if (!shouldRecycle) {
+    bridge.finishHandoff(generation)
+    emit()
+    return
+  }
+
+  bridge.forceRestart(generation)
+    .then(emit)
+    .catch((error) => {
+      nativeLog.error('process.recycle-failed', 'audio recorder process recycle failed', error)
+      emit()
+    })
+}
+
+function armHandoffWatchdog(generation: number, timeoutMs: number): void {
+  const existing = handoffWatchdogs.get(generation)
+  if (existing)
+    clearTimeout(existing)
+  const watchdog = setTimeout(() => {
+    if (bridge.handoffGeneration !== generation)
+      return
+    handoffWatchdogs.delete(generation)
+    recycleGenerations.delete(generation)
+    nativeLog.error('process.handoff-timeout', 'audio recorder stop handoff timed out; force restarting helper')
+    bridge.forceRestart(generation)
+      .catch(error => nativeLog.error('process.recycle-failed', 'audio recorder process recycle failed', error))
+  }, timeoutMs)
+  handoffWatchdogs.set(generation, watchdog)
+}
+
+function finishHandoffWatchdog(generation: number): void {
+  const watchdog = handoffWatchdogs.get(generation)
+  if (watchdog)
+    clearTimeout(watchdog)
+  handoffWatchdogs.delete(generation)
+}
 
 export function startRecorder(): void {
   console.log('[audio-recorder] spawning process...')
@@ -93,7 +177,7 @@ export function resumeRecording(): void {
 }
 
 export function stopRecording(): void {
-  bridge.send(JSON.stringify({ action: 'stop' }))
+  bridge.sendAndBeginHandoff(handoffId => JSON.stringify({ action: 'stop', handoffId }))
 }
 
 export function onRecorderEvent<K extends keyof RecorderEvents>(
@@ -148,7 +232,7 @@ type RecorderEvents = {
   paused: { path: string }
   mixing: { path: string }
   stopped: { path: string, duration: number }
-  error: { code: string, detail?: string }
+  error: { code: string, detail?: string, path?: string, terminal: boolean }
   mic_degraded: { detail?: string }
   exited: { code: number | null, signal: NodeJS.Signals | null }
 }
@@ -157,6 +241,8 @@ type RecorderMessage
   = | { status: 'recording', path: string, duration?: never, detail?: never }
     | { status: 'paused', path: string, duration?: never, detail?: never }
     | { status: 'mixing', path: string, duration?: never, detail?: never }
-    | { status: 'stopped', path: string, duration?: number, detail?: never }
+    | { status: 'stopped', path: string, duration?: number, handoffId?: number, detail?: never }
     | { status: 'mic_degraded', detail?: string, path?: never, duration?: never }
-    | { error: string, detail?: string, status?: never }
+    | { status: 'recycle_required', handoffId: number, detail?: string, path?: never, duration?: never }
+    | { error: string, detail?: string, terminal?: false, path?: string, status?: never }
+    | { error: string, detail?: string, terminal: true, path: string, handoffId?: number, status?: never }

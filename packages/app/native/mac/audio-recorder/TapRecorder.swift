@@ -26,6 +26,24 @@ struct TapRecorderError: Error {
   }
 }
 
+/** sampleQueue 尾部哨兵与 timeout 竞争时只恢复 continuation 一次 */
+private final class SampleQueueDrainResolution: @unchecked Sendable {
+  private let lock = NSLock()
+  private var continuation: CheckedContinuation<Bool, Never>?
+
+  init(_ continuation: CheckedContinuation<Bool, Never>) {
+    self.continuation = continuation
+  }
+
+  func resolve(_ drained: Bool) {
+    lock.lock()
+    let continuation = continuation
+    self.continuation = nil
+    lock.unlock()
+    continuation?.resume(returning: drained)
+  }
+}
+
 // MARK: - Tap 手动录音引擎（Core Audio process tap + mic 双轨，macOS 14.2+）
 
 @available(macOS 14.2, *)
@@ -41,6 +59,17 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   private var deviceProcID: AudioDeviceIOProcID?
   /** tap IOProc 与 mic 回调共用一条串行队列,保证 writer 启动会话与 append 无竞态 */
   private let sampleQueue = DispatchQueue(label: "tap-recorder", qos: .userInitiated)
+  /** 开录完成后，audioEngine / captureSession / tap 管线变更的唯一物理生命周期执行队列 */
+  private let micLifecycleQueue = DispatchQueue(label: "tap-recorder-mic-lifecycle", qos: .userInitiated)
+  private let captureUpdateLock = NSLock()
+  private var captureUpdateScheduled = false
+  private var pendingCaptureUpdate: (
+    generation: UUID,
+    tapEnabled: Bool,
+    micEnabled: Bool,
+    pids: [pid_t],
+    excludePids: [pid_t]
+  )?
 
   private var writer: AVAssetWriter?
   private var checkpointWriter: AudioCheckpointWriter?
@@ -100,9 +129,19 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   /** mic 自愈连续失败计数:达 MIC_RECOVERY_MAX_ATTEMPTS 停看门狗周期重试并发一次降级诊断;设备变更或重挂成功清零 */
   private var micRecoveryAttempts = 0
   private var micDegradedEmitted = false
-  /** mic 自愈请求去重:一次重挂在命令链上排队期间,后续请求全部合并,避免堆叠重复重挂 */
+  /** mic recovery 的唯一状态所有者：调度、换代、取消、在飞标记与 callback gate 全在同一锁内 */
   private let micRecoveryLock = NSLock()
-  private var micRecoveryScheduled = false
+  private var micRecoveryToken: UUID?
+  private var micRecoveryWorkItem: DispatchWorkItem?
+  private var micRecoveryInFlight = false
+  private var micRecoveryRerunReason: String?
+  private var recordingGeneration = UUID()
+  private var acceptMicSamples = false
+  private var acceptTapSamples = false
+  private var micRecoveryRequested = false
+  /** 每次 attach 都换代；旧 engine 的迟到 callback 即使仍在执行也不能写入新一代录音 */
+  private var activeMicGeneration: UUID?
+  private var activeCaptureOutput: AVCaptureOutput?
 
   private var tapFormat: AudioStreamBasicDescription?
   private var tapFormatDescription: CMAudioFormatDescription?
@@ -145,6 +184,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       return false
     }
 
+    beginRecordingGeneration(micRequested: withMic)
     self.outputPath = outputPath
     self.micAecPref = micAec
     self.micRequested = withMic
@@ -216,10 +256,49 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       return
     }
 
-    /** mic 热切：与 tap 独立，micInput 恒在，只起停采集引擎。micRequested 恒等于用户意图,
-     * 这样即便此刻 micActive 已因掉线为 false,用户手动关麦也能让 micRequested=false 令自愈停手 */
+    /**
+     * command chain 只更新 desired state 与 callback gate，绝不直接调用 Core Audio
+     * 最新全量 update 由 lifecycle queue 串行应用；旧 update 在 stop 换代后自动失效
+     */
     micRequested = micEnabled
-    if micEnabled, !micActive {
+    setMicRecoveryRequested(micEnabled)
+    if micEnabled {
+      enableMicSampleGate()
+    }
+    else {
+      disableMicSampleGate()
+      cancelScheduledMicRecovery()
+    }
+    setTapSampleGate(tapEnabled)
+
+    let generation = currentRecordingGeneration()
+    captureUpdateLock.lock()
+    pendingCaptureUpdate = (
+      generation,
+      tapEnabled,
+      micEnabled,
+      pids,
+      excludePids
+    )
+    let shouldSchedule = !captureUpdateScheduled
+    captureUpdateScheduled = true
+    captureUpdateLock.unlock()
+
+    if shouldSchedule {
+      micLifecycleQueue.async { [weak self] in
+        self?.applyPendingCaptureUpdates()
+      }
+    }
+  }
+
+  /** 仅在 micLifecycleQueue 调用，独占全部物理 Core Audio 生命周期 */
+  private func applyCaptureUpdate(
+    tapEnabled: Bool,
+    micEnabled: Bool,
+    pids: [pid_t],
+    excludePids: [pid_t]
+  ) {
+    if micEnabled, !isMicActive() {
       resetMicRecoveryBackoff()
       if attachMic(aec: micAecPref) {
         log("mic attached")
@@ -228,7 +307,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
         log("mic attach failed, no mic capture")
       }
     }
-    else if !micEnabled, micActive {
+    else if !micEnabled, isMicActive() {
       detachMic()
       log("mic detached")
     }
@@ -271,6 +350,30 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     }
   }
 
+  private func applyPendingCaptureUpdates() {
+    while true {
+      captureUpdateLock.lock()
+      guard let update = pendingCaptureUpdate else {
+        captureUpdateScheduled = false
+        captureUpdateLock.unlock()
+        return
+      }
+      pendingCaptureUpdate = nil
+      captureUpdateLock.unlock()
+
+      guard isRecordingGenerationActive(update.generation) else {
+        log("tap: stale capture update discarded")
+        continue
+      }
+      applyCaptureUpdate(
+        tapEnabled: update.tapEnabled,
+        micEnabled: update.micEnabled,
+        pids: update.pids,
+        excludePids: update.excludePids
+      )
+    }
+  }
+
   /** 创建 tap → 读格式 → 聚合设备(IOProc 由调用方按需启动),start 与 update 共用 */
   private func buildTapPipeline(_ description: CATapDescription) throws {
     var newTapID = AudioObjectID(kAudioObjectUnknown)
@@ -310,6 +413,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   func pause() {
     guard writer != nil, !paused else { return }
     paused = true
+    cancelScheduledMicRecovery()
     pausedAt = Date()
     pauseStartHostTime = CMClockGetTime(CMClockGetHostTimeClock())
     emitStatus("paused", path: outputPath)
@@ -329,6 +433,10 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       pauseStartHostTime = nil
     }
     paused = false
+    if micRequested {
+      enableMicSampleGate()
+      requestMicRecovery(reason: "recording-resumed")
+    }
     /** 恢复后重置两轨基准:暂停时段无样本,陈旧时间戳会让下一 tick 误判掉线 */
     let resumedAt = Date()
     sysLastSampleAt = resumedAt
@@ -340,14 +448,17 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     emitStatus("recording", path: outputPath)
   }
 
-  func stop() async {
+  func stop(handoffId: Int? = nil) async {
     guard writer != nil else {
-      emitError("not_recording")
+      emitTerminalError("not_recording", path: outputPath, handoffId: handoffId)
       return
     }
     guard !isFinalizingRecording else { return }
     isFinalizingRecording = true
     defer { isFinalizingRecording = false }
+    /** stop/finalizing 期间不再允许首帧或 gap watchdog 发出录音中 error */
+    firstSampleWatchdogToken = UUID()
+    sampleGapWatchdogToken = UUID()
 
     if paused, let pa = pausedAt {
       totalPausedDuration += Date().timeIntervalSince(pa)
@@ -355,11 +466,29 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
     /** 必须在拆管线前快照:stopCapturePipeline → detachMic 会把 micActive 清为 false,
      * 事后再读恒为 false,零样本收尾会把 mic 采集故障误报成「无音频内容」 */
-    let hadMicAtStop = micActive
+    let hadMicAtStop = micRequested
 
-    stopCapturePipeline()
-    /** 排空采样队列里已入队的回调,避免 markAsFinished 后再 append 抛 ObjC 异常 */
-    sampleQueue.sync {}
+    cancelMicRecoveryForStop()
+    clearPendingCaptureUpdate()
+    /**
+     * stop 永远不调用 stopRunning/removeTap/engine.stop/AudioDeviceStop
+     * HAL settle、pending recovery 与任何已挂起 lifecycle 操作都统一视为不安全；
+     * callback gate 已原子关闭，文件交接完成后由父进程回收整个 helper
+     */
+    /**
+     * 不可用 sync：recovery 若正卡在 sampleQueue 内，stop 会排在它后面永久等待
+     * 超时后 writer 仍可能被队列访问，故绝不能 markAsFinished / cleanup；保留 checkpoint
+     * 与 mic sidecar，通知父进程强杀 helper，交给启动恢复扫描重建可用产物
+     */
+    guard await drainSampleQueue(timeout: SAMPLE_QUEUE_DRAIN_TIMEOUT_SEC) else {
+      let detail = "sample queue did not drain within \(SAMPLE_QUEUE_DRAIN_TIMEOUT_SEC)s; preserving recovery assets"
+      log("tap: finalize aborted — \(detail)")
+      if let handoffId {
+        emitRecycleDirective(handoffId: handoffId, detail: detail)
+      }
+      emitTerminalError("finalize_queue_timeout", path: outputPath, detail: detail, handoffId: handoffId)
+      return
+    }
 
     systemInput?.markAsFinished()
     micInput?.markAsFinished()
@@ -394,11 +523,12 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     let duration = max(0, elapsed - totalPausedDuration)
     let savedPath = outputPath
 
-    cleanup()
+    cleanup(skipMicTeardown: true)
 
     if hasStorageWriteError {
       log("tap: recording storage insufficient: \(storageWriteError)")
-      emitError("storage_insufficient", detail: storageWriteError)
+      emitRecycleRequired(handoffId: handoffId)
+      emitTerminalError("storage_insufficient", path: savedPath, detail: storageWriteError, handoffId: handoffId)
       return
     }
 
@@ -407,14 +537,16 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       checkpoints?.deleteAll()
       try? FileManager.default.removeItem(atPath: savedPath)
       let error = hadMicAtStop ? "no_audio_samples" : "no_audio_content"
-      emitError(error, detail: stats)
+      emitRecycleRequired(handoffId: handoffId)
+      emitTerminalError(error, path: savedPath, detail: stats, handoffId: handoffId)
       return
     }
 
     if writerStatus != .completed && !hasMicSidecarSamples {
       log("tap: writer finish failed: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
       try? FileManager.default.removeItem(atPath: savedPath)
-      emitError("writer_failed", detail: writerError)
+      emitRecycleRequired(handoffId: handoffId)
+      emitTerminalError("writer_failed", path: savedPath, detail: writerError, handoffId: handoffId)
       return
     }
     if writerStatus != .completed {
@@ -437,12 +569,15 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       consumeMicSidecarFile(URL(fileURLWithPath: micSidecarPath), context: "tap stop")
     }
 
-    emitStatus("stopped", path: savedPath, duration: duration)
+    emitRecycleRequired(handoffId: handoffId)
+    emitStatus("stopped", path: savedPath, duration: duration, handoffId: handoffId)
   }
 
   private func startFirstSampleWatchdog() {
     firstSampleErrorEmitted = false
     let token = UUID()
+    let generation = currentRecordingGeneration()
+    let path = outputPath
     firstSampleWatchdogToken = token
 
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + FIRST_AUDIO_SAMPLE_TIMEOUT) { [weak self] in
@@ -452,7 +587,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
         guard let self else { return }
         guard self.firstSampleWatchdogToken == token,
               self.writer != nil,
-              self.micActive,
+              self.isMicActive(),
               !self.paused,
               (self.sysAppendCount + self.micAppendCount) == 0,
               !self.firstSampleErrorEmitted
@@ -460,7 +595,12 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
         self.firstSampleErrorEmitted = true
         log("tap: first audio sample timeout")
-        emitError("no_audio_samples", detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())")
+        self.emitWatchdogError(
+          "no_audio_samples",
+          generation: generation,
+          path: path,
+          detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())"
+        )
       }
     }
   }
@@ -469,10 +609,14 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     sampleGapErrorEmitted = false
     let token = UUID()
     sampleGapWatchdogToken = token
-    scheduleSampleGapWatchdog(token)
+    scheduleSampleGapWatchdog(
+      token,
+      generation: currentRecordingGeneration(),
+      path: outputPath
+    )
   }
 
-  private func scheduleSampleGapWatchdog(_ token: UUID) {
+  private func scheduleSampleGapWatchdog(_ token: UUID, generation: UUID, path: String) {
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL) { [weak self] in
       guard let self else { return }
 
@@ -492,7 +636,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
            * - !micActive:上一次重挂失败已丢麦,未达重试上限则周期重挂;达上限即停手,交由 HAL 设备变更监听在复联时拉起
            */
           if self.micRequested {
-            if self.micActive {
+            if self.isMicActive() {
               if let micAt = self.micLastSampleAt,
                  now.timeIntervalSince(micAt) >= MIC_SAMPLE_GAP_TIMEOUT {
                 let micGap = Int(now.timeIntervalSince(micAt))
@@ -512,14 +656,38 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
             self.sampleGapErrorEmitted = true
             let gap = Int(now.timeIntervalSince(latestActive))
             log("tap: audio sample gap timeout (gap=\(gap)s)")
-            emitError("audio_sample_timeout", detail: "no samples for \(gap)s, sysOK=\(self.sysAppendCount) micOK=\(self.micAppendCount), devices: \(describeDefaultAudioDevices())")
+            self.emitWatchdogError(
+              "audio_sample_timeout",
+              generation: generation,
+              path: path,
+              detail: "no samples for \(gap)s, sysOK=\(self.sysAppendCount) micOK=\(self.micAppendCount), devices: \(describeDefaultAudioDevices())"
+            )
             return
           }
         }
 
-        self.scheduleSampleGapWatchdog(token)
+        self.scheduleSampleGapWatchdog(token, generation: generation, path: path)
       }
     }
+  }
+
+  /**
+   * generation 校验与 stdout emission 共用 micRecoveryLock
+   * stop 若先换代则事件不再发；事件若先发则携带旧 path，消费层会拒绝其作用于新 session
+   */
+  private func emitWatchdogError(
+    _ error: String,
+    generation: UUID,
+    path: String,
+    detail: String
+  ) {
+    micRecoveryLock.lock()
+    guard recordingGeneration == generation else {
+      micRecoveryLock.unlock()
+      return
+    }
+    emitRecordingError(error, path: path, detail: detail)
+    micRecoveryLock.unlock()
   }
 
   /** 在挂音源中最近一次出样时刻(取 tap / mic 两轨较新者);无任何在挂源返回 nil */
@@ -528,7 +696,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     if tapActive, let sys = sysLastSampleAt {
       latest = latest.map { max($0, sys) } ?? sys
     }
-    if micActive, let mic = micLastSampleAt {
+    if isMicActive(), let mic = micLastSampleAt {
       latest = latest.map { max($0, mic) } ?? mic
     }
     return latest
@@ -537,36 +705,232 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   // ── mic 单轨自愈(设备掉线/切换后重挂) ──
 
   /**
-   * mic 采集引擎重挂到当前默认输入设备。两个触发源都汇入此处:
-   * - 系统默认输入设备变更监听(HAL `kAudioHardwarePropertyDefaultInputDevice`):蓝牙掉线 / 切设备近实时触发,快
-   * - 断流看门狗:mic 静默超阈值的兜底(监听未覆盖的僵尸态,如同设备内静默停流)
-   *
-   * 重挂串到命令链上执行 → 与 start / stop / update 天然互斥,复用 detach + attach 现有拆建逻辑;
-   * `micRecoveryScheduled` 合并排队期间的重复请求,避免每个 tick 都堆一次重挂
-   * 自愈状态(scheduled / attempts / degradedEmitted)横跨 HAL 队列、sampleQueue、命令链三处访问,
-   * 一律经下方持 `micRecoveryLock` 的同步方法读写,杜绝数据竞争
+   * HAL 与 watchdog 统一进入 trailing debounce：
+   * - 每个新请求替换 pending work item，真正执行时间始终是「最后一次请求 + settle window」
+   * - recovery 已在飞时只登记一次 rerun，完成后重新经过同一静默窗口
+   * - 物理拆建在专属 lifecycle queue 执行，绝不占住 stdin 的全局 command chain
    */
-  private func requestMicRecovery(reason: String) {
-    /** 抢占调度位:已在排队 / 在飞则合并丢弃 */
-    guard claimMicRecoverySlot() else { return }
+  private func requestMicRecovery(reason: String, expectedGeneration: UUID? = nil) {
+    micRecoveryLock.lock()
+    guard acceptMicSamples,
+          micRecoveryRequested,
+          expectedGeneration.map({ $0 == recordingGeneration }) ?? true
+    else {
+      micRecoveryLock.unlock()
+      return
+    }
 
-    enqueueCommand { [weak self] in
-      await self?.performMicRecovery(reason: reason)
+    if micRecoveryInFlight {
+      micRecoveryRerunReason = reason
+      micRecoveryLock.unlock()
+      log("tap: mic recovery rerun requested (\(reason))")
+      return
+    }
+
+    micRecoveryWorkItem?.cancel()
+    let token = UUID()
+    let generation = recordingGeneration
+    let workItem = DispatchWorkItem { [weak self] in
+      self?.launchMicRecovery(reason: reason, token: token, generation: generation)
+    }
+    micRecoveryToken = token
+    micRecoveryWorkItem = workItem
+    micRecoveryLock.unlock()
+
+    log("tap: mic recovery scheduled (\(reason), settle=\(MIC_DEVICE_CHANGE_SETTLE_DELAY_SEC)s)")
+    deviceListenerQueue.asyncAfter(
+      deadline: .now() + MIC_DEVICE_CHANGE_SETTLE_DELAY_SEC,
+      execute: workItem
+    )
+  }
+
+  private func launchMicRecovery(reason: String, token: UUID, generation: UUID) {
+    micRecoveryLock.lock()
+    guard micRecoveryToken == token,
+          recordingGeneration == generation,
+          acceptMicSamples,
+          !(micRecoveryWorkItem?.isCancelled ?? true)
+    else {
+      micRecoveryLock.unlock()
+      return
+    }
+
+    micRecoveryWorkItem = nil
+    micRecoveryInFlight = true
+    if reason == "default-input-changed" {
+      micRecoveryAttempts = 0
+      micDegradedEmitted = false
+    }
+    micRecoveryLock.unlock()
+
+    micLifecycleQueue.async { [weak self] in
+      self?.performMicRecovery(reason: reason, token: token, generation: generation)
     }
   }
 
-  /** 锁内 check-and-set,返回是否抢到调度位;同步方法,避免在 async 上下文直接持锁(Swift 6 会报错) */
-  private func claimMicRecoverySlot() -> Bool {
+  private func isMicRecoveryValid(token: UUID, generation: UUID) -> Bool {
     micRecoveryLock.lock()
     defer { micRecoveryLock.unlock() }
-    guard !micRecoveryScheduled else { return false }
-    micRecoveryScheduled = true
-    return true
+    return micRecoveryToken == token
+      && recordingGeneration == generation
+      && acceptMicSamples
+      && micRecoveryRequested
   }
 
-  private func releaseMicRecoverySlot() {
+  private func finishMicRecovery(token: UUID, generation: UUID) {
+    var rerunReason: String?
+
     micRecoveryLock.lock()
-    micRecoveryScheduled = false
+    if micRecoveryToken == token {
+      micRecoveryToken = nil
+    }
+    micRecoveryInFlight = false
+    if recordingGeneration == generation, acceptMicSamples {
+      rerunReason = micRecoveryRerunReason
+    }
+    micRecoveryRerunReason = nil
+    micRecoveryLock.unlock()
+
+    if let rerunReason {
+      requestMicRecovery(reason: rerunReason)
+    }
+  }
+
+  /** start 与 recovery claim 共用同一原子边界，旧 callback 不可能读取到新一代 generation */
+  private func beginRecordingGeneration(micRequested: Bool) {
+    micRecoveryLock.lock()
+    micRecoveryWorkItem?.cancel()
+    micRecoveryWorkItem = nil
+    micRecoveryToken = nil
+    micRecoveryRerunReason = nil
+    recordingGeneration = UUID()
+    acceptMicSamples = true
+    acceptTapSamples = true
+    micRecoveryRequested = micRequested
+    activeMicGeneration = nil
+    activeCaptureOutput = nil
+    micRecoveryLock.unlock()
+  }
+
+  private func currentRecordingGeneration() -> UUID {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    return recordingGeneration
+  }
+
+  private func cancelScheduledMicRecovery() {
+    micRecoveryLock.lock()
+    micRecoveryWorkItem?.cancel()
+    micRecoveryWorkItem = nil
+    micRecoveryToken = nil
+    micRecoveryRerunReason = nil
+    if micRecoveryInFlight {
+      acceptMicSamples = false
+    }
+    micRecoveryLock.unlock()
+  }
+
+  /**
+   * stop 只取消逻辑采样，不等待不可取消的 Core Audio 拆建
+   * 物理资源一律不在 stop 销毁，terminal 后由父进程回收 helper
+   */
+  private func cancelMicRecoveryForStop() {
+    micRecoveryLock.lock()
+    micRecoveryWorkItem?.cancel()
+    micRecoveryWorkItem = nil
+    micRecoveryToken = nil
+    micRecoveryRerunReason = nil
+    recordingGeneration = UUID()
+    acceptMicSamples = false
+    acceptTapSamples = false
+    micRecoveryRequested = false
+    activeMicGeneration = nil
+    activeCaptureOutput = nil
+    micRecoveryLock.unlock()
+  }
+
+  private func shouldAcceptMicSamples(generation: UUID) -> Bool {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    return acceptMicSamples && activeMicGeneration == generation
+  }
+
+  private func shouldAcceptTapSamples() -> Bool {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    return acceptTapSamples
+  }
+
+  private func enableMicSampleGate() {
+    micRecoveryLock.lock()
+    acceptMicSamples = true
+    micRecoveryLock.unlock()
+  }
+
+  private func disableMicSampleGate() {
+    micRecoveryLock.lock()
+    acceptMicSamples = false
+    micRecoveryLock.unlock()
+  }
+
+  private func setTapSampleGate(_ enabled: Bool) {
+    micRecoveryLock.lock()
+    acceptTapSamples = enabled
+    micRecoveryLock.unlock()
+  }
+
+  private func isRecordingGenerationActive(_ generation: UUID) -> Bool {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    return recordingGeneration == generation && (acceptMicSamples || acceptTapSamples)
+  }
+
+  private func setMicRecoveryRequested(_ requested: Bool) {
+    micRecoveryLock.lock()
+    micRecoveryRequested = requested
+    micRecoveryLock.unlock()
+  }
+
+  private func isMicActive() -> Bool {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    return micActive
+  }
+
+  private func setMicActive(_ active: Bool) {
+    micRecoveryLock.lock()
+    micActive = active
+    micRecoveryLock.unlock()
+  }
+
+  private func beginMicGeneration() -> UUID {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    let generation = UUID()
+    activeMicGeneration = generation
+    activeCaptureOutput = nil
+    return generation
+  }
+
+  private func registerCaptureOutput(_ output: AVCaptureOutput, generation: UUID) {
+    micRecoveryLock.lock()
+    if activeMicGeneration == generation {
+      activeCaptureOutput = output
+    }
+    micRecoveryLock.unlock()
+  }
+
+  private func captureGeneration(for output: AVCaptureOutput) -> UUID? {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    guard activeCaptureOutput === output else { return nil }
+    return activeMicGeneration
+  }
+
+  private func invalidateMicGeneration() {
+    micRecoveryLock.lock()
+    activeMicGeneration = nil
+    activeCaptureOutput = nil
     micRecoveryLock.unlock()
   }
 
@@ -597,12 +961,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     return (micRecoveryAttempts, shouldEmit)
   }
 
-  private func performMicRecovery(reason: String) async {
-    /** 标志压到重挂全程结束才释放:在飞期间到达的请求(如慢重挂中途又一次看门狗 tick)全部合并丢弃,避免冗余重挂 */
-    defer { releaseMicRecoverySlot() }
+  private func performMicRecovery(reason: String, token: UUID, generation: UUID) {
+    defer { finishMicRecovery(token: token, generation: generation) }
 
-    /** 排到执行时录音可能已停 / 已暂停 / 用户已主动关麦(micRequested=false),此时无需自愈 */
-    guard writer != nil, micRequested, !paused, !isFinalizingRecording else {
+    guard isMicRecoveryValid(token: token, generation: generation) else {
+      log("tap: mic recovery cancelled before detach (\(reason))")
       return
     }
 
@@ -611,10 +974,23 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     log("tap: mic recovery start (\(reason)), devices: \(describeDefaultAudioDevices())")
 
     /** 僵尸引擎先拆再建;上一次已丢麦(micActive=false)则直接重挂 */
-    if micActive {
+    if isMicActive() {
+      log("tap: mic recovery detach begin")
       detachMic()
+      log("tap: mic recovery detach end")
     }
+
+    guard isMicRecoveryValid(token: token, generation: generation) else {
+      log("tap: mic recovery cancelled after detach (\(reason))")
+      return
+    }
+
+    log("tap: mic recovery attach begin")
     let recovered = attachMic(aec: micAecPref)
+    guard isMicRecoveryValid(token: token, generation: generation) else {
+      log("tap: mic recovery result discarded (\(reason))")
+      return
+    }
     if recovered {
       /** attachMic 成功路径已清零 micRecoveryAttempts / micDegradedEmitted */
       log("tap: mic recovery succeeded (micCb=\(micCallbackCount)), devices: \(describeDefaultAudioDevices())")
@@ -635,24 +1011,37 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     }
   }
 
+  private func clearPendingCaptureUpdate() {
+    captureUpdateLock.lock()
+    pendingCaptureUpdate = nil
+    captureUpdateLock.unlock()
+  }
+
+  private func emitRecycleRequired(handoffId: Int?) {
+    guard let handoffId else { return }
+    emitRecycleDirective(
+      handoffId: handoffId,
+      detail: "tap recorder physical lifecycle is recycled after terminal handoff"
+    )
+  }
+
   // ── 系统默认输入设备变更监听(HAL 层,独立于 mic 引擎生命周期) ──
 
-  private func handleDefaultInputDeviceChange() {
+  private func handleDefaultInputDeviceChange(generation: UUID) {
     log("tap: default input device changed, devices: \(describeDefaultAudioDevices())")
-    /** 设备复联 / 切换:清零退避(锁内),即便之前重试耗尽也重新拉起 mic(engine 绑定监听在引擎销毁后已失效,这是唯一兜底) */
-    resetMicRecoveryBackoff()
-    requestMicRecovery(reason: "default-input-changed")
+    requestMicRecovery(reason: "default-input-changed", expectedGeneration: generation)
   }
 
   private func registerDefaultInputDeviceListener() {
     guard defaultInputListenerBlock == nil else { return }
+    let generation = currentRecordingGeneration()
     var address = AudioObjectPropertyAddress(
       mSelector: kAudioHardwarePropertyDefaultInputDevice,
       mScope: kAudioObjectPropertyScopeGlobal,
       mElement: kAudioObjectPropertyElementMain
     )
     let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-      self?.handleDefaultInputDeviceChange()
+      self?.handleDefaultInputDeviceChange(generation: generation)
     }
     let status = AudioObjectAddPropertyListenerBlock(
       AudioObjectID(kAudioObjectSystemObject), &address, deviceListenerQueue, block
@@ -856,15 +1245,19 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    */
   @discardableResult
   private func attachMic(aec: Bool) -> Bool {
-    guard !micActive else { return true }
+    guard !isMicActive() else { return true }
+    let micGeneration = beginMicGeneration()
     resetMicTimingState(preservingEmittedTimeline: true)
-    guard prepareMicCapture(aec: aec) else { return false }
+    guard prepareMicCapture(aec: aec, generation: micGeneration) else {
+      invalidateMicGeneration()
+      return false
+    }
 
     /** AVAudioEngine 路径 captureSession 为 nil;AVCapture 路径可能已在首帧探测中启动 */
     if let captureSession, !captureSession.isRunning {
       captureSession.startRunning()
     }
-    micActive = true
+    setMicActive(true)
     /** 重挂 mic 后重置 mic 轨 gap 基准:关麦超阈值再开麦时,陈旧时间戳会让下一个 tick 抢在新引擎首帧前误报掉线 */
     micLastSampleAt = Date()
     /** 挂上即视为一次成功恢复:清零退避,后续再掉线可重新走满 MIC_RECOVERY_MAX_ATTEMPTS */
@@ -874,7 +1267,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
   /** 停 mic 采集引擎,micInput 保留(恒预建);已采集的 mic 样本仍在产物中 */
   private func detachMic() {
-    guard micActive else { return }
+    guard isMicActive() else { return }
+    /** 先让旧 callback 失效，再进入任何可能阻塞的 Core Audio 同步调用 */
+    invalidateMicGeneration()
 
     captureSession?.stopRunning()
     captureSession = nil
@@ -885,7 +1280,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
       audioEngine = nil
     }
     micFormatDescription = nil
-    micActive = false
+    setMicActive(false)
     /** 排空采样队列里 detach 前已入队的 mic 回调，避免其与随后 attachMic 的时间轴状态重置跨线程并发 */
     sampleQueue.sync {}
     /** 排空后再清转换器缓存:队列里残留的 sidecar 写入会按需重建它,先清会被写回 */
@@ -899,19 +1294,19 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    * 2. raw AVAudioEngine(短重试后写 sidecar)
    * 3. AVCaptureSession 作为最后兜底(也写 sidecar,不再进实时 AAC mic writer)
    */
-  private func prepareMicCapture(aec: Bool) -> Bool {
-    if aec, prepareVoiceProcessedMic() {
+  private func prepareMicCapture(aec: Bool, generation: UUID) -> Bool {
+    if aec, prepareVoiceProcessedMic(generation: generation) {
       return true
     }
-    if prepareRawAudioEngineMicWithRetry() {
+    if prepareRawAudioEngineMicWithRetry(generation: generation) {
       return true
     }
-    return prepareCaptureSessionMic()
+    return prepareCaptureSessionMic(generation: generation)
   }
 
-  private func prepareRawAudioEngineMicWithRetry() -> Bool {
+  private func prepareRawAudioEngineMicWithRetry(generation: UUID) -> Bool {
     for attempt in 1...RAW_AUDIO_ENGINE_START_ATTEMPTS {
-      switch prepareRawAudioEngineMic() {
+      switch prepareRawAudioEngineMic(generation: generation) {
       case .ready:
         return true
 
@@ -932,7 +1327,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     return false
   }
 
-  private func prepareVoiceProcessedMic() -> Bool {
+  private func prepareVoiceProcessedMic(generation: UUID) -> Bool {
     let engine = AVAudioEngine()
     let input = engine.inputNode
 
@@ -981,7 +1376,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
     let callbackBaseline = micCallbackCount
     input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, when in
-      self?.handleMicBuffer(buffer, at: when)
+      self?.handleMicBuffer(buffer, at: when, generation: generation)
     }
 
     engine.prepare()
@@ -1007,7 +1402,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     return true
   }
 
-  private func prepareRawAudioEngineMic() -> MicEnginePrepareResult {
+  private func prepareRawAudioEngineMic(generation: UUID) -> MicEnginePrepareResult {
     let engine = AVAudioEngine()
     let input = engine.inputNode
     let format = input.outputFormat(forBus: 0)
@@ -1039,7 +1434,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
     let callbackBaseline = micCallbackCount
     input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, when in
-      self?.handleMicBuffer(buffer, at: when)
+      self?.handleMicBuffer(buffer, at: when, generation: generation)
     }
 
     engine.prepare()
@@ -1065,7 +1460,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     return .ready
   }
 
-  private func prepareCaptureSessionMic() -> Bool {
+  private func prepareCaptureSessionMic(generation: UUID) -> Bool {
     guard let device = AVCaptureDevice.default(for: .audio) else {
       log("tap: no microphone device, system audio only")
       return false
@@ -1087,6 +1482,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
         return false
       }
       session.addOutput(output)
+      registerCaptureOutput(output, generation: generation)
 
       let callbackBaseline = micCallbackCount
       session.startRunning()
@@ -1154,7 +1550,7 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
    */
   private func handleTapBuffer(_ bufferList: UnsafePointer<AudioBufferList>, _ inputTime: UnsafePointer<AudioTimeStamp>) {
     tapCallbackCount += 1
-    guard !paused else { return }
+    guard shouldAcceptTapSamples(), !paused else { return }
     guard let writer, writer.status == .writing,
           let formatDescription = tapFormatDescription,
           let format = tapFormat
@@ -1226,7 +1622,11 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
   /** mic 轨(降级路径):AVCaptureSession 回调(与 tap 同队列串行),同样写 sidecar 避开实时 AAC writer */
   func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-    guard !paused, sampleBuffer.isValid else { return }
+    guard let generation = captureGeneration(for: output),
+          shouldAcceptMicSamples(generation: generation),
+          !paused,
+          sampleBuffer.isValid
+    else { return }
     micCallbackCount += 1
     guard let pcmBuffer = copyPCMBuffer(from: sampleBuffer) else {
       micConvertFailCount += 1
@@ -1237,9 +1637,9 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
   }
 
   /** mic 轨(VPIO 路径):AVAudioEngine tap 回调在引擎内部线程,拷贝为 CMSampleBuffer 后进采样串行队列 */
-  private func handleMicBuffer(_ buffer: AVAudioPCMBuffer, at when: AVAudioTime) {
+  private func handleMicBuffer(_ buffer: AVAudioPCMBuffer, at when: AVAudioTime, generation: UUID) {
     micCallbackCount += 1
-    guard !paused, buffer.frameLength > 0 else { return }
+    guard shouldAcceptMicSamples(generation: generation), !paused, buffer.frameLength > 0 else { return }
     guard let copied = copyPCMBuffer(buffer) else {
       micConvertFailCount += 1
       return
@@ -1247,7 +1647,24 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
 
     sampleQueue.async { [weak self] in
       guard let self else { return }
+      guard self.shouldAcceptMicSamples(generation: generation) else { return }
       self.writeMicSidecarBuffer(copied, at: when)
+    }
+  }
+
+  /**
+   * 给 sampleQueue 投递一个尾部哨兵并有界等待。等待发生在独立任务中，不占 stdin command
+   * chain；超时只表示不能安全 finalize，不会尝试取消或并发访问队列内仍在执行的任务
+   */
+  private func drainSampleQueue(timeout: TimeInterval) async -> Bool {
+    await withCheckedContinuation { continuation in
+      let resolution = SampleQueueDrainResolution(continuation)
+      sampleQueue.async {
+        resolution.resolve(true)
+      }
+      DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) {
+        resolution.resolve(false)
+      }
     }
   }
 
@@ -1715,14 +2132,26 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     tapID = AudioObjectID(kAudioObjectUnknown)
   }
 
-  private func stopCapturePipeline() {
+  private func stopCapturePipeline(skipMicTeardown: Bool = false) {
     teardownTapPipeline()
     tapActive = false
-    detachMic()
+    if skipMicTeardown {
+      /**
+       * recovery 可能卡在同步系统调用；callback generation 已关闭，stop 只会有界等待 sampleQueue
+       * 不在 stop 路径并发销毁同一 engine，交给 stopped 后的 helper 进程回收
+       */
+      setMicActive(false)
+    }
+    else {
+      detachMic()
+    }
   }
 
-  private func cleanup() {
-    stopCapturePipeline()
+  private func cleanup(skipMicTeardown: Bool = false) {
+    if !skipMicTeardown {
+      stopCapturePipeline()
+    }
+    /** skip 时 lifecycle owner 仍可能在 Core Audio 内；不再触碰其状态，物理资源与实例字段随 helper 回收 */
     writer = nil
     checkpointWriter = nil
     systemInput = nil
@@ -1747,12 +2176,16 @@ class TapRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     unregisterDefaultInputDeviceListener()
     micRequested = false
     resetMicRecoveryBackoff()
-    releaseMicRecoverySlot()
+    if !skipMicTeardown {
+      cancelMicRecoveryForStop()
+    }
     tapFormat = nil
     tapFormatDescription = nil
-    micFormatDescription = nil
-    micSidecarConverter = nil
-    micSidecarConverterSourceFormat = nil
+    if !skipMicTeardown {
+      micFormatDescription = nil
+      micSidecarConverter = nil
+      micSidecarConverterSourceFormat = nil
+    }
     receivedNonSilentBuffer = false
     silentBufferCount = 0
     tapCallbackCount = 0

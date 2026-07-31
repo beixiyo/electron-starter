@@ -55,9 +55,11 @@ TS 侧的封装在 `packages/app/main/audio-recorder/`（`startRecording` / `onR
 | `{"status":"recording","path"}` | 产物路径 | 采集真正开始 |
 | `{"status":"paused","path"}` | | 已暂停 |
 | `{"status":"mixing","path"}` | | 停止后进入离线混音 |
-| `{"status":"stopped","path","duration"}` | 路径 + 墙钟时长（秒） | 收尾完成，产物已落盘 |
+| `{"status":"stopped","path","duration","handoffId"}` | 路径 + 墙钟时长（秒）+ stop 代际 | 收尾完成，产物已落盘 |
 | `{"status":"mic_degraded","detail"}` | 麦克风掉线诊断 | 麦克风重挂多次失败，系统音轨仍继续录制；这是非致命状态 |
-| `{"error","detail"}` | 错误码 + 诊断详情 | 见下 |
+| `{"status":"recycle_required","handoffId","detail"}` | stop 代际 | Tap terminal 的相邻前导消息：父进程只回收匹配该代际的 helper。若 terminal 丢失，2 秒 watchdog 或 child exit 会独立触发重建；若为 `finalize_queue_timeout`，writer 不再收尾，只保留 checkpoint / sidecar 交给崩溃恢复 |
+| `{"error","path?","detail"}` | 错误码 + 可选录音路径 + 诊断详情 | 录音中/命令错误，不结算 stop handoff；watchdog error 带 path 供上层拒绝迟到事件 |
+| `{"error","terminal":true,"path","handoffId","detail"}` | 错误码 + 录音路径 + stop 代际 + 诊断详情 | Tap/SCK 收尾失败 terminal；上层必须同时按 handoffId 与 path 代际消费 |
 
 helper 发出的 `error` 码：
 

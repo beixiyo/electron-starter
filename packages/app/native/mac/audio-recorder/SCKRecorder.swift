@@ -118,14 +118,16 @@ class Recorder: NSObject, SCStreamOutput {
     output(status: "recording", path: outputPath)
   }
 
-  func stop() async {
+  func stop(handoffId: Int? = nil) async {
     guard let scStream = stream else {
-      output(error: "not_recording")
+      output(terminalError: "not_recording", path: outputPath, handoffId: handoffId)
       return
     }
     guard !isFinalizingRecording else { return }
     isFinalizingRecording = true
     defer { isFinalizingRecording = false }
+    firstSampleWatchdogToken = UUID()
+    sampleGapWatchdogToken = UUID()
 
     if paused, let pa = pausedAt {
       totalPausedDuration += Date().timeIntervalSince(pa)
@@ -162,7 +164,7 @@ class Recorder: NSObject, SCStreamOutput {
 
     if hasStorageWriteError {
       log("SCK recording storage insufficient: \(writerError)")
-      output(error: "storage_insufficient", detail: writerError)
+      output(terminalError: "storage_insufficient", path: savedPath, detail: writerError, handoffId: handoffId)
       return
     }
 
@@ -170,14 +172,14 @@ class Recorder: NSObject, SCStreamOutput {
       log("SCK writer finish failed: no audio samples")
       checkpoints?.deleteAll()
       try? FileManager.default.removeItem(atPath: savedPath)
-      output(error: "no_audio_samples", detail: stats)
+      output(terminalError: "no_audio_samples", path: savedPath, detail: stats, handoffId: handoffId)
       return
     }
 
     if writerStatus != .completed {
       log("SCK writer finish failed: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
       try? FileManager.default.removeItem(atPath: savedPath)
-      output(error: "writer_failed", detail: writerError)
+      output(terminalError: "writer_failed", path: savedPath, detail: writerError, handoffId: handoffId)
       return
     }
 
@@ -189,12 +191,13 @@ class Recorder: NSObject, SCStreamOutput {
       }
     }
 
-    output(status: "stopped", path: savedPath, duration: duration)
+    output(status: "stopped", path: savedPath, duration: duration, handoffId: handoffId)
   }
 
   private func startFirstSampleWatchdog() {
     firstSampleErrorEmitted = false
     let token = UUID()
+    let path = outputPath
     firstSampleWatchdogToken = token
 
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + FIRST_AUDIO_SAMPLE_TIMEOUT) { [weak self] in
@@ -212,7 +215,7 @@ class Recorder: NSObject, SCStreamOutput {
 
         self.firstSampleErrorEmitted = true
         log("SCK first audio sample timeout")
-        self.output(error: "no_audio_samples", detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())")
+        self.output(error: "no_audio_samples", path: path, detail: "no first sample within \(Int(FIRST_AUDIO_SAMPLE_TIMEOUT))s, devices: \(describeDefaultAudioDevices())")
       }
     }
   }
@@ -221,10 +224,10 @@ class Recorder: NSObject, SCStreamOutput {
     sampleGapErrorEmitted = false
     let token = UUID()
     sampleGapWatchdogToken = token
-    scheduleSampleGapWatchdog(token)
+    scheduleSampleGapWatchdog(token, path: outputPath)
   }
 
-  private func scheduleSampleGapWatchdog(_ token: UUID) {
+  private func scheduleSampleGapWatchdog(_ token: UUID, path: String) {
     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL) { [weak self] in
       guard let self else { return }
 
@@ -242,11 +245,11 @@ class Recorder: NSObject, SCStreamOutput {
           self.sampleGapErrorEmitted = true
           let gap = Int(Date().timeIntervalSince(lastSampleAt))
           log("SCK audio sample gap timeout (gap=\(gap)s)")
-          self.output(error: "audio_sample_timeout", detail: "no samples for \(gap)s, appended=\(self.appendedSampleCount), devices: \(describeDefaultAudioDevices())")
+          self.output(error: "audio_sample_timeout", path: path, detail: "no samples for \(gap)s, appended=\(self.appendedSampleCount), devices: \(describeDefaultAudioDevices())")
           return
         }
 
-        self.scheduleSampleGapWatchdog(token)
+        self.scheduleSampleGapWatchdog(token, path: path)
       }
     }
   }
@@ -337,12 +340,21 @@ class Recorder: NSObject, SCStreamOutput {
 
   // ── stdout JSON ──
 
-  private func output(status: String, path: String, duration: Double? = nil) {
-    emitStatus(status, path: path, duration: duration)
+  private func output(status: String, path: String, duration: Double? = nil, handoffId: Int? = nil) {
+    emitStatus(status, path: path, duration: duration, handoffId: handoffId)
   }
 
-  private func output(error: String, detail: String? = nil) {
-    emitError(error, detail: detail)
+  private func output(error: String, path: String? = nil, detail: String? = nil) {
+    if let path {
+      emitRecordingError(error, path: path, detail: detail)
+    }
+    else {
+      emitError(error, detail: detail)
+    }
+  }
+
+  private func output(terminalError error: String, path: String, detail: String? = nil, handoffId: Int? = nil) {
+    emitTerminalError(error, path: path, detail: detail, handoffId: handoffId)
   }
 }
 

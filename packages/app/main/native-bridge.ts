@@ -33,6 +33,11 @@ export class NativeBridge<T extends Record<string, any>> {
    * 令其滞后到达的退出事件不再被判成意外退出
    */
   private readonly settledChildren = new WeakSet<ChildProcess>()
+  private restarting = false
+  private restartPromise: Promise<void> | null = null
+  private handoffCounter = 0
+  private activeHandoffGeneration: number | null = null
+  private readonly pendingWrites: PendingWrite[] = []
   readonly events = new EventBus<T>()
 
   constructor(private config: NativeBridgeConfig<T>) {}
@@ -44,6 +49,10 @@ export class NativeBridge<T extends Record<string, any>> {
   /** 子进程 pid（未启动时为 null），供会议检测排除自身录音 */
   get pid(): number | null {
     return this.child?.pid ?? null
+  }
+
+  get handoffGeneration(): number | null {
+    return this.activeHandoffGeneration
   }
 
   start(): void {
@@ -81,6 +90,8 @@ export class NativeBridge<T extends Record<string, any>> {
 
     let buffer = ''
     child.stdout?.on('data', (data: string) => {
+      if (this.settledChildren.has(child))
+        return
       buffer += data
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
@@ -110,9 +121,13 @@ export class NativeBridge<T extends Record<string, any>> {
         return
 
       this.settledChildren.add(child)
-      const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
       if (this.child === child)
         this.child = null
+      if (this.restarting) {
+        void this.forceRestart(this.activeHandoffGeneration ?? undefined)
+        return
+      }
+      const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
       if (unexpected) {
         log.warn('process.unexpected-exit', 'native helper exited unexpectedly', {
           helper: this.config.name,
@@ -136,9 +151,41 @@ export class NativeBridge<T extends Record<string, any>> {
   }
 
   send(data: string): void {
+    if (this.restarting) {
+      this.pendingWrites.push({ kind: 'command', data })
+      return
+    }
     if (!this.child?.stdin)
       return
     this.child.stdin.write(`${data}\n`)
+  }
+
+  /**
+   * 将 stop 写入当前 helper 后立即建立 handoff barrier。同一 JS turn 内先写 stop 再冻结，
+   * 后续 start/update 不会进入旧 stdin；terminal 决定原进程继续使用还是整体重建
+   */
+  sendAndBeginHandoff(makeData: (generation: number) => string): number {
+    const generation = ++this.handoffCounter
+    const data = makeData(generation)
+    if (this.restarting) {
+      this.pendingWrites.push({ kind: 'handoff', data, generation })
+      return generation
+    }
+    if (!this.child?.stdin)
+      this.start()
+    if (this.child?.stdin)
+      this.child.stdin.write(`${data}\n`)
+    this.restarting = true
+    this.activeHandoffGeneration = generation
+    this.config.onHandoffStarted?.(generation)
+    return generation
+  }
+
+  /** terminal 明确无需 recycle 时解除 barrier，并向当前 helper 重放缓存命令 */
+  finishHandoff(generation: number): void {
+    if (this.activeHandoffGeneration !== generation)
+      return
+    this.finishRestart(generation)
   }
 
   stop(): void {
@@ -146,7 +193,7 @@ export class NativeBridge<T extends Record<string, any>> {
       return
 
     /**
-     * 先登记再 kill：exit 事件异步到达，届时 restart 可能已 spawn 新进程。
+     * 先登记再 kill：exit 事件异步到达，届时 restart 可能已 spawn 新进程
      * 不登记则老进程的退出会被判成意外退出——helper 若自行捕获 SIGTERM 后 exit(0)，
      * signal 为 null 恰好绕过 SIGTERM / SIGINT 判断，从而在健康的新一代上
      * 触发一次多余的 onUnexpectedExit（全量快捷键重注册）
@@ -162,6 +209,85 @@ export class NativeBridge<T extends Record<string, any>> {
     this.stop()
     this.start()
   }
+
+  /**
+   * 仅用于 helper 已完成业务收尾、但内部原生资源可能卡在不可取消同步调用的场景
+   *
+   * SIGTERM 会进入 helper 自己的优雅收尾链，若该链正被系统调用卡住就无法退出；
+   * 此处明确用 SIGKILL 回收旧进程，并立即创建干净的新一代
+   */
+  forceRestart(expectedGeneration?: number): Promise<void> {
+    if (
+      expectedGeneration !== undefined
+      && this.activeHandoffGeneration !== expectedGeneration
+    ) {
+      return Promise.resolve()
+    }
+    if (this.restartPromise)
+      return this.restartPromise
+    this.restarting = true
+    const completedGeneration = this.activeHandoffGeneration
+    this.restartPromise = this.performForceRestart(completedGeneration)
+      .finally(() => {
+        this.restartPromise = null
+      })
+    return this.restartPromise
+  }
+
+  private async performForceRestart(completedGeneration: number | null): Promise<void> {
+    const child = this.child
+    if (child === null) {
+      this.start()
+      this.finishRestart(completedGeneration)
+      return
+    }
+
+    this.settledChildren.add(child)
+    this.child = null
+    await new Promise<void>((resolve) => {
+      const restartAfterExit = () => {
+        this.start()
+        this.finishRestart(completedGeneration)
+        resolve()
+      }
+      child.once('exit', restartAfterExit)
+
+      const signaled = child.kill('SIGKILL')
+      log.warn('process.force-restarted', 'native helper process force restarted after completed handoff', {
+        helper: this.config.name,
+        pid: child.pid,
+        signaled,
+      })
+      if (!signaled) {
+        child.off('exit', restartAfterExit)
+        restartAfterExit()
+      }
+    })
+  }
+
+  private finishRestart(completedGeneration: number | null): void {
+    if (
+      completedGeneration !== null
+      && this.activeHandoffGeneration !== completedGeneration
+    ) {
+      return
+    }
+    this.restarting = false
+    this.activeHandoffGeneration = null
+
+    while (this.pendingWrites.length > 0) {
+      const write = this.pendingWrites.shift()!
+      if (this.child?.stdin)
+        this.child.stdin.write(`${write.data}\n`)
+      if (write.kind === 'handoff') {
+        this.restarting = true
+        this.activeHandoffGeneration = write.generation
+        this.config.onHandoffStarted?.(write.generation)
+        break
+      }
+    }
+    this.config.onHandoffComplete?.(completedGeneration)
+  }
 }
 
 type NativeBridgeConfig<T extends Record<string, any>> = {
@@ -172,5 +298,13 @@ type NativeBridgeConfig<T extends Record<string, any>> = {
   /** stderr 逐行回调（logStderr 开启时生效），供产品接入自己的持久化诊断日志 */
   onStderrLine?: (line: string) => void
   onUnexpectedExit?: (code: number | null, signal: NodeJS.Signals | null) => void
+  /** handoff 通过复用或重建 helper 完成，供上层结算同一代 watchdog */
+  onHandoffComplete?: (generation: number | null) => void
+  /** stop 已真正写入 helper 并建立 barrier，此时才开始计算该代 terminal timeout */
+  onHandoffStarted?: (generation: number) => void
   parseLine: (line: string, bus: EventBus<T>) => void
 }
+
+type PendingWrite
+  = | { kind: 'command', data: string }
+    | { kind: 'handoff', data: string, generation: number }

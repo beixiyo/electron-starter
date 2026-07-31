@@ -93,7 +93,7 @@ export function initNativeRecordingPipeline(): void {
     handlersBySource[source]?.onError('helper_exited', `code=${code} signal=${signal}`)
   })
 
-  onRecorderEvent('error', ({ code, detail }) => {
+  onRecorderEvent('error', ({ code, detail, path: errorPath }) => {
     /**
      * 录音中 Swift 子进程报错（权限被拒、设备异常、无样本）：仅手动 native 录音处理，
      * 非本管线录音（会议链路）的报错一律忽略
@@ -103,6 +103,21 @@ export function initNativeRecordingPipeline(): void {
     const source = recordingState.nativeSource
     if (!source)
       return
+
+    const activeSession = peekNativeRecordingSession()
+    if (
+      errorPath
+      && activeSession
+      && activeSession.outputPath !== errorPath
+    ) {
+      console.warn('[native-recording] stale recorder error ignored', {
+        code,
+        detail,
+        path: errorPath,
+        activePath: activeSession.outputPath,
+      })
+      return
+    }
 
     /**
      * 重复 start 被拒（并发触发时第二次 start 的回执）：活录音本身无恙，

@@ -8,10 +8,13 @@ import ScreenCaptureKit
 
 // ── stdout JSON(SCK 与 tap 两个引擎共用) ──
 
-func emitStatus(_ status: String, path: String, duration: Double? = nil) {
+func emitStatus(_ status: String, path: String, duration: Double? = nil, handoffId: Int? = nil) {
   var json = "{\"status\":\"\(status)\",\"path\":\"\(escapeJSON(path))\""
   if let d = duration {
     json += ",\"duration\":\(String(format: "%.1f", d))"
+  }
+  if let handoffId {
+    json += ",\"handoffId\":\(handoffId)"
   }
   json += "}"
   print(json)
@@ -36,6 +39,37 @@ func emitError(_ error: String, detail: String? = nil) {
     json += ",\"detail\":\"\(escapeJSON(detail))\""
   }
   json += "}"
+  print(json)
+  fflush(stdout)
+}
+
+/** 录音中事件携带所属产物路径，消费层可拒绝已被下一场录音取代的迟到事件 */
+func emitRecordingError(_ error: String, path: String, detail: String? = nil) {
+  var json = "{\"error\":\"\(escapeJSON(error))\",\"path\":\"\(escapeJSON(path))\""
+  if let detail {
+    json += ",\"detail\":\"\(escapeJSON(detail))\""
+  }
+  json += "}"
+  print(json)
+  fflush(stdout)
+}
+
+/** 录音收尾失败 terminal：必须携带产物路径，业务层据此拒绝旧录音错误污染新 session */
+func emitTerminalError(_ error: String, path: String, detail: String? = nil, handoffId: Int? = nil) {
+  var json = "{\"error\":\"\(escapeJSON(error))\",\"terminal\":true,\"path\":\"\(escapeJSON(path))\""
+  if let handoffId {
+    json += ",\"handoffId\":\(handoffId)"
+  }
+  if let detail {
+    json += ",\"detail\":\"\(escapeJSON(detail))\""
+  }
+  json += "}"
+  print(json)
+  fflush(stdout)
+}
+
+func emitRecycleDirective(handoffId: Int, detail: String) {
+  let json = "{\"status\":\"recycle_required\",\"handoffId\":\(handoffId),\"detail\":\"\(escapeJSON(detail))\"}"
   print(json)
   fflush(stdout)
 }
