@@ -128,7 +128,6 @@ helper 发出的 `error` 码：
 - main 进程统一把 native 产物写到 `~/.electron-app/recordings/pending`，录音页挂载时扫描残留，并依次调用 `--merge-checkpoints` / `--recover-mic-sidecar`
 - renderer 只通过 typed IPC 按 `taskId` 读取、导入 IndexedDB 和删除恢复资产，不能传任意本地路径
 - helper stderr 与 `mic_degraded` 会追加到 `~/.electron-app/logs/native-recorder.log`，不只依赖 DevTools
-- starter 不包含 Flowtica 的账号隔离、云端上传、转写任务与恢复弹窗等业务层；恢复成功后直接进入本地录音列表
 
 ---
 
