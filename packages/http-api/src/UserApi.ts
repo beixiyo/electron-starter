@@ -41,6 +41,7 @@ export class UserApi {
     const url = '/account/oauth_login'
     return this.http.post(url, {
       authorization_code: data.authorization_code,
+      state: data.state,
       client_name: data.client_name,
       os_version: data.os_version,
       client_model_name: data.client_model_name,
@@ -96,6 +97,8 @@ export enum ClientType {
 
 export type OauthLoginParams = {
   authorization_code: string
+  /** Provider 回传的 OAuth state；存在时原样交给后端 */
+  state?: string
   client_name: string
   os_version: string
   client_model_name: string

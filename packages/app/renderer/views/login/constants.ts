@@ -1,4 +1,7 @@
-import { APPLE_OAUTH_URL, buildOAuthUrl, GOOGLE_OAUTH_URL } from '@jl-org/auth'
+/**
+ * 集中读取登录配置，并为 Web 弹窗和 Electron 系统浏览器构造 OAuth 参数
+ */
+import { APPLE_OAUTH_URL, GOOGLE_OAUTH_URL } from '@jl-org/auth'
 import { isElectron } from '@/utils/env'
 
 export const GOOGLE_CLIENT_ID = isElectron()
@@ -43,27 +46,49 @@ export function buildClientContext() {
   }
 }
 
-export function buildAppleAuthorizeUrl() {
+export function buildAppleAuthorizeUrl(state?: string) {
   if (!APPLE_CLIENT_ID || !APPLE_REDIRECT_URI) {
     throw new Error('Apple OAuth 配置缺失')
   }
 
-  return buildOAuthUrl(APPLE_OAUTH_URL, {
+  return buildAuthorizeUrl(APPLE_OAUTH_URL, {
     client_id: APPLE_CLIENT_ID,
     redirect_uri: APPLE_REDIRECT_URI,
     scope: APPLE_SCOPE,
     response_mode: 'form_post',
+    ...(state
+      ? { state }
+      : {}),
   })
 }
 
-export function buildGoogleAuthorizeUrl() {
+export function buildGoogleAuthorizeUrl(state?: string) {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
     throw new Error('Google OAuth 配置缺失')
   }
 
-  return buildOAuthUrl(GOOGLE_OAUTH_URL, {
+  return buildAuthorizeUrl(GOOGLE_OAUTH_URL, {
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: GOOGLE_REDIRECT_URI,
     scope: GOOGLE_SCOPE,
+    ...(state
+      ? { state }
+      : {}),
   })
+}
+
+/**
+ * 使用 URLSearchParams 编码 OAuth 参数，确保 redirect_uri 内部的 query 不会泄漏到授权端点
+ */
+function buildAuthorizeUrl(baseUrl: string, params: Record<string, string>) {
+  const url = new URL(baseUrl)
+
+  for (const [name, value] of Object.entries({
+    ...params,
+    response_type: 'code',
+  })) {
+    url.searchParams.set(name, value)
+  }
+
+  return url.toString()
 }

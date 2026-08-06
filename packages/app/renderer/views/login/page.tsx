@@ -1,7 +1,8 @@
-import type { OAuthCallbackParams } from '@shared'
+/**
+ * 登录路由页面：Web 端保留弹窗授权，Electron 端在系统默认浏览器中发起 OAuth 授权
+ */
 import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
 import { useNavigate } from '@jl-org/react-router'
-import { WindowType } from '@shared'
 import { Button, Message } from 'comps'
 import { ClientType } from 'http-api'
 import { Chrome, Mail } from 'lucide-react'
@@ -15,6 +16,8 @@ import { isElectron } from '@/utils/env'
 import AppleIcon from '../../assets/svg/apple.svg?react'
 import { EmailModal } from './components/EmailModal'
 import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI, APPLE_SCOPE, APPLE_STATE, buildAppleAuthorizeUrl, buildClientContext, buildGoogleAuthorizeUrl, GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from './constants'
+import { consumeElectronOAuthCallback } from './electronOAuthCallback'
+import { clearOAuthState, createOAuthState } from './oauthState'
 
 export default function LoginPage() {
   const { t } = useTranslation('login')
@@ -33,13 +36,15 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (isElectron()) {
+      const state = createOAuthState({ provider: 'google', storage: localStorage })
       try {
-        const googleUrl = buildGoogleAuthorizeUrl()
-        const result = await $ipc.window.openOAuth(googleUrl)
+        const googleUrl = buildGoogleAuthorizeUrl(state)
+        const result = await $ipc.window.openExternal(googleUrl)
         if (!result.success)
           throw new Error(result.error)
       }
       catch (error) {
+        clearOAuthState('google', localStorage)
         Message.danger(t('messages.loginFailed'))
         console.error(error)
       }
@@ -75,13 +80,15 @@ export default function LoginPage() {
 
   const handleAppleLogin = async () => {
     if (isElectron()) {
+      const state = createOAuthState({ provider: 'apple', storage: localStorage })
       try {
-        const appleUrl = buildAppleAuthorizeUrl()
-        const result = await $ipc.window.openOAuth(appleUrl)
+        const appleUrl = buildAppleAuthorizeUrl(state)
+        const result = await $ipc.window.openExternal(appleUrl)
         if (!result.success)
           throw new Error(result.error)
       }
       catch (error) {
+        clearOAuthState('apple', localStorage)
         Message.danger(t('messages.loginFailed'))
         console.error(error)
       }
@@ -146,27 +153,33 @@ export default function LoginPage() {
       return
     }
 
-    const cleanup = $ipc.oauth.on('callback', async (params: OAuthCallbackParams) => {
-      if (params.provider !== 'apple' && params.provider !== 'google') {
+    let active = true
+    type OAuthCallbackDelivery = Awaited<ReturnType<typeof $ipc.oauth.registerReceiver>>[number]
+    const handleOAuthCallback = async (delivery: OAuthCallbackDelivery) => {
+      if (!active)
         return
-      }
 
-      if (params.error || !params.code) {
-        Message.danger(t('messages.loginFailed'))
-        console.error('OAuth callback failed:', params)
-        await $ipc.window.destroy(WindowType.OAUTH)
+      const { id, params } = delivery
+      const callback = consumeElectronOAuthCallback(params, localStorage)
+      await $ipc.oauth.acknowledgeCallback(id).catch(() => {})
+
+      if (!callback.ok) {
+        if (callback.reason !== 'unsupported_provider' && callback.reason !== 'access_denied')
+          Message.danger(t('messages.loginFailed'))
         return
       }
 
       try {
-        setAppleLoading(params.provider === 'apple')
+        setAppleLoading(callback.provider === 'apple')
         const clientContext = buildClientContext()
         const userData = await api.user.oauthLogin({
-          authorization_code: params.code,
+          authorization_code: callback.authorizationCode,
+          state: callback.state,
           ...clientContext,
-          platform: params.provider,
+          platform: callback.provider,
           /** 该回调仅在 Electron 端注册（上方已 isElectron 守卫），固定为 Desktop */
           client_type: ClientType.Desktop,
+          username: callback.username,
         })
 
         if (userData?.id) {
@@ -180,12 +193,21 @@ export default function LoginPage() {
       }
       finally {
         setAppleLoading(false)
-        await $ipc.window.destroy(WindowType.OAUTH)
       }
+    }
+
+    const cleanup = $ipc.oauth.on('callbackDelivery', handleOAuthCallback)
+    void $ipc.oauth.registerReceiver().then((pendingCallbacks) => {
+      for (const pendingCallback of pendingCallbacks)
+        void handleOAuthCallback(pendingCallback)
+    }).catch(() => {
+      Message.danger(t('messages.loginFailed'))
     })
 
     return () => {
+      active = false
       cleanup?.()
+      void $ipc.oauth.unregisterReceiver().catch(() => {})
     }
   }, [handleLoginSuccess, t])
 

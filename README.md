@@ -16,8 +16,8 @@
 
 https://cn.electron-vite.org/guide/env-and-mode
 
-- `packages/electron/env/.env.development`
-- `packages/electron/env/.env.production`
+- `packages/app/env/.env.development`
+- `packages/app/env/.env.production`
 
 ```bash
 # Electron Env
@@ -25,12 +25,12 @@ VITE_ELECTRON_API_BASE_URL=xxx
 VITE_ELECTRON_WS_BASE_URL=xxx
 
 VITE_ELECTRON_APPLE_CLIENT_ID=xxx
-VITE_ELECTRON_APPLE_REDIRECT_URI=xxx
+# OAuth Center 的固定 HTTPS 回调地址，最终会跳回 xxx://oauth/complete
+VITE_ELECTRON_APPLE_REDIRECT_URI=https://<oauth-center-domain>/callback/apple/desktop
 VITE_ELECTRON_APPLE_SCOPE=xxx
-VITE_ELECTRON_APPLE_STATE=xxx
 
 VITE_ELECTRON_GOOGLE_CLIENT_ID=xxx
-VITE_ELECTRON_GOOGLE_REDIRECT_URI=xxx
+VITE_ELECTRON_GOOGLE_REDIRECT_URI=https://<oauth-center-domain>/callback/google/desktop
 
 
 # Web Env
@@ -52,6 +52,10 @@ MAIN_VITE_ASR_TOKEN=xxx
 MAIN_VITE_ASR_CLUSTER=xxx
 ```
 
+模板默认协议是 `xxx://`，同时定义在 `packages/app/shared/constants/app-protocol.ts`
+和 `packages/app/electron-builder.yml`；创建实际项目时必须一起替换。OAuth Center 的
+`DISPATCH_DESKTOP_BASE_URL` 也必须配置成同一个 scheme，例如 `xxx://`
+
 ---
 
 ## 启动开发
@@ -63,7 +67,7 @@ pnpm build
 # macOS：编译 Swift native 二进制（audio-monitor / audio-recorder / fn-listener / focus-check）
 bash packages/app/scripts/build-native.sh
 
-cd packages/electron
+cd packages/app
 pnpm dev
 ```
 

@@ -36,8 +36,9 @@
     "lint": "eslint ./src --fix --quiet"
   },
   "dependencies": {
-    "xss": "^1.0.15",
+    "nanoid": "^5.1.11",
     "marked": "^15.0.7",
-    "config": "workspace:*"
+    "config": "workspace:*",
+    "xss": "^1.0.15"
   }
 }

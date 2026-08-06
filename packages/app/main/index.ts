@@ -27,7 +27,6 @@ import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
-import { setupOAuthInterceptor } from './oauth-interceptor'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
 import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
@@ -98,7 +97,7 @@ initDeeplink(() => {
     /** 手动 native tap 录音管线（macOS 14.2+ 混入系统音频）：与会议录音共用 audio-recorder 子进程 */
     initNativeRecordingPipeline()
   }
-})
+}, showOrCreateMainWindow)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -359,8 +358,6 @@ function createMainWindow(): void {
   if (process.platform === 'darwin') {
     setupFnKeyIpc(mainWindow)
   }
-
-  setupOAuthInterceptor(mainWindow)
 
   /** 主窗先于 ready-to-show 被关闭（启动即退出/崩溃销毁）时回收 splash */
   mainWindow.on('closed', destroySplash)

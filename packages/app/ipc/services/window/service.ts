@@ -1,9 +1,10 @@
-import type { WindowBounds, WindowConfig } from '@shared'
-import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { holdStateManager } from '@main/shortcuts'
 import { getShortcutTestWindowBounds, logicalWindowManager, windowManager } from '@main/window-manager'
+import type { WindowBounds, WindowConfig } from '@shared'
 import { WindowType } from '@shared'
+import { shell } from 'electron'
+import type { WindowContract } from './contract'
 
 export const windowService = createIpcService<WindowContract>('window', {
   create: async (_event, type: WindowType, configOverride?: Partial<WindowConfig>) => {
@@ -53,6 +54,29 @@ export const windowService = createIpcService<WindowContract>('window', {
     }
     catch (error) {
       console.error('打开 OAuth 窗口失败:', error)
+      return {
+        success: false,
+        error: error instanceof Error
+          ? error.message
+          : 'Unknown error',
+      }
+    }
+  },
+
+  openExternal: async (event, url: string) => {
+    try {
+      assertMainWindowSender(event)
+      if (!isAllowedOAuthUrl(url)) {
+        return {
+          success: false,
+          error: 'Invalid OAuth URL',
+        }
+      }
+
+      await shell.openExternal(url)
+      return { success: true }
+    }
+    catch (error) {
       return {
         success: false,
         error: error instanceof Error
@@ -168,17 +192,24 @@ function getLogicalWindowShowOptions(type: WindowType) {
 function isAllowedOAuthUrl(rawUrl: string): boolean {
   try {
     const url = new URL(rawUrl)
-    if (url.protocol !== 'https:')
-      return false
+    if (url.protocol !== 'https:') return false
 
-    return OAUTH_ALLOWED_HOSTS.has(url.hostname)
+    const OAUTH_ALLOWED_ENDPOINTS = new Map([
+      ['accounts.google.com', '/o/oauth2/v2/auth'],
+      ['appleid.apple.com', '/auth/authorize'],
+    ])
+
+    return OAUTH_ALLOWED_ENDPOINTS.get(url.hostname) === url.pathname
   }
   catch {
     return false
   }
 }
 
-const OAUTH_ALLOWED_HOSTS = new Set([
-  'accounts.google.com',
-  'appleid.apple.com',
-])
+/** 仅允许主窗口触发系统浏览器副作用 */
+function assertMainWindowSender(event: unknown): void {
+  const senderId = (event as { sender: { id: number } }).sender.id
+  const mainWindow = windowManager.get(WindowType.MAIN)
+
+  if (!mainWindow || mainWindow.isDestroyed() || senderId !== mainWindow.webContents.id) throw new Error('External OAuth URL must be opened by the main window')
+}
