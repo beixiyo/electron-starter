@@ -18,12 +18,15 @@ import type {
  * - 保存到文件（`saveCapture`）不投递图片，结束时发 `cancel` 让发起方清理会话
  */
 export type ScreenshotContract = IpcContract<{
-  startCapture: (options?: ScreenshotStartOptions) => ScreenshotStartResult
-  confirmCapture: (displayId: number, rect: ScreenshotBounds) => void
-  saveCapture: (displayId: number, rect: ScreenshotBounds) => void
-  cancelCapture: () => void
-}, {
-  init: ScreenshotInitPayload
-  ok: ScreenshotOkPayload
-  cancel: ScreenshotCancelPayload
+  mainHandle: {
+    startCapture: (options?: ScreenshotStartOptions) => ScreenshotStartResult
+    confirmCapture: (displayId: number, rect: ScreenshotBounds) => void
+    saveCapture: (displayId: number, rect: ScreenshotBounds) => void
+    cancelCapture: () => void
+  }
+  rendererOn: {
+    init: ScreenshotInitPayload
+    ok: ScreenshotOkPayload
+    cancel: ScreenshotCancelPayload
+  }
 }>

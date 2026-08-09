@@ -38,64 +38,66 @@ function listAudioApps(): AudioAppItem[] {
  * 完成 / 错误经 registerNativeRecordingHandlers('manual') 定向主窗，由录音页存 IndexedDB / 弹提示
  */
 export const recordingService = createIpcService<RecordingContract>('recording', {
-  async getState() {
-    return recordingState.snapshot
-  },
-
-  async start() {
-    return startManualRecording()
-  },
-
-  async openStorageSettings() {
-    await openStorageSettings()
-  },
-
-  async setManualRecordingPrefs(_event, prefs) {
-    setManualRecordingPrefs(prefs)
-  },
-
-  async setAudioSourceCapture(_event, options) {
-    return setAudioSourceCapture(options)
-  },
-
-  async getAudioApps() {
-    startAudioMonitor()
-    return listAudioApps()
-  },
-
-  async getSystemAudioSupport() {
-    return isSystemAudioRecordingSupported()
-  },
-
-  async pause() {
-    return recordingState.pause()
-  },
-
-  async resume() {
-    if (!await ensureRecordingStorageAvailable('resume'))
+  mainHandle: {
+    async getState() {
       return recordingState.snapshot
+    },
 
-    return recordingState.resume()
-  },
+    async start() {
+      return startManualRecording()
+    },
 
-  async stop() {
-    return recordingState.stop()
-  },
+    async openStorageSettings() {
+      await openStorageSettings()
+    },
 
-  async reset() {
-    return recordingState.reset()
-  },
+    async setManualRecordingPrefs(_event, prefs) {
+      setManualRecordingPrefs(prefs)
+    },
 
-  async listRecoverableRecordings() {
-    return listRecoverableRecordings(peekNativeRecordingSession()?.outputPath)
-  },
+    async setAudioSourceCapture(_event, options) {
+      return setAudioSourceCapture(options)
+    },
 
-  async readRecordingFile(_event, taskId: string) {
-    return readRecoveryRecording(taskId)
-  },
+    async getAudioApps() {
+      startAudioMonitor()
+      return listAudioApps()
+    },
 
-  async deleteRecordingFile(_event, taskId: string) {
-    await deleteRecoveryRecording(taskId)
+    async getSystemAudioSupport() {
+      return isSystemAudioRecordingSupported()
+    },
+
+    async pause() {
+      return recordingState.pause()
+    },
+
+    async resume() {
+      if (!await ensureRecordingStorageAvailable('resume'))
+        return recordingState.snapshot
+
+      return recordingState.resume()
+    },
+
+    async stop() {
+      return recordingState.stop()
+    },
+
+    async reset() {
+      return recordingState.reset()
+    },
+
+    async listRecoverableRecordings() {
+      return listRecoverableRecordings(peekNativeRecordingSession()?.outputPath)
+    },
+
+    async readRecordingFile(_event, taskId: string) {
+      return readRecoveryRecording(taskId)
+    },
+
+    async deleteRecordingFile(_event, taskId: string) {
+      await deleteRecoveryRecording(taskId)
+    },
   },
 })
 

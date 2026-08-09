@@ -9,39 +9,41 @@ import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable, reportRecordingStorageInsufficient } from '@main/recording-storage'
 
 export const meetingDetectionService = createIpcService<MeetingDetectionContract>('meeting-detection', {
-  async dismiss(_event, appId: string, pid: number) {
-    dismissSession(appId, pid)
-  },
+  mainHandle: {
+    async dismiss(_event, appId: string, pid: number) {
+      dismissSession(appId, pid)
+    },
 
-  async startRecording(_event, appId: string, pid: number, displayName?: string) {
-    if (!recordingState.canStart)
-      return
+    async startRecording(_event, appId: string, pid: number, displayName?: string) {
+      if (!recordingState.canStart)
+        return
 
-    if (!await ensureRecordingStorageAvailable())
-      return
+      if (!await ensureRecordingStorageAvailable())
+        return
 
-    suppressSession(appId, pid)
-    const session = createRecordingRecoverySession('meeting', displayName || appId, {
-      micAudio: true,
-      systemAudio: true,
-    })
-    setNativeRecordingSession(session)
-    recordingState.startMeetingNative()
-    startNativeRecorder(session.outputPath)
-    console.log(`[meeting-detection] recording started for: ${appId} pid=${pid}`)
-  },
+      suppressSession(appId, pid)
+      const session = createRecordingRecoverySession('meeting', displayName || appId, {
+        micAudio: true,
+        systemAudio: true,
+      })
+      setNativeRecordingSession(session)
+      recordingState.startMeetingNative()
+      startNativeRecorder(session.outputPath)
+      console.log(`[meeting-detection] recording started for: ${appId} pid=${pid}`)
+    },
 
-  async pauseRecording() {
-    recordingState.pause()
-  },
+    async pauseRecording() {
+      recordingState.pause()
+    },
 
-  async resumeRecording() {
-    if (await ensureRecordingStorageAvailable('resume'))
-      recordingState.resume()
-  },
+    async resumeRecording() {
+      if (await ensureRecordingStorageAvailable('resume'))
+        recordingState.resume()
+    },
 
-  async stopRecording() {
-    recordingState.stop()
+    async stopRecording() {
+      recordingState.stop()
+    },
   },
 })
 

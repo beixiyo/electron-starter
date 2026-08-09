@@ -10,21 +10,23 @@ const pendingCallbacks: OAuthCallbackDelivery[] = []
 let receiver: WebContents | null = null
 
 export const oauthService = createIpcService<OAuthContract>('oauth', {
-  registerReceiver: (event) => {
-    receiver = getMainWindowSender(event)
+  mainHandle: {
+    registerReceiver: (event) => {
+      receiver = getMainWindowSender(event)
 
-    return [...pendingCallbacks]
-  },
-  acknowledgeCallback: (event, id) => {
-    getMainWindowSender(event)
-    const index = pendingCallbacks.findIndex(callback => callback.id === id)
-    if (index >= 0)
-      pendingCallbacks.splice(index, 1)
-  },
-  unregisterReceiver: (event) => {
-    const sender = getMainWindowSender(event)
-    if (receiver === sender)
-      receiver = null
+      return [...pendingCallbacks]
+    },
+    acknowledgeCallback: (event, id) => {
+      getMainWindowSender(event)
+      const index = pendingCallbacks.findIndex(callback => callback.id === id)
+      if (index >= 0)
+        pendingCallbacks.splice(index, 1)
+    },
+    unregisterReceiver: (event) => {
+      const sender = getMainWindowSender(event)
+      if (receiver === sender)
+        receiver = null
+    },
   },
 })
 

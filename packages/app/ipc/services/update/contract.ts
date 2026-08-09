@@ -71,19 +71,22 @@ export interface UpdateProgress {
 /**
  * 应用更新 IPC 契约
  *
- * - invoke：渲染进程发起检查 / 下载 / 安装，并查询当前版本
- * - events：主进程把更新状态与下载进度推回渲染进程
+ * - `mainHandle`：渲染进程发起检查 / 下载 / 安装，并查询当前版本
+ * - `rendererOn`：主进程把更新状态与下载进度推回渲染进程
  */
 export type UpdateContract = IpcContract<{
-  /** 主动检查更新；过程同时通过 `status` 事件广播 */
-  check: () => UpdateCheckOutcome
-  /** 开始下载更新（autoDownload=false 时由 UI 确认后调用） */
-  download: () => void
-  /** 退出并安装已下载好的更新（会先关闭所有窗口） */
-  install: () => void
-  /** 当前应用版本号 */
-  getVersion: () => string
-}, {
-  status: UpdateStatusEvent
-  progress: UpdateProgress
+  mainHandle: {
+    /** 主动检查更新；过程同时通过 `status` 事件广播 */
+    check: () => UpdateCheckOutcome
+    /** 开始下载更新（autoDownload=false 时由 UI 确认后调用） */
+    download: () => void
+    /** 退出并安装已下载好的更新（会先关闭所有窗口） */
+    install: () => void
+    /** 当前应用版本号 */
+    getVersion: () => string
+  }
+  rendererOn: {
+    status: UpdateStatusEvent
+    progress: UpdateProgress
+  }
 }>

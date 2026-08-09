@@ -9,8 +9,9 @@ export type FocusPayload = {
 }
 
 export type FocusContract = IpcContract<
-  {},
   {
-    update: FocusPayload
+    rendererOn: {
+      update: FocusPayload
+    }
   }
 >

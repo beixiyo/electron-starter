@@ -5,20 +5,22 @@ import { getPermissionStatus, openPrivacySettings, requestPermission } from '@ma
 import { requestShortcutRuntimeSync } from '@main/shortcuts/runtime-sync'
 
 export const permissionService = createIpcService<PermissionContract>('permission', {
-  async get(_event, kind: PermissionKind) {
-    const status = getPermissionStatus(kind)
-    syncAccessibilityRuntime(kind, status)
-    return status
-  },
+  mainHandle: {
+    async get(_event, kind: PermissionKind) {
+      const status = getPermissionStatus(kind)
+      syncAccessibilityRuntime(kind, status)
+      return status
+    },
 
-  async request(_event, kind: PermissionKind) {
-    const status = await requestPermission(kind)
-    syncAccessibilityRuntime(kind, status)
-    return status
-  },
+    async request(_event, kind: PermissionKind) {
+      const status = await requestPermission(kind)
+      syncAccessibilityRuntime(kind, status)
+      return status
+    },
 
-  async openSettings(_event, kind: PermissionKind) {
-    return openPrivacySettings(kind)
+    async openSettings(_event, kind: PermissionKind) {
+      return openPrivacySettings(kind)
+    },
   },
 })
 

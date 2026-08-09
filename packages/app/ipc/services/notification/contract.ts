@@ -72,16 +72,19 @@ export type NativeCloseReason = 'userCanceled' | 'applicationHidden' | 'timedOut
 /**
  * 原生通知 IPC 契约
  *
- * - invoke：渲染进程发起展示 / 关闭，并查询系统是否支持
- * - events：主进程把通知交互（点击 / 关闭 / 操作 / 回复 等）回传渲染进程
+ * - `mainHandle`：渲染进程发起展示 / 关闭，并查询系统是否支持
+ * - `rendererOn`：主进程把通知交互（点击 / 关闭 / 操作 / 回复 等）回传渲染进程
  */
 export type NotificationContract = IpcContract<{
-  /** 当前系统是否支持原生通知 */
-  isSupported: () => boolean
-  /** 展示一条原生通知 */
-  show: (payload: NativeNotifyPayload) => void
-  /** 按 id 关闭一条通知 */
-  close: (id: string) => void
-}, {
-  event: NativeNotifyEvent
+  mainHandle: {
+    /** 当前系统是否支持原生通知 */
+    isSupported: () => boolean
+    /** 展示一条原生通知 */
+    show: (payload: NativeNotifyPayload) => void
+    /** 按 id 关闭一条通知 */
+    close: (id: string) => void
+  }
+  rendererOn: {
+    event: NativeNotifyEvent
+  }
 }>

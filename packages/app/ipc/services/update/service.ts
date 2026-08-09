@@ -22,50 +22,52 @@ const { autoUpdater } = electronUpdater
  * 事件监听与配置在 {@link initAutoUpdater} 里集中完成
  */
 export const updateService = createIpcService<UpdateContract>('update', {
-  async check() {
-    const result = await autoUpdater.checkForUpdates()
+  mainHandle: {
+    async check() {
+      const result = await autoUpdater.checkForUpdates()
 
-    if (!result) {
-      pendingDownloadTarget = null
-      return { available: false }
-    }
+      if (!result) {
+        pendingDownloadTarget = null
+        return { available: false }
+      }
 
-    pendingDownloadTarget = result.isUpdateAvailable
-      ? getPendingDownloadTarget(result.updateInfo)
-      : null
+      pendingDownloadTarget = result.isUpdateAvailable
+        ? getPendingDownloadTarget(result.updateInfo)
+        : null
 
-    return {
-      available: result.isUpdateAvailable,
-      info: result.isUpdateAvailable
-        ? toLite(result.updateInfo)
-        : undefined,
-    }
-  },
+      return {
+        available: result.isUpdateAvailable,
+        info: result.isUpdateAvailable
+          ? toLite(result.updateInfo)
+          : undefined,
+      }
+    },
 
-  async download() {
-    mainProgressSnapshot = null
-    pendingProgressSnapshot = null
-    receivedNativeProgress = false
-    startPendingDownloadPolling()
-    try {
-      await autoUpdater.downloadUpdate()
-    }
-    finally {
-      stopPendingDownloadPolling()
-    }
-  },
+    async download() {
+      mainProgressSnapshot = null
+      pendingProgressSnapshot = null
+      receivedNativeProgress = false
+      startPendingDownloadPolling()
+      try {
+        await autoUpdater.downloadUpdate()
+      }
+      finally {
+        stopPendingDownloadPolling()
+      }
+    },
 
-  async install() {
-    if (is.dev) {
-      emitStatus('error', { error: 'dev mode cannot install update' })
-      return
-    }
+    async install() {
+      if (is.dev) {
+        emitStatus('error', { error: 'dev mode cannot install update' })
+        return
+      }
 
-    autoUpdater.quitAndInstall()
-  },
+      autoUpdater.quitAndInstall()
+    },
 
-  async getVersion() {
-    return app.getVersion()
+    async getVersion() {
+      return app.getVersion()
+    },
   },
 })
 

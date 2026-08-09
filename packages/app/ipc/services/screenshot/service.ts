@@ -10,21 +10,23 @@ import {
 } from '@main/screenshot'
 
 export const screenshotService = createIpcService<ScreenshotContract>('screenshot', {
+  mainHandle: {
   /** 申请截图会话：记录发起方 webContents，返回主进程生成的 captureId */
-  async startCapture(e, options) {
-    const captureId = await startCapture(options, (e as IpcMainInvokeEvent).sender)
-    return { captureId }
-  },
+    async startCapture(e, options) {
+      const captureId = await startCapture(options, (e as IpcMainInvokeEvent).sender)
+      return { captureId }
+    },
 
-  async confirmCapture(_e, displayId: number, rect: ScreenshotBounds) {
-    return handleConfirmCapture(displayId, rect)
-  },
+    async confirmCapture(_e, displayId: number, rect: ScreenshotBounds) {
+      return handleConfirmCapture(displayId, rect)
+    },
 
-  async saveCapture(_e, displayId: number, rect: ScreenshotBounds) {
-    return handleSaveCapture(displayId, rect)
-  },
+    async saveCapture(_e, displayId: number, rect: ScreenshotBounds) {
+      return handleSaveCapture(displayId, rect)
+    },
 
-  async cancelCapture(_e) {
-    return handleCancelCapture()
+    async cancelCapture(_e) {
+      return handleCancelCapture()
+    },
   },
 })

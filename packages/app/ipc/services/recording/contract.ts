@@ -8,52 +8,55 @@ import type { RecordingSnapshot } from '@shared'
  * 会议录音走独立的 meeting-detection 契约，二者互不影响
  */
 export type RecordingContract = IpcContract<{
-  getState: () => RecordingSnapshot
-  /**
-   * 开始手动录音：macOS 14.2+ 走 native tap 引擎（mic 恒采集，系统音轨按已同步的混音偏好挂载）
-   * 更早系统 / 非 darwin 由 renderer 回退浏览器 mic 采集，不经过此入口
-   */
-  start: () => RecordingSnapshot
-  /** 打开当前平台的系统存储管理入口 */
-  openStorageSettings: () => void
-  /** 同步手动录音偏好（麦克风 / 混入系统音频开关）到主进程 */
-  setManualRecordingPrefs: (prefs: ManualRecordingPrefs) => void
-  /**
-   * 手动 native 录音进行中热挂/卸音源（音源多选条：麦克风 + 所有软件）；
-   * 每次变更下发完整音源状态；开启系统音轨且权限未定时会即时弹系统授权框，录音不中断
-   */
-  setAudioSourceCapture: (options: AudioSourceCaptureOptions) => AudioSourceCaptureResult
-  /** 当前正在输出音频的软件列表，已排除应用自身进程 */
-  getAudioApps: () => AudioAppItem[]
-  /** 本机是否支持混系统音频录音（darwin 且 macOS >= 14.2），UI 据此显隐音源条 */
-  getSystemAudioSupport: () => boolean
-  pause: () => RecordingSnapshot
-  resume: () => RecordingSnapshot
-  stop: () => RecordingSnapshot
-  reset: () => RecordingSnapshot
-  /** 扫描崩溃残留并返回可恢复录音 */
-  listRecoverableRecordings: () => RecoverableRecordingPayload[]
-  /** 读取录音产物（可达几十 MB，异步读避免阻塞主进程） */
-  readRecordingFile: (taskId: string) => ArrayBuffer
-  /** 删除录音产物（存进 IndexedDB 后清理临时文件） */
-  deleteRecordingFile: (taskId: string) => void
-}, {
-  stateChanged: RecordingSnapshot
-  /** 录音达到最大时长：提示用户确认后再收尾 */
-  showMaxDurationReached: undefined
-  /** 手动 native 录音结束：产物已落临时目录，渲染端接手存 IndexedDB */
-  manualRecordingComplete: ManualRecordingCompletePayload
-  /** 手动 native 录音失败（定向主窗弹提示） */
-  manualRecordingError: ManualRecordingErrorPayload
-  /** 录音空间低于安全阈值，或 Native writer 已明确返回 ENOSPC */
-  storageInsufficient: {
-    availableBytes: number
-    context: 'start' | 'recording' | 'resume' | 'write'
+  mainHandle: {
+    getState: () => RecordingSnapshot
+    /**
+     * 开始手动录音：macOS 14.2+ 走 native tap 引擎（mic 恒采集，系统音轨按已同步的混音偏好挂载）
+     * 更早系统 / 非 darwin 由 renderer 回退浏览器 mic 采集，不经过此入口
+     */
+    start: () => RecordingSnapshot
+    /** 打开当前平台的系统存储管理入口 */
+    openStorageSettings: () => void
+    /** 同步手动录音偏好（麦克风 / 混入系统音频开关）到主进程 */
+    setManualRecordingPrefs: (prefs: ManualRecordingPrefs) => void
+    /**
+     * 手动 native 录音进行中热挂/卸音源（音源多选条：麦克风 + 所有软件）；
+     * 每次变更下发完整音源状态；开启系统音轨且权限未定时会即时弹系统授权框，录音不中断
+     */
+    setAudioSourceCapture: (options: AudioSourceCaptureOptions) => AudioSourceCaptureResult
+    /** 当前正在输出音频的软件列表，已排除应用自身进程 */
+    getAudioApps: () => AudioAppItem[]
+    /** 本机是否支持混系统音频录音（darwin 且 macOS >= 14.2），UI 据此显隐音源条 */
+    getSystemAudioSupport: () => boolean
+    pause: () => RecordingSnapshot
+    resume: () => RecordingSnapshot
+    stop: () => RecordingSnapshot
+    reset: () => RecordingSnapshot
+    /** 扫描崩溃残留并返回可恢复录音 */
+    listRecoverableRecordings: () => RecoverableRecordingPayload[]
+    /** 读取录音产物（可达几十 MB，异步读避免阻塞主进程） */
+    readRecordingFile: (taskId: string) => ArrayBuffer
+    /** 删除录音产物（存进 IndexedDB 后清理临时文件） */
+    deleteRecordingFile: (taskId: string) => void
   }
-  /** 麦克风自愈失败，录音仍以剩余音源继续 */
-  micDegraded: MicDegradedPayload
-  /** 正在输出音频的软件列表发生变化 */
-  audioAppsChanged: AudioAppItem[]
+  rendererOn: {
+    stateChanged: RecordingSnapshot
+    /** 录音达到最大时长：提示用户确认后再收尾 */
+    showMaxDurationReached: undefined
+    /** 手动 native 录音结束：产物已落临时目录，渲染端接手存 IndexedDB */
+    manualRecordingComplete: ManualRecordingCompletePayload
+    /** 手动 native 录音失败（定向主窗弹提示） */
+    manualRecordingError: ManualRecordingErrorPayload
+    /** 录音空间低于安全阈值，或 Native writer 已明确返回 ENOSPC */
+    storageInsufficient: {
+      availableBytes: number
+      context: 'start' | 'recording' | 'resume' | 'write'
+    }
+    /** 麦克风自愈失败，录音仍以剩余音源继续 */
+    micDegraded: MicDegradedPayload
+    /** 正在输出音频的软件列表发生变化 */
+    audioAppsChanged: AudioAppItem[]
+  }
 }>
 
 /** renderer 同步给主进程的手动录音偏好 */

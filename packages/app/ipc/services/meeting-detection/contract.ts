@@ -21,19 +21,21 @@ export type RecordingCompletePayload = {
 
 export type MeetingDetectionContract = IpcContract<
   {
-    dismiss: (appId: string, pid: number) => void
-    startRecording: (appId: string, pid: number, displayName?: string) => void
-    pauseRecording: () => void
-    resumeRecording: () => void
-    stopRecording: () => void
-  },
-  {
-    'detected': MeetingDetectedPayload
-    'ended': MeetingDetectedPayload
-    'recording-state': RecordingStatePayload
-    'recording-complete': RecordingCompletePayload
-    'recording-error': RecordingErrorPayload
-    'mic-degraded': { detail?: string }
+    mainHandle: {
+      dismiss: (appId: string, pid: number) => void
+      startRecording: (appId: string, pid: number, displayName?: string) => void
+      pauseRecording: () => void
+      resumeRecording: () => void
+      stopRecording: () => void
+    }
+    rendererOn: {
+      'detected': MeetingDetectedPayload
+      'ended': MeetingDetectedPayload
+      'recording-state': RecordingStatePayload
+      'recording-complete': RecordingCompletePayload
+      'recording-error': RecordingErrorPayload
+      'mic-degraded': { detail?: string }
+    }
   }
 >
 

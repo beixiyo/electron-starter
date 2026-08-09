@@ -9,6 +9,7 @@
   "scripts": {
     "----- quality -----": "-----",
     "lint": "eslint --fix .",
+    "test": "vitest run --environment node",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
@@ -97,6 +98,7 @@
     "styles": "workspace:*",
     "utils": "workspace:*",
     "vite": "^8.0.12",
+    "vitest": "^4.1.10",
     "ws": "^8.18.3"
   }
 }

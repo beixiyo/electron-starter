@@ -4,6 +4,7 @@ import { createServiceClient } from '@ipc/core'
 export const recordingClient = createServiceClient<RecordingContract>('recording', [
   'getState',
   'start',
+  'openStorageSettings',
   'setManualRecordingPrefs',
   'setAudioSourceCapture',
   'getAudioApps',

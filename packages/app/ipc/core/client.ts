@@ -4,15 +4,18 @@ import { ipcRenderer } from 'electron/renderer'
 /**
  * 在渲染进程（preload）创建类型安全的 IPC 客户端
  *
- * invoke 方法和事件订阅的类型全部从契约自动推导，
- * `methods` 数组由 TypeScript 约束只能填契约中存在的方法名
+ * 三个通道的类型全部从契约自动推导，
+ * `methods` 数组由 TypeScript 约束只能填契约 `mainHandle` 中存在的方法名
+ *
+ * `on`（`rendererOn`）和 `send`（`mainOn`）走名字传参，不需要额外的名单：
+ * 契约里声明了就能调，运行时无需枚举
  *
  * @param namespace 服务命名空间，需与 `createIpcService` 一致
- * @param methods invoke 方法名列表（运行时需要，类型层面自动校验）
+ * @param methods `mainHandle` 方法名列表（运行时需要，类型层面自动校验）
  */
 export function createServiceClient<C extends IpcContract>(
   namespace: string,
-  methods: readonly (string & keyof C['invoke'])[],
+  methods: readonly (string & keyof C['mainHandle'])[],
 ): IpcClient<C> {
   const client: Record<string, unknown> = {}
 
@@ -28,6 +31,11 @@ export function createServiceClient<C extends IpcContract>(
     return () => {
       ipcRenderer.removeListener(channel, handler)
     }
+  }
+
+  /** 单向发送：不等待、无返回值，主进程侧的错误不会回传 */
+  client.send = (name: string, ...args: unknown[]) => {
+    ipcRenderer.send(`${namespace}:${name}`, ...args)
   }
 
   return client as IpcClient<C>

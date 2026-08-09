@@ -67,7 +67,7 @@ initDeeplink(() => {
   initPowerSaveBlockers()
   const ipcLog = createMainDiagnosticLogger('ipc.service')
   setIpcServiceErrorLogger((error, meta) => {
-    ipcLog.error('invoke.failed', 'IPC handler failed', error, meta)
+    ipcLog.error(`${meta.kind}.failed`, 'IPC handler failed', error, meta)
   })
 
   setupAppIdentity()

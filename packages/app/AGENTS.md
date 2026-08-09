@@ -147,16 +147,16 @@ pnpm build:native:mac   # 显式编译 macOS native helper
 
 | 文件 | 职责 |
 |---|---|
-| `contract.ts` | 定义 `IpcContract<InvokeSignatures, EventPayloads>` 类型，声明请求-响应方法签名和事件载荷 |
-| `service.ts` | 主进程实现，调用 `createIpcService<Contract>(namespace, handlers)` 自动注册到 `ipcMain.handle()` |
+| `contract.ts` | 定义 `IpcContract<{ mainHandle, mainOn, rendererOn }>`，按接收端声明三类通道 |
+| `service.ts` | 主进程实现，调用 `createIpcService<Contract>(namespace, impl)` 注册 `ipcMain.handle()` / `ipcMain.on()` |
 | `client.ts` | 渲染进程客户端，调用 `createServiceClient<Contract>(namespace, methods)` 生成类型安全的调用代理 |
 
 核心类型（`ipc/core/contract.ts`）：
 
-- `IpcContract<H, E>` — 合并 invoke 方法与 event 推送的契约类型
-- `ServiceHandlers<C>` — 自动为 handler 签名添加 `event` 参数
+- `IpcContract<T>` — 合并 `mainHandle`、`mainOn`、`rendererOn` 三类通道
+- `ServiceImpl<C>` — 根据契约条件约束主进程必须实现的接收通道
 - `IpcEmitter<C>` — 主进程类型安全的事件发射器
-- `IpcClient<C>` — 渲染进程合并请求方法 + 订阅方法的客户端类型
+- `IpcClient<C>` — renderer 的请求方法、事件订阅与单向发送客户端类型
 
 **服务加载方式：**
 
@@ -165,8 +165,8 @@ pnpm build:native:mac   # 显式编译 macOS native helper
 
 **新增 IPC 能力的步骤：**
 
-1. 创建 `ipc/services/<name>/contract.ts`，定义 `IpcContract` 类型
-2. 创建 `ipc/services/<name>/service.ts`，用 `createIpcService()` 实现并自动注册
+1. 创建 `ipc/services/<name>/contract.ts`，按接收端定义 `mainHandle`、`mainOn`、`rendererOn`
+2. 创建 `ipc/services/<name>/service.ts`，用同名字段实现 main 侧接收通道
 3. 创建 `ipc/services/<name>/client.ts`，用 `createServiceClient()` 生成客户端
 4. 在主进程入口或使用处导入 `service.ts`（核心服务加到 `ipc/services/index.ts`，按需服务在使用处导入）
 5. 在 `preload/index.ts` 通过 Context Bridge 暴露客户端（`window.$ipc`）

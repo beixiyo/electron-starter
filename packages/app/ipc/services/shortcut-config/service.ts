@@ -20,39 +20,41 @@ export function createShortcutConfigService(
   onReapply: (bindings: ShortcutBindings) => void,
 ): void {
   const service = createIpcService<ShortcutConfigContract>('shortcut-config', {
-    async getBindings(_e) {
-      return filterPersistableShortcutBindings(readShortcutBindings())
-    },
+    mainHandle: {
+      async getBindings(_e) {
+        return filterPersistableShortcutBindings(readShortcutBindings())
+      },
 
-    async setBindings(_e, bindings) {
-      const nextBindings = filterPersistableShortcutBindings(
-        resolveShortcutBindingConflicts(normalizeShortcutBindings(bindings)),
-      )
-      writeShortcutBindings(nextBindings)
-      onReapply(nextBindings)
-    },
+      async setBindings(_e, bindings) {
+        const nextBindings = filterPersistableShortcutBindings(
+          resolveShortcutBindingConflicts(normalizeShortcutBindings(bindings)),
+        )
+        writeShortcutBindings(nextBindings)
+        onReapply(nextBindings)
+      },
 
-    async getCapabilities(_e) {
-      return getElectronShortcutCapabilities()
-    },
+      async getCapabilities(_e) {
+        return getElectronShortcutCapabilities()
+      },
 
-    async pauseForRecord(e) {
-      suspendFnShortcuts()
-      const win = BrowserWindow.fromWebContents((e as IpcMainInvokeEvent).sender)
-      try {
-        startRecordShortcutDetection((recordEvent) => {
-          service.emit('record', recordEvent, win ?? undefined)
-        })
-      }
-      catch (error) {
+      async pauseForRecord(e) {
+        suspendFnShortcuts()
+        const win = BrowserWindow.fromWebContents((e as IpcMainInvokeEvent).sender)
+        try {
+          startRecordShortcutDetection((recordEvent) => {
+            service.emit('record', recordEvent, win ?? undefined)
+          })
+        }
+        catch (error) {
+          resumeFnShortcuts()
+          throw error
+        }
+      },
+
+      async resumeAfterRecord(_e) {
+        stopRecordShortcutDetection()
         resumeFnShortcuts()
-        throw error
-      }
-    },
-
-    async resumeAfterRecord(_e) {
-      stopRecordShortcutDetection()
-      resumeFnShortcuts()
+      },
     },
   })
 }
