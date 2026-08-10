@@ -3,7 +3,7 @@ import { createIpcService } from '@ipc/core'
 import { startRecording as startNativeRecorder } from '@main/audio-recorder'
 import { dismissSession, suppressSession } from '@main/meeting-detection/meeting-detector'
 import { registerNativeRecordingHandlers } from '@main/native-recording'
-import { setNativeRecordingSession } from '@main/native-recording/session'
+import { hasNativeRecordingSession, setNativeRecordingSession } from '@main/native-recording/session'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable, reportRecordingStorageInsufficient } from '@main/recording-storage'
@@ -15,10 +15,14 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
     },
 
     async startRecording(_event, appId: string, pid: number, displayName?: string) {
-      if (!recordingState.canStart)
+      if (!recordingState.canStart || hasNativeRecordingSession())
         return
 
       if (!await ensureRecordingStorageAvailable())
+        return
+
+      /** 存储检查期间另一路录音可能已占用共享 helper */
+      if (!recordingState.canStart || hasNativeRecordingSession())
         return
 
       suppressSession(appId, pid)

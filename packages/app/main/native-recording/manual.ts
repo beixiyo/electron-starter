@@ -8,7 +8,7 @@ import { ensureRecordingStorageAvailable } from '@main/recording-storage'
 import { isMacOSAtLeast } from '@main/utils/macos-version'
 import { getSelfProcessPids } from '@main/utils/self-pids'
 import { initNativeRecordingPipeline } from '.'
-import { setNativeRecordingSession } from './session'
+import { hasNativeRecordingSession, setNativeRecordingSession } from './session'
 
 /**
  * 手动 native tap 录音（主进程收口）
@@ -44,14 +44,17 @@ function isSystemAudioPermissionUsable(): boolean {
 }
 
 /**
- * start 全程互斥锁：isBusy 的相位切换发生在 startRecording 前后，
- * 仅靠 isBusy 挡不住双击并发触发——第二次 start 会被 Swift 以 already_recording 拒绝，
- * 该错误若被当致命处理会连带杀掉第一路录音
+ * 权限、存储检查是异步的，进入 starting 前仍需互斥，避免双击创建两个 session
  */
 let startingManual = false
 
 export async function startManualRecording(): Promise<RecordingSnapshot> {
-  if (!isSystemAudioRecordingSupported() || startingManual || !recordingState.canStart) {
+  if (
+    !isSystemAudioRecordingSupported()
+    || startingManual
+    || !recordingState.canStart
+    || hasNativeRecordingSession()
+  ) {
     return recordingState.snapshot
   }
 
@@ -80,6 +83,10 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
     /** 幂等：确保 audio-recorder 子进程与管线已就绪（可能早于 meeting-detection 初始化） */
     initNativeRecordingPipeline()
 
+    /** 权限 / 存储检查期间会议录音可能已抢先占用共享 helper */
+    if (!recordingState.canStart || hasNativeRecordingSession())
+      return recordingState.snapshot
+
     const session = createRecordingRecoverySession('manual', undefined, {
       micAudio: micEnabled,
       systemAudio: mixSystemAudio,
@@ -94,7 +101,7 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
       excludePids: getSelfProcessPids(),
       mic: micEnabled,
     })
-    console.log(`[recording] manual native recording started (mic=${micEnabled}, mix=${mixSystemAudio}, pids=[${selectedPids.join(',')}])`)
+    console.log(`[recording] manual native startup requested (mic=${micEnabled}, mix=${mixSystemAudio}, pids=[${selectedPids.join(',')}])`)
     return snapshot
   }
   finally {
@@ -110,8 +117,12 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
  */
 export async function setAudioSourceCapture(options: AudioSourceCaptureOptions): Promise<AudioSourceCaptureResult> {
   const { micEnabled, systemEnabled } = options
+  const phase = recordingState.snapshot.phase
 
-  if (recordingState.nativeSource !== 'manual' || !recordingState.isBusy) {
+  if (
+    recordingState.nativeSource !== 'manual'
+    || (phase !== 'recording' && phase !== 'paused')
+  ) {
     return { ok: false, reason: 'not-recording' }
   }
 
@@ -122,7 +133,11 @@ export async function setAudioSourceCapture(options: AudioSourceCaptureOptions):
     }
 
     /** 授权弹窗可能挂数分钟：期间录音可能已结束，陈旧 update 不能套到新录音上 */
-    if (recordingState.nativeSource !== 'manual' || !recordingState.isBusy) {
+    const currentPhase = recordingState.snapshot.phase
+    if (
+      recordingState.nativeSource !== 'manual'
+      || (currentPhase !== 'recording' && currentPhase !== 'paused')
+    ) {
       return { ok: false, reason: 'not-recording' }
     }
   }

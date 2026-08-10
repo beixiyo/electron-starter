@@ -112,6 +112,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const effIsRecording = nativeMode
     ? native.isRecording
     : isRecording
+  const effIsStarting = nativeMode && native.isStarting
   const effIsPaused = nativeMode
     ? native.isPaused
     : isPaused
@@ -280,9 +281,21 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   }, [getMediaStream, isLiveAudioPreview, liveAudioRef])
 
   const stateMetaMap = useMemo(() => buildRecorderStateMeta(t), [t])
-  const stateMeta = stateMetaMap[recorderState]
+  const stateMeta = stateMetaMap[nativeMode
+    ? native.phase
+    : recorderState]
 
   const primaryAction = useMemo<PrimaryAction>(() => {
+    if (effIsStarting) {
+      return {
+        label: t('primaryActions.starting'),
+        onClick: native.cancel,
+        variant: 'primary',
+        disabled: true,
+        icon: <Play className="size-4" />,
+        loading: true,
+      }
+    }
     if (effIsRecording) {
       return {
         label: t('primaryActions.pause'),
@@ -317,7 +330,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       icon: <Play className="size-4" />,
       loading,
     }
-  }, [effIsBusy, effIsPaused, effIsRecording, nativeMode, native.pause, native.resume, loading, pause, resume, handleStartNative, handleStartRecording, t])
+  }, [effIsBusy, effIsPaused, effIsRecording, effIsStarting, nativeMode, native.cancel, native.pause, native.resume, loading, pause, resume, handleStartNative, handleStartRecording, t])
 
   const sidebarActions = {
     stopLabel: t('primaryActions.stop'),
@@ -342,6 +355,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     title: t('audioSettings.audioOnly.label'),
     description: t('audioSettings.audioOnly.description'),
     checked: audioOnly,
+    disabled: effIsBusy,
     onChange: setAudioOnly,
   }
 
@@ -418,8 +432,14 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       }
     : undefined
 
-  /** 录制时长管理（原生模式沿用本地计时器，按有效录音态驱动） */
-  const recordingDuration = useRecordingTimer(effIsRecording, effIsPaused)
+  /** Web 录制由 renderer 计时；native 录制直接使用 main 的就绪后时钟 */
+  const rendererRecordingDuration = useRecordingTimer(
+    !nativeMode && effIsRecording,
+    !nativeMode && effIsPaused,
+  )
+  const recordingDuration = nativeMode
+    ? native.elapsedSeconds
+    : rendererRecordingDuration
 
   // LiveWaveAudio 错误处理
   const handleLiveWaveError = useCallback((error: Error) => {
@@ -482,9 +502,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
                   ? (
                       <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                         <p className="text-sm font-medium text-textPrimary">
-                          { effIsBusy
-                            ? t('nativeRecording.recording', '正在录制（可混入系统音频）…')
-                            : t('nativeRecording.idle', '选择音源后点击开始录制') }
+                          { effIsStarting
+                            ? t('nativeRecording.starting', '正在准备麦克风与系统音频…')
+                            : effIsBusy
+                              ? t('nativeRecording.recording', '正在录制（可混入系统音频）…')
+                              : t('nativeRecording.idle', '选择音源后点击开始录制') }
                         </p>
                         <p className="text-xs text-textSecondary">
                           { t('nativeRecording.hint', '录制完成后自动保存到下方列表') }

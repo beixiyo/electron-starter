@@ -8,7 +8,7 @@ import { RECORDING_MAX_DURATION_MS, RECORDING_TICK_MS } from '@shared'
  * 手动 tap 与会议 ScreenCaptureKit 录音统一由此驱动：相位切换（pause/resume/stop/reset）
  * 经 onPhaseChange 转发给 audio-recorder 子进程；每秒 broadcast 快照给 renderer
  */
-class RecordingStateManager {
+export class RecordingStateManager {
   private phase: RecordingPhase = 'idle'
   private elapsed = 0
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -30,7 +30,7 @@ class RecordingStateManager {
   }
 
   get isBusy(): boolean {
-    return this.phase === 'recording' || this.phase === 'paused'
+    return this.phase === 'starting' || this.phase === 'recording' || this.phase === 'paused'
   }
 
   /** 仅 idle 可创建新 native session；stopped 仍处于原生混音/文件校验收尾窗口 */
@@ -53,41 +53,34 @@ class RecordingStateManager {
 
   /** 手动录音（native tap 引擎，macOS 14.2+）：renderer 不驱动浏览器采集 */
   startManualNative(): RecordingSnapshot {
-    return this.startWithSource('manual')
+    return this.startNative('manual')
   }
 
   /** 会议录音（native SCK 引擎）：与手动录音共享互斥状态 */
   startMeetingNative(): RecordingSnapshot {
-    return this.startWithSource('meeting')
+    return this.startNative('meeting')
   }
 
   start(): RecordingSnapshot {
-    return this.startWithSource(null)
+    if (this.phase !== 'idle')
+      return this.snapshot
+
+    this._nativeSource = null
+    this.enterRecording('idle')
+    return this.snapshot
   }
 
   /**
-   * 统一启动入口：native 来源随本次启动显式设置
-   * 普通 start() 必须清残留来源——stopped 后的下一次纯 mic 录音若带着
-   * stale nativeSource，renderer 会误判为 native 模式而不驱动浏览器采集
+   * Native helper 确认设备与 writer 已就绪后才开始计时
+   *
+   * @returns 是否接受了本次 ready；过期或重复回执返回 false
    */
-  private startWithSource(source: NativeRecordingSource | null): RecordingSnapshot {
-    if (this.phase !== 'idle') {
-      return this.snapshot
-    }
+  confirmNativeStarted(): boolean {
+    if (this.phase !== 'starting' || !this._nativeSource)
+      return false
 
-    this._nativeSource = source
-
-    const prev = this.phase
-    console.log(`[rec-state] ${prev} → recording${source
-      ? ` (native: ${source})`
-      : ''}`)
-    this.phase = 'recording'
-    this.elapsed = 0
-    this.clock.start()
-    this.startTimer()
-    this.broadcast()
-    this.notifyPhase(prev, 'recording')
-    return this.snapshot
+    this.enterRecording('starting')
+    return true
   }
 
   pause(): RecordingSnapshot {
@@ -121,7 +114,7 @@ class RecordingStateManager {
   }
 
   stop(): RecordingSnapshot {
-    if (this.phase !== 'recording' && this.phase !== 'paused') {
+    if (this.phase !== 'starting' && this.phase !== 'recording' && this.phase !== 'paused') {
       return this.snapshot
     }
 
@@ -134,6 +127,32 @@ class RecordingStateManager {
     this.broadcast()
     this.notifyPhase(prev, 'stopped')
     return this.snapshot
+  }
+
+  private startNative(source: NativeRecordingSource): RecordingSnapshot {
+    if (this.phase !== 'idle')
+      return this.snapshot
+
+    this._nativeSource = source
+    this.elapsed = 0
+    this.clock.reset()
+    console.log(`[rec-state] idle → starting (native: ${source})`)
+    this.phase = 'starting'
+    this.broadcast()
+    this.notifyPhase('idle', 'starting')
+    return this.snapshot
+  }
+
+  private enterRecording(prev: 'idle' | 'starting'): void {
+    console.log(`[rec-state] ${prev} → recording${this._nativeSource
+      ? ` (native: ${this._nativeSource})`
+      : ''}`)
+    this.phase = 'recording'
+    this.elapsed = 0
+    this.clock.start()
+    this.startTimer()
+    this.broadcast()
+    this.notifyPhase(prev, 'recording')
   }
 
   reset(): RecordingSnapshot {

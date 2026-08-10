@@ -77,12 +77,14 @@ export function getRecordingSourceState(): RecordingSourceState {
 }
 
 export function isRecordingBusy(): boolean {
-  return state.phase === 'recording' || state.phase === 'paused'
+  return state.phase === 'starting' || state.phase === 'recording' || state.phase === 'paused'
 }
 
 /** 当前是否为「可热切音源」的手动 native 录音（音源条 / controller 共用谓词） */
 export function isManualNativeRecordingActive(): boolean {
-  return isElectron() && state.nativeSource === 'manual' && isRecordingBusy()
+  return isElectron()
+    && state.nativeSource === 'manual'
+    && (state.phase === 'recording' || state.phase === 'paused')
 }
 
 function applyAudioSourceState(mic: boolean, system: boolean, pids: number[]): void {
@@ -103,6 +105,10 @@ async function commitAudioSources(mic: boolean, system: boolean, pids: number[])
   if (!mic && !system) {
     return { ok: false, reason: 'need-one-source' }
   }
+
+  /** start 命令已冻结本次音源，ready 前不接受与 native 实际状态不一致的改动 */
+  if (state.phase === 'starting')
+    return { ok: false, reason: 'switching' }
 
   const prev = {
     mic: state.micEnabled,

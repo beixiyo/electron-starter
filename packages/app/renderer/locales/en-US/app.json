@@ -5,6 +5,10 @@
       "label": "Idle",
       "description": "Ready, click to start recording"
     },
+    "starting": {
+      "label": "Preparing",
+      "description": "Starting audio devices"
+    },
     "recording": {
       "label": "Recording",
       "description": "Recording the selected screen / window"
@@ -26,6 +30,7 @@
     "pause": "Pause Recording",
     "resume": "Resume Recording",
     "start": "Start Recording",
+    "starting": "Preparing",
     "stop": "Save",
     "cancel": "Cancel",
     "clear": "Clear Preview",
@@ -47,6 +52,7 @@
     }
   },
   "nativeRecording": {
+    "starting": "Preparing the microphone and system audio…",
     "recording": "Recording (system audio can be mixed in)…",
     "idle": "Pick audio sources, then click Start",
     "hint": "The recording is saved to the list below when finished"

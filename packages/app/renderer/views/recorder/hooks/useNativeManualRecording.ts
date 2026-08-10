@@ -1,6 +1,6 @@
 import { Button, Message, Modal } from 'comps'
 import { useLatestCallback } from 'hooks'
-import { createElement, useCallback, useEffect } from 'react'
+import { createElement, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   disposeRecordingStore,
@@ -146,18 +146,21 @@ export function useNativeManualRecording(onSaved?: () => void) {
     }
   }, [handleSaved, t])
 
+  const isStarting = phase === 'starting'
   const isRecording = phase === 'recording'
   const isPaused = phase === 'paused'
-  const isBusy = isRecording || isPaused
+  const isBusy = isStarting || isRecording || isPaused
 
-  const start = useCallback(() => { void startNativeRecording() }, [])
-  const pause = useCallback(() => { void pauseNativeRecording() }, [])
-  const resume = useCallback(() => { void resumeNativeRecording() }, [])
-  const stop = useCallback(() => { void stopNativeRecording() }, [])
-  const cancel = useCallback(() => { void resetNativeRecording() }, [])
+  const start = useLatestCallback(() => { void startNativeRecording() })
+  const pause = useLatestCallback(() => { void pauseNativeRecording() })
+  const resume = useLatestCallback(() => { void resumeNativeRecording() })
+  const stop = useLatestCallback(() => { void stopNativeRecording() })
+  const cancel = useLatestCallback(() => { void resetNativeRecording() })
 
   return {
+    phase,
     supported: systemAudioSupport === true,
+    isStarting,
     isRecording,
     isPaused,
     isBusy,

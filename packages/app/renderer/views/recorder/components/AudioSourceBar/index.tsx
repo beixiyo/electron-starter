@@ -34,6 +34,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
     systemAudioSupport,
     systemAudioSelectedPids,
     nativeSource,
+    phase,
   } = useRecordingSourceState()
 
   useEffect(() => {
@@ -78,6 +79,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
     return null
 
   const allAppsActive = systemAudioMixEnabled && systemAudioSelectedPids.length === 0
+  const sourceSwitchDisabled = audioSourceSwitching || phase === 'starting'
 
   return (
     <div className={ cn('flex flex-col gap-2', className) }>
@@ -88,7 +90,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
           icon={ <Mic size={ 12 } className="shrink-0" /> }
           label={ t('audioSource.mic') }
           active={ micEnabled }
-          disabled={ audioSourceSwitching }
+          disabled={ sourceSwitchDisabled }
           onClick={ handleMic }
         />
 
@@ -96,7 +98,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
           icon={ <Volume2 size={ 12 } className="shrink-0" /> }
           label={ t('audioSource.allApps') }
           active={ allAppsActive }
-          disabled={ audioSourceSwitching }
+          disabled={ sourceSwitchDisabled }
           onClick={ handleAllApps }
         />
 
@@ -105,7 +107,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
             key={ app.pid }
             label={ app.name }
             active={ systemAudioSelectedPids.includes(app.pid) }
-            disabled={ audioSourceSwitching }
+            disabled={ sourceSwitchDisabled }
             onClick={ () => handleApp(app.pid) }
           />
         )) }

@@ -17,15 +17,30 @@ import { clearNativeRecordingSession, consumeNativeRecordingSession, peekNativeR
 let syncing = false
 
 /**
- * 标记「下一个原生 stopped 事件来自 Discard」：
+ * 记录「下一个原生 terminal 事件来自 Discard」：
  * Discard（相位 → idle）也要让原生进程停下，但其产物不得上报——
- * 置位后，stopped 处理改为删除文件、不向 renderer 发完成事件
+ * starting 取消可能只收到 error / exited，已开始采集的取消则必须等 stopped 安全收尾
  */
-let discardPending = false
+let pendingDiscard: 'none' | 'starting' | 'active' = 'none'
 
 let initialized = false
 
 const handlersBySource: Partial<Record<NativeRecordingSource, NativeRecordingHandlers>> = {}
+
+/** Helper 已无法再产生 stopped 时，清理待丢弃会话及其恢复资产 */
+function clearPendingDiscard(): void {
+  if (pendingDiscard === 'none')
+    return
+
+  pendingDiscard = 'none'
+  const session = peekNativeRecordingSession()
+  clearNativeRecordingSession()
+  if (session) {
+    void deleteRecoveryRecording(session.taskId).catch((error) => {
+      console.warn('[native-recording] failed to delete canceled recovery session', error)
+    })
+  }
+}
 
 /** 各录音来源注册自己的收尾处理器（手动：emit 到 recording 服务） */
 export function registerNativeRecordingHandlers(source: NativeRecordingSource, handlers: NativeRecordingHandlers): void {
@@ -49,7 +64,9 @@ function syncToRecorder(from: RecordingPhase, to: RecordingPhase): void {
   }
   else if (to === 'idle') {
     /** Discard：先打标再 stop，原生 stopped 回来时按 discard 处理（删文件、不上报） */
-    discardPending = true
+    pendingDiscard = from === 'starting'
+      ? 'starting'
+      : 'active'
     stopRecording()
   }
 
@@ -68,9 +85,25 @@ export function initNativeRecordingPipeline(): void {
 
   recordingState.onPhaseChange(syncToRecorder)
 
-  onRecorderEvent('recording', () => {
-    /** 新录音开始，复位可能残留的 discard 标记，避免误删本次产物 */
-    discardPending = false
+  onRecorderEvent('recording', ({ path }) => {
+    const session = peekNativeRecordingSession()
+    if (
+      !session
+      || session.outputPath !== path
+      || session.source !== recordingState.nativeSource
+    ) {
+      console.warn('[native-recording] stale recorder ready ignored', {
+        path,
+        activePath: session?.outputPath,
+        activeSource: session?.source,
+        stateSource: recordingState.nativeSource,
+      })
+      return
+    }
+
+    /** 只有当前 starting session 的 ready 回执才能开始计时并撤销 discard */
+    if (recordingState.confirmNativeStarted())
+      pendingDiscard = 'none'
   })
 
   onRecorderEvent('mic_degraded', ({ detail }) => {
@@ -85,15 +118,17 @@ export function initNativeRecordingPipeline(): void {
 
   onRecorderEvent('exited', ({ code, signal }) => {
     const source = recordingState.nativeSource
-    if (!source)
+    if (!source) {
+      clearPendingDiscard()
       return
+    }
 
     clearNativeRecordingSession()
     recordingState.finishNative()
     handlersBySource[source]?.onError('helper_exited', `code=${code} signal=${signal}`)
   })
 
-  onRecorderEvent('error', ({ code, detail, path: errorPath }) => {
+  onRecorderEvent('error', ({ code, detail, path: errorPath, terminal }) => {
     /**
      * 录音中 Swift 子进程报错（权限被拒、设备异常、无样本）：仅手动 native 录音处理，
      * 非本管线录音（会议链路）的报错一律忽略
@@ -101,8 +136,12 @@ export function initNativeRecordingPipeline(): void {
      * writer_failed（此时 phase 已是 stopped），吞掉会让 renderer 干等完成事件
      */
     const source = recordingState.nativeSource
-    if (!source)
+    if (!source) {
+      /** 已开始采集的取消要等 stopped 或 terminal error，避免 writer 未收尾就删文件 */
+      if (pendingDiscard === 'starting' || terminal)
+        clearPendingDiscard()
       return
+    }
 
     const activeSession = peekNativeRecordingSession()
     if (
@@ -169,8 +208,8 @@ export function initNativeRecordingPipeline(): void {
     }
 
     /** Discard 产物：删除文件且不发完成事件。消费标记后复位 */
-    if (discardPending) {
-      discardPending = false
+    if (pendingDiscard !== 'none') {
+      pendingDiscard = 'none'
       const discardedSession = peekNativeRecordingSession()
       clearNativeRecordingSession()
       if (discardedSession)

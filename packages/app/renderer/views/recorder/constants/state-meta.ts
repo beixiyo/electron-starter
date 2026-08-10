@@ -15,11 +15,15 @@ export type StateMeta = {
 /**
  * 根据当前语言构建录制状态文案
  */
-export function buildRecorderStateMeta(t: TFunction<'app'>): Record<RecorderState, StateMeta> {
+export function buildRecorderStateMeta(t: TFunction<'app'>): Record<RecorderState | 'starting', StateMeta> {
   return {
     idle: {
       label: t('recorderState.idle.label'),
       accent: 'text-textPrimary',
+    },
+    starting: {
+      label: t('recorderState.starting.label'),
+      accent: 'text-info',
     },
     recording: {
       label: t('recorderState.recording.label'),

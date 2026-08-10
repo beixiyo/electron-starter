@@ -121,7 +121,8 @@ onRecordingStorageInsufficient((availableBytes, context) => {
 })
 
 recordingState.onPhaseChange((_prev, next) => {
-  setRecordingPowerSaveBlocker(next === 'recording' || next === 'paused')
+  /** 启动 native 设备时也阻止系统休眠，但存储检查只从真正开始采集后计时 */
+  setRecordingPowerSaveBlocker(next === 'starting' || next === 'recording' || next === 'paused')
 
   if (next === 'recording')
     startRecordingStorageMonitor()

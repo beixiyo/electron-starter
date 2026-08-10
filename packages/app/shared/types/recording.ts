@@ -2,10 +2,13 @@
  * 录音状态阶段（状态机）
  *
  * ```
- * idle → recording ⇄ paused → stopped
+ * native:  idle → starting → recording ⇄ paused → stopped
+ * browser: idle → recording ⇄ paused → stopped
  * ```
+ *
+ * `starting` 表示 native helper 已接受启动意图，但音频设备和 writer 尚未就绪
  */
-export type RecordingPhase = 'idle' | 'recording' | 'paused' | 'stopped'
+export type RecordingPhase = 'idle' | 'starting' | 'recording' | 'paused' | 'stopped'
 
 /**
  * Native 录音来源（录音由 Swift 子进程执行，renderer 不驱动浏览器采集）

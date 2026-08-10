@@ -5,6 +5,10 @@
       "label": "空闲",
       "description": "准备就绪，点击开始录制"
     },
+    "starting": {
+      "label": "正在准备",
+      "description": "正在启动音频设备"
+    },
     "recording": {
       "label": "录制中",
       "description": "正在录制当前选中的屏幕 / 窗口"
@@ -26,6 +30,7 @@
     "pause": "暂停录制",
     "resume": "继续录制",
     "start": "开始录制",
+    "starting": "正在准备",
     "stop": "保存",
     "cancel": "取消录制",
     "clear": "清除预览",
@@ -47,6 +52,7 @@
     }
   },
   "nativeRecording": {
+    "starting": "正在准备麦克风与系统音频…",
     "recording": "正在录制（可混入系统音频）…",
     "idle": "选择音源后点击开始录制",
     "hint": "录制完成后自动保存到下方列表"
