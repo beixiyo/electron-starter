@@ -31,6 +31,8 @@ resources/native/mac/audio-monitor
 resources/native/mac/audio-recorder
 ```
 
+SwiftPM 编译缓存保留在各 package 的 `.build/` 中，同一 package 的 products 共享缓存。首次或源码变化后会重新编译，后续构建复用增量结果；缓存属于本地产物，不进入 Git
+
 ## Fn/Globe 原始输入协议
 
 `fn-listener` 使用逐行 JSON 输出物理输入，不判断 press、doublePress、hold 或任何 action/scope 语义：

@@ -78,12 +78,10 @@ build_arch() {
   local product="$2"
   local arch="$3"
   local triple="$4"
-  local scratch_path="$BUILD_ROOT/${product}-${arch}"
 
   echo "  swift build $product ($arch, $triple)"
   swift build \
     --package-path "$package_dir" \
-    --scratch-path "$scratch_path" \
     --configuration release \
     --triple "$triple" \
     --product "$product"
@@ -91,7 +89,6 @@ build_arch() {
   local bin_path
   bin_path="$(swift build \
     --package-path "$package_dir" \
-    --scratch-path "$scratch_path" \
     --configuration release \
     --triple "$triple" \
     --show-bin-path)"
