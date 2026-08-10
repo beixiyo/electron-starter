@@ -61,9 +61,8 @@ packages/app/
 │
 ├── native/            # 平台原生源码
 │   └── mac/           # macOS Swift helper 源码
-│       ├── fn-listener.swift
-│       ├── focus-check.swift
-│       ├── audio-monitor.swift
+│       ├── accessibility/        # focus-check、fn-listener 与物理事件测试
+│       ├── audio-monitor/        # 音频设备监听 helper
 │       └── audio-recorder/       # Swift 录音 helper：双引擎、恢复、看门狗与设备自愈
 │
 ├── resources/         # 运行时资源与原生编译产物
@@ -214,25 +213,38 @@ type BroadcastMessage<T> = {
 
 ---
 
+## 快捷键架构
+
+- `shared/shortcuts/`：binding、capabilities、录制与手势状态机
+- `main/shortcuts/`：Fn、uiohook、provider、scope 与 runtime 调度
+- `renderer/shortcuts/`：Electron IPC / Web DOM 录制适配和窗口内 runtime
+
+`scope` 是 action 语义，由 `SHORTCUT_ACTIONS[].scope` 声明。运行时系统级捕获不可用时，global keyboard 会临时降级为 local 并由 renderer DOM 接管；降级结果不写入配置
+
+macOS Fn helper 只输出物理 `down/up/reset`，press、doublePress、hold 均由 shared gesture engine 判断。Electron 窗口内捕获经 `shortcutConfig.trigger` 回主进程执行，主进程根据自己的绑定和 runtime 结果校验，不采信 renderer 提交 binding
+
+详见 `main/shortcuts/README.md` 与 `native/mac/README.md`
+
+---
+
 ## macOS 原生功能
 
 > 详见 `docs/fn-key.md` 和 `docs/focus-check.md`，下手前必读
 
 ### Fn 键监听（fn-listener）
 
-- 通过 Swift 子进程（IOHIDManager）独立监听 HID 层，绕过 Electron 的按键拦截限制
-- 主进程管理子进程生命周期，通过 stdout 协议接收事件：`FN_DOWN` / `FN_UP` / `FN_COMBO_<key>`
-- 300ms 状态机支持三种模式：**Hold**（长按）/ **DoublePress**（双击）/ **Combo**（组合键）
-- Swift 源码：`native/mac/fn-listener.swift`
-- 代码入口：`main/shortcuts/fn/core.ts`（子进程管理）、`main/shortcuts/fn/state-machine.ts`（状态机）
-- **注意 50ms 缓冲**：HID 事件存在时序抖动，详见 `docs/fn-key.md`
+- Swift 子进程通过 CGEventTap 捕获 Fn/Globe 与 Fn 组合键物理相位
+- stdout 使用严格 NDJSON 协议，上报 `down/up/reset`、sequence 和 monotonic timestamp
+- Swift 不判断 press、doublePress、hold、action 或 scope
+- Swift 源码：`native/mac/accessibility/Sources/FnListener/`
+- TypeScript 入口：`main/shortcuts/fn/core.ts`、`protocol.ts`、`runtime-backend.ts`
 
 ### 文本焦点检测（focus-check）
 
 - 通过 Swift 子进程（Accessibility API / AXUIElement）一次性检测当前是否有文本输入焦点
 - 与 fn-listener 不同，focus-check 是**一次性调用**，不常驻
 - 典型场景：Voice IME 触发时判断是否直接注入文本
-- Swift 源码：`native/mac/focus-check.swift`
+- Swift 源码：`native/mac/accessibility/Sources/FocusCheck/main.swift`
 - 代码入口：`main/focus-check.ts`
 
 **Swift 二进制都在 `resources/native/mac/` 下，已 gitignore。** 首次 clone 必须手动编译：

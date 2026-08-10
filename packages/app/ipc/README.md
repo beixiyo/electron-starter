@@ -58,18 +58,18 @@ channel 命名统一 `namespace:name`
 // contract.ts
 export type PowerContract = IpcContract<{
   mainHandle: {
-    startUploadActivity: () => string // 不含 event 首参
+    startUploadActivity: () => string           // 不含 event 首参
     stopUploadActivity: (requestId: string) => void
   }
   rendererOn: {
-    event: PowerEventPayload // 事件名 → payload 类型
+    event: PowerEventPayload                    // 事件名 → payload 类型
   }
 }>
 
 // service.ts —— 实现参数的字段名和契约一一对应
 export const powerService = createIpcService<PowerContract>('power', {
   mainHandle: {
-    async startUploadActivity(_e) { // 首参恒为 event
+    async startUploadActivity(_e) {             // 首参恒为 event
       return createRequestId()
     },
     async stopUploadActivity(_e, requestId) {
@@ -78,7 +78,7 @@ export const powerService = createIpcService<PowerContract>('power', {
   },
 })
 
-/** 任意时机推事件，不传 target 即广播到所有未销毁窗口 */
+// 任意时机推事件，不传 target 即广播到所有未销毁窗口
 powerService.emit('event', { type: 'suspend', at: new Date().toISOString() })
 
 // client.ts
@@ -108,17 +108,16 @@ export type MediaContract = IpcContract<{
 // contract.ts
 export type FnContract = IpcContract<{
   rendererOn: {
-    down: undefined // 无 payload 事件
-    combo: { key: FnComboKey, modifiers: FnModifier[] }
+    raw: FnNativeEvent
   }
 }>
 
 // service.ts
 export const fnService = createIpcService<FnContract>('fn', {})
 
-export function sendFnDownEvent(window: BrowserWindow): void {
-  if (window && !window.isDestroyed())
-    fnService.emit('down', undefined, window)
+export function sendFnRawEvent(window: BrowserWindow, event: FnNativeEvent): void {
+  if (!window.isDestroyed())
+    fnService.emit('raw', event, window)
 }
 
 // client.ts
@@ -195,10 +194,8 @@ $ipc.panel.send('seen', 'card-1', 3)
 // mainHandle：直接调方法
 const status = await $ipc.permission.get('microphone')
 
-/** rendererOn：on 返回取消函数，直接当 useEffect 返回值 */
-export function useRecordingMark() {
-  useEffect(() => $ipc.recording.on('mark', handleMark), [])
-}
+// rendererOn：on 返回取消函数，直接当 useEffect 返回值
+useEffect(() => $ipc.recording.on('mark', handleMark), [])
 
 // mainOn：无返回值，不用 await
 $ipc.panel.send('heartbeat')
