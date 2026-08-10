@@ -1,4 +1,4 @@
-import type { KeyboardShortcutChord, ShortcutBinding, ShortcutBindings, ShortcutRuntimeEvent } from '@shared/shortcuts'
+import type { KeyboardShortcutChord, ShortcutBinding, ShortcutBindings } from '@shared/shortcuts'
 import type { ShortcutRuntimeBackend, ShortcutRuntimeBackendContext } from '../runtime-backend'
 import { KEYBOARD_SHORTCUT_RUNTIME_PROVIDER } from '../providers'
 import { getShortcutRuntimeEntries } from '../runtime-backend'
@@ -50,9 +50,3 @@ function isKeyboardBinding(
 ): binding is ShortcutBinding & { chord: KeyboardShortcutChord } {
   return !!binding && binding.scope === 'global' && binding.chord.source === 'keyboard'
 }
-
-/** keyboard backend 派发的 runtime 事件 */
-export type KeyboardHotkeyEvent = {
-  /** 已匹配的 keyboard binding */
-  binding: ShortcutBinding & { chord: KeyboardShortcutChord }
-} & ShortcutRuntimeEvent

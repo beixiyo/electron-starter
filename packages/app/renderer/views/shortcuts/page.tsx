@@ -4,7 +4,7 @@ import { useShortcutRecordingSession } from './useShortcutRecordingSession'
 import { useShortcutsList } from './useShortcutsList'
 
 export default function ShortcutsPage() {
-  const { actions, replaceBinding, updateBindingScope, resetToDefault } = useShortcutsList()
+  const { actions, replaceBinding, resetToDefault } = useShortcutsList()
   const recorder = useRecordBinding()
   const session = useShortcutRecordingSession(actions, recorder, replaceBinding)
 
@@ -23,24 +23,10 @@ export default function ShortcutsPage() {
               isRecording={ session.recordingId === action.id && recorder.isRecording }
               isDetected={ session.recordingId === action.id && recorder.isDetected }
               isUnsupported={ session.recordingId === action.id && recorder.isUnsupported }
-              scope={ session.recordingId === action.id
-                ? session.recordingScope
-                : session.resolveScope(action.binding?.scope ?? (session.canUseGlobalScope
-                    ? 'global'
-                    : 'local')) }
-              canUseGlobalScope={ session.canUseGlobalScope }
               detected={ session.recordingId === action.id
                 ? recorder.detected
                 : null }
               onStartRecord={ () => session.start(action.id) }
-              onScopeChange={ (scope) => {
-                const nextScope = session.resolveScope(scope)
-                if (session.recordingId === action.id) {
-                  session.changeScope(nextScope)
-                  return
-                }
-                updateBindingScope(action.id, nextScope)
-              } }
               onConfirm={ session.confirm }
               onCancel={ session.cancel }
               onReset={ () => resetToDefault(action.id) }

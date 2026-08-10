@@ -1,13 +1,10 @@
-import type { KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from './types'
+import type { KeyboardCode, KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from './types'
+import { normalizeKeyboardCode, normalizeKeyboardShortcutChord, releaseActiveKeyboardChord } from './utils'
 
-export const BROWSER_MODIFIER_KEYS = new Set([
-  'Alt',
+const BROWSER_LOCK_KEYS = new Set([
   'CapsLock',
-  'Control',
-  'Meta',
   'NumLock',
   'ScrollLock',
-  'Shift',
 ])
 
 export function toBrowserShortcutRecordEvent(
@@ -18,11 +15,10 @@ export function toBrowserShortcutRecordEvent(
   const keyId = getBrowserShortcutKeyId(event)
 
   if (phase === 'up') {
-    const chord = activeChords.get(keyId)
+    const chord = releaseActiveKeyboardChord(activeChords, keyId)
     if (!chord)
       return null
 
-    activeChords.delete(keyId)
     return {
       phase,
       chord,
@@ -30,7 +26,7 @@ export function toBrowserShortcutRecordEvent(
     }
   }
 
-  if (event.repeat || activeChords.has(keyId) || isBrowserModifierOnlyEvent(event))
+  if (event.repeat || activeChords.has(keyId) || BROWSER_LOCK_KEYS.has(event.key))
     return null
 
   const chord = toBrowserShortcutChord(event)
@@ -50,26 +46,22 @@ export function toBrowserShortcutChord(event: BrowserShortcutKeyEvent): Keyboard
   if (!key)
     return null
 
-  return {
-    source: 'keyboard',
-    key,
-    modifiers: getBrowserShortcutModifiers(event),
-  }
+  return normalizeKeyboardShortcutChord(key, getBrowserShortcutModifiers(event))
 }
 
-export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): string | null {
+export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): KeyboardCode | null {
   const { code, key } = event
 
   if (code.startsWith('Key'))
-    return code.slice(3).toUpperCase()
+    return normalizeKeyboardCode(code.slice(3).toUpperCase())
   if (code.startsWith('Digit'))
-    return code.slice(5)
+    return normalizeKeyboardCode(code.slice(5))
   if (code)
-    return code
-  if (key && !BROWSER_MODIFIER_KEYS.has(key)) {
-    return key.length === 1
+    return normalizeKeyboardCode(code)
+  if (key && !BROWSER_LOCK_KEYS.has(key)) {
+    return normalizeKeyboardCode(key.length === 1
       ? key.toUpperCase()
-      : key
+      : key)
   }
 
   return null
@@ -92,10 +84,6 @@ export function getBrowserShortcutModifiers(event: BrowserShortcutKeyEvent): Sho
 
 export function getBrowserShortcutKeyId(event: BrowserShortcutKeyEvent): string {
   return event.code || event.key || 'Unidentified'
-}
-
-export function isBrowserModifierOnlyEvent(event: BrowserShortcutKeyEvent): boolean {
-  return BROWSER_MODIFIER_KEYS.has(event.key) || BROWSER_MODIFIER_KEYS.has(event.code)
 }
 
 /** 浏览器 KeyboardEvent 的快捷键归一化所需字段子集 */

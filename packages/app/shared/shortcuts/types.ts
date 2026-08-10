@@ -84,10 +84,167 @@ export type FnComboKey = typeof FN_COMBO_KEYS[number]
 /** 快捷键修饰键，`Primary` 表示 macOS Command、Windows/Linux Control */
 export type ShortcutModifier = FnModifier | 'Primary'
 
+/**
+ * 普通键盘快捷键持久化使用的规范键名
+ *
+ * 这些值同时能由浏览器 `KeyboardEvent.code` 和 uIOhook 解析；浏览器的
+ * `KeyA` / `Digit1` 等带前缀名称只在输入边界转换，不进入配置文件
+ */
+export const KEYBOARD_CODES = [
+  'Backspace',
+  'Tab',
+  'Enter',
+  'CapsLock',
+  'Escape',
+  'Space',
+  'PageUp',
+  'PageDown',
+  'End',
+  'Home',
+  'ArrowLeft',
+  'ArrowUp',
+  'ArrowRight',
+  'ArrowDown',
+  'Insert',
+  'Delete',
+  'A',
+  'B',
+  'C',
+  'D',
+  'E',
+  'F',
+  'G',
+  'H',
+  'I',
+  'J',
+  'K',
+  'L',
+  'M',
+  'N',
+  'O',
+  'P',
+  'Q',
+  'R',
+  'S',
+  'T',
+  'U',
+  'V',
+  'W',
+  'X',
+  'Y',
+  'Z',
+  'Numpad0',
+  'Numpad1',
+  'Numpad2',
+  'Numpad3',
+  'Numpad4',
+  'Numpad5',
+  'Numpad6',
+  'Numpad7',
+  'Numpad8',
+  'Numpad9',
+  'NumpadMultiply',
+  'NumpadAdd',
+  'NumpadSubtract',
+  'NumpadDecimal',
+  'NumpadDivide',
+  'NumpadEnter',
+  'NumpadEnd',
+  'NumpadArrowDown',
+  'NumpadPageDown',
+  'NumpadArrowLeft',
+  'NumpadArrowRight',
+  'NumpadHome',
+  'NumpadArrowUp',
+  'NumpadPageUp',
+  'NumpadInsert',
+  'NumpadDelete',
+  'F1',
+  'F2',
+  'F3',
+  'F4',
+  'F5',
+  'F6',
+  'F7',
+  'F8',
+  'F9',
+  'F10',
+  'F11',
+  'F12',
+  'F13',
+  'F14',
+  'F15',
+  'F16',
+  'F17',
+  'F18',
+  'F19',
+  'F20',
+  'F21',
+  'F22',
+  'F23',
+  'F24',
+  'Semicolon',
+  'Equal',
+  'Comma',
+  'Minus',
+  'Period',
+  'Slash',
+  'Backquote',
+  'BracketLeft',
+  'Backslash',
+  'BracketRight',
+  'Quote',
+  'PrintScreen',
+  'NumLock',
+  'ScrollLock',
+  'Meta',
+  'Control',
+  'Alt',
+  'Shift',
+] as const
+
+/** 普通键盘快捷键的规范键名类型 */
+export type KeyboardCode = typeof KEYBOARD_CODES[number]
+
+/** 纯修饰键组合选取主键时使用的稳定顺序 */
+export const KEYBOARD_MODIFIER_CODES = ['Meta', 'Control', 'Alt', 'Shift'] as const satisfies readonly KeyboardCode[]
+
+/** 旧版及浏览器输入名称到规范键名的别名 */
+export const KEYBOARD_CODE_ALIASES: Readonly<Record<string, KeyboardCode>> = {
+  Grave: 'Backquote',
+  Left: 'ArrowLeft',
+  Right: 'ArrowRight',
+  Up: 'ArrowUp',
+  Down: 'ArrowDown',
+  LeftBracket: 'BracketLeft',
+  RightBracket: 'BracketRight',
+  Return: 'Enter',
+  Esc: 'Escape',
+  Del: 'Delete',
+  MetaLeft: 'Meta',
+  MetaRight: 'Meta',
+  ControlLeft: 'Control',
+  ControlRight: 'Control',
+  Ctrl: 'Control',
+  CtrlRight: 'Control',
+  AltLeft: 'Alt',
+  AltRight: 'Alt',
+  ShiftLeft: 'Shift',
+  ShiftRight: 'Shift',
+} as const
+
+/** 作为主键使用时，对应的逻辑修饰键 */
+export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, FnModifier>>> = {
+  Meta: 'Meta',
+  Control: 'Control',
+  Alt: 'Alt',
+  Shift: 'Shift',
+}
+
 /** 普通键盘快捷键 chord */
 export type KeyboardShortcutChord = {
   source: 'keyboard'
-  key: string
+  key: KeyboardCode
   modifiers: ShortcutModifier[]
 }
 
@@ -167,21 +324,21 @@ export type ShortcutInputSource = ShortcutChord['source']
 export type ShortcutRuntimePlatform = 'electron' | 'web'
 
 /** 单个 scope 下每类输入源支持的手势 */
-export type ShortcutScopeCapabilities = Record<ShortcutInputSource, ShortcutGestureType[]>
+export type ShortcutScopeCapabilities = Readonly<Record<ShortcutInputSource, readonly ShortcutGestureType[]>>
 
 /** 快捷键捕获 provider 声明，用于诊断和能力展示 */
 export type ShortcutRuntimeProviderDescriptor = {
   /** provider 标识 */
-  id: string
+  readonly id: string
   /** provider 负责的输入源 */
-  source: ShortcutInputSource
+  readonly source: ShortcutInputSource
   /** provider 能处理的 scope；真实启用仍由 capabilities 判断 */
   scopes: readonly ShortcutScope[]
 }
 
 /** 当前 runtime 可提供的快捷键捕获能力 */
 export type ShortcutRuntimeCapabilities = {
-  platform: ShortcutRuntimePlatform
-  scopes: Record<ShortcutScope, ShortcutScopeCapabilities>
-  providers: ShortcutRuntimeProviderDescriptor[]
+  readonly platform: ShortcutRuntimePlatform
+  readonly scopes: Readonly<Record<ShortcutScope, ShortcutScopeCapabilities>>
+  readonly providers: readonly ShortcutRuntimeProviderDescriptor[]
 }

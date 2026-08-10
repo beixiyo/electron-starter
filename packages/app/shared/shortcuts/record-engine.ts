@@ -4,11 +4,10 @@ import type {
   ShortcutGestureType,
   ShortcutRecordEvent,
 } from './types'
-import { isShortcutGestureSupportedByChord } from './capabilities'
-import { shortcutChordsEqual } from './utils'
+import { isKeyboardModifierChordPrefixOf, shortcutChordsEqual } from './utils'
 
 const DEFAULT_DOUBLE_PRESS_INTERVAL_MS = 300
-const DEFAULT_HOLD_MIN_DURATION_MS = 300
+const DEFAULT_HOLD_MIN_DURATION_MS = 400
 const DEFAULT_UNSUPPORTED_RESET_MS = 1500
 
 /** 创建快捷键录制状态机，消费标准化输入事件并输出最终 binding */
@@ -30,6 +29,7 @@ export function createShortcutRecordEngine(
   let activeStartedAt = 0
   let pendingChord: ShortcutChord | null = null
   let holdDetected = false
+  let completesDoublePress = false
 
   const start = (nextSupportedGestures: readonly ShortcutGestureType[]): void => {
     clearRecordState()
@@ -43,6 +43,13 @@ export function createShortcutRecordEngine(
     supportedGestures = []
     onDetectedChange(null)
     setPhase('idle')
+  }
+
+  const reset = (): void => {
+    clearRecordState()
+    onDetectedChange(null)
+    if (phase !== 'idle')
+      setPhase('waiting')
   }
 
   const handle = (event: ShortcutRecordEvent): void => {
@@ -62,23 +69,22 @@ export function createShortcutRecordEngine(
   const handleShortcutDown = (chord: ShortcutChord, timestamp: number): void => {
     if (!canAcceptInput())
       return
-    if (activeChord)
-      return
+    if (activeChord) {
+      if (!isKeyboardModifierChordPrefixOf(activeChord, chord))
+        return
 
-    if (canFinishDoublePress(chord)) {
-      detect({
-        gesture: 'doublePress',
-        chord,
-        intervalMs: doublePressIntervalMs,
-      })
-      return
+      clearTimer()
+      clearActiveChord()
     }
+
+    const isSecondPress = canFinishDoublePress(chord)
 
     clearTimer()
     pendingChord = null
     activeChord = chord
     activeStartedAt = timestamp
     holdDetected = false
+    completesDoublePress = isSecondPress
     setPhase('deciding')
 
     if (!hasGesture('hold'))
@@ -104,11 +110,21 @@ export function createShortcutRecordEngine(
 
     const startedAt = activeStartedAt
     const wasHoldDetected = holdDetected
+    const wasCompletingDoublePress = completesDoublePress
     clearTimer()
     clearActiveChord()
 
     if (wasHoldDetected)
       return
+
+    if (wasCompletingDoublePress) {
+      detect({
+        gesture: 'doublePress',
+        chord,
+        intervalMs: doublePressIntervalMs,
+      })
+      return
+    }
 
     const elapsed = Math.max(timestamp - startedAt, 0)
     if (hasGesture('hold') && elapsed >= holdMinDurationMs) {
@@ -169,7 +185,7 @@ export function createShortcutRecordEngine(
     clearRecordState()
     onDetectedChange(binding)
 
-    if (supportedGestures.includes(binding.gesture) && isShortcutGestureSupportedByChord(binding)) {
+    if (supportedGestures.includes(binding.gesture)) {
       setPhase('detected')
       return
     }
@@ -210,6 +226,7 @@ export function createShortcutRecordEngine(
     activeChord = null
     activeStartedAt = 0
     holdDetected = false
+    completesDoublePress = false
   }
 
   const clearTimer = (): void => {
@@ -231,6 +248,7 @@ export function createShortcutRecordEngine(
     },
     start,
     cancel,
+    reset,
     handle,
     dispose() {
       clearRecordState()
@@ -249,7 +267,7 @@ export type CreateShortcutRecordEngineOptions = {
   onDetectedChange: (binding: ShortcutGestureBinding | null) => void
   /** @default 300 */
   doublePressIntervalMs?: number
-  /** @default 300 */
+  /** @default 400 */
   holdMinDurationMs?: number
   /** @default 1500 */
   unsupportedResetMs?: number
@@ -262,6 +280,8 @@ export type ShortcutRecordEngine = {
   start: (supportedGestures: readonly ShortcutGestureType[]) => void
   /** 取消录制并清空内部状态 */
   cancel: () => void
+  /** 输入源重置后清空本轮物理状态，并继续等待录制 */
+  reset: () => void
   /** 消费一个标准化录制事件 */
   handle: (event: ShortcutRecordEvent) => void
   /** 释放 timer 和内部状态 */

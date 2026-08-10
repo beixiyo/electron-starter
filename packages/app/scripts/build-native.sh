@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PLATFORM="mac"
+PLATFORM=""
 
 usage() {
   echo "Usage: bash scripts/build-native.sh [--platform=mac|windows|linux]"
@@ -34,6 +34,18 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+if [[ -z "$PLATFORM" ]]; then
+  case "$(uname -s)" in
+    Darwin) PLATFORM="mac" ;;
+    Linux) PLATFORM="linux" ;;
+    MINGW*|MSYS*|CYGWIN*) PLATFORM="windows" ;;
+    *)
+      echo "No native helpers configured for host: $(uname -s)"
+      exit 0
+      ;;
+  esac
+fi
 
 case "$PLATFORM" in
   mac|macos|darwin)

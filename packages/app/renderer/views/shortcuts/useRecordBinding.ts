@@ -41,7 +41,10 @@ export function useRecordBinding() {
     if (!isActive)
       return
 
-    return bindShortcutRecordEvents(engine.handle)
+    return bindShortcutRecordEvents({
+      emit: engine.handle,
+      onReset: engine.reset,
+    })
   }, [engine, isActive])
 
   useEffect(() => {

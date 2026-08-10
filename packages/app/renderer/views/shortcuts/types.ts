@@ -1,15 +1,20 @@
 import type {
+  FnModifier,
   ShortcutBinding,
   ShortcutChord,
   ShortcutGestureBinding,
   ShortcutGestureType,
   ShortcutModifier,
-  ShortcutScope,
 } from '@shared/shortcuts'
-import { SHORTCUT_ACTIONS, shortcutBindingsConflict } from '@shared/shortcuts'
+import {
+  normalizeShortcutModifier,
+  SHORTCUT_ACTIONS,
+  shortcutBindingsConflict,
+  toShortcutActionBinding,
+} from '@shared/shortcuts'
 
 export type { ShortcutBinding }
-export type { FnComboKey, ShortcutGestureBinding, ShortcutScope } from '@shared/shortcuts'
+export type { FnComboKey, ShortcutGestureBinding } from '@shared/shortcuts'
 
 /** 设置页可录制的手势类型 */
 export type GestureType = ShortcutGestureType
@@ -20,6 +25,8 @@ export type ShortcutAction = {
   id: string
   /** 展示名称 */
   label: string
+  /** action 声明的生效范围，录制时不可由 UI 覆盖 */
+  scope: ShortcutBinding['scope']
   /** 当前绑定，null 表示禁用 */
   binding: ShortcutBinding | null
   /** 该 action 允许录制的手势类型 */
@@ -54,12 +61,19 @@ const FN_KEY_DISPLAY: Record<string, string> = {
   Down: '↓',
 }
 
-const MOD_SYMBOL: Record<ShortcutModifier, string> = {
-  Meta: '⌘',
-  Primary: '⌘/Ctrl',
-  Control: '⌃',
-  Alt: '⌥',
-  Shift: '⇧',
+const IS_APPLE_PLATFORM = detectApplePlatform()
+const MODIFIER_DISPLAY: Record<FnModifier, string> = IS_APPLE_PLATFORM
+  ? { Meta: '⌘', Control: '⌃', Alt: '⌥', Shift: '⇧' }
+  : { Meta: 'Win', Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift' }
+const MODIFIER_SEPARATOR = IS_APPLE_PLATFORM
+  ? ''
+  : ' + '
+
+const KEYBOARD_MODIFIER_DISPLAY: Record<string, string> = {
+  Meta: MODIFIER_DISPLAY.Meta,
+  Control: MODIFIER_DISPLAY.Control,
+  Alt: MODIFIER_DISPLAY.Alt,
+  Shift: MODIFIER_DISPLAY.Shift,
 }
 
 const HOTKEY_DISPLAY: Record<string, string> = {
@@ -88,12 +102,6 @@ export function formatBinding(binding: ShortcutGestureBinding): string {
   }
 }
 
-export function getScopeLabel(scope: ShortcutScope): string {
-  return scope === 'global'
-    ? '全局'
-    : '窗口内'
-}
-
 export function bindingsConflict(a: ShortcutBinding, b: ShortcutBinding): boolean {
   return shortcutBindingsConflict(a, b)
 }
@@ -102,18 +110,43 @@ function formatChord(chord: ShortcutChord): string {
   if (chord.source === 'fn') {
     if (chord.key === 'Fn')
       return 'fn'
-    const mods = (chord.modifiers ?? []).map(m => MOD_SYMBOL[m]).join('')
-    return `fn + ${mods}${FN_KEY_DISPLAY[chord.key] ?? chord.key}`
+    const modifiers = formatModifiers(chord.modifiers ?? [])
+    const key = FN_KEY_DISPLAY[chord.key] ?? chord.key
+    return modifiers
+      ? `fn + ${modifiers}${IS_APPLE_PLATFORM
+        ? ''
+        : ' + '}${key}`
+      : `fn + ${key}`
   }
 
-  const mods = chord.modifiers.map(m => MOD_SYMBOL[m]).join('')
-  const key = HOTKEY_DISPLAY[chord.key] ?? chord.key
-  return `${mods}${key}`
+  const modifiers = formatModifiers(chord.modifiers)
+  const key = KEYBOARD_MODIFIER_DISPLAY[chord.key] ?? HOTKEY_DISPLAY[chord.key] ?? chord.key
+  return `${modifiers}${modifiers && !IS_APPLE_PLATFORM
+    ? ' + '
+    : ''}${key}`
+}
+
+function formatModifiers(modifiers: ShortcutModifier[]): string {
+  return modifiers
+    .map(modifier => MODIFIER_DISPLAY[normalizeShortcutModifier(modifier)])
+    .join(MODIFIER_SEPARATOR)
+}
+
+function detectApplePlatform(): boolean {
+  const maybeProcess = globalThis as typeof globalThis & { process?: { platform?: string } }
+  if (maybeProcess.process?.platform)
+    return maybeProcess.process.platform === 'darwin'
+
+  const maybeNavigator = globalThis as typeof globalThis & { navigator?: { platform?: string, userAgent?: string } }
+  const platform = maybeNavigator.navigator?.platform ?? ''
+  const userAgent = maybeNavigator.navigator?.userAgent ?? ''
+  return /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac OS X/i.test(userAgent)
 }
 
 export const DEFAULT_ACTIONS: ShortcutAction[] = SHORTCUT_ACTIONS.map(action => ({
   id: action.id,
   label: action.label,
-  binding: action.binding,
+  scope: action.scope,
+  binding: toShortcutActionBinding(action, action.binding),
   supportedGestures: [...action.supportedGestures],
 }))

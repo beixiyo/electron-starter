@@ -13,6 +13,7 @@
   // 不从 web 视角 typecheck，归 tsconfig.node.json 管
   "exclude": [
     "./ipc/services/**/service.ts",
+    "./ipc/services/**/service.test.ts",
     "./ipc/services/index.ts"
   ],
   "compilerOptions": {

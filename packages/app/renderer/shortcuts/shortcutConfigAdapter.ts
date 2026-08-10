@@ -2,21 +2,24 @@ import type {
   ShortcutBindings,
   ShortcutRecordEvent,
   ShortcutRuntimeCapabilities,
+  ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import {
-  cloneShortcutRuntimeCapabilities,
   DEFAULT_BINDINGS,
+  DEFAULT_KEYBOARD_BINDINGS,
   filterShortcutBindingsByCapabilities,
   normalizeShortcutBindings,
+  normalizeShortcutBindingsOrThrow,
   resolveShortcutBindingConflicts,
+  SHORTCUT_ACTIONS,
   WEB_SHORTCUT_CAPABILITIES,
 } from '@shared/shortcuts'
 import { isElectron } from '@/utils/env'
 import { bindBrowserShortcutRecordEvents } from './browserRecordEvent'
 
 const WEB_SHORTCUT_BINDINGS_KEY = 'shortcut-bindings'
-const FN_COMBO_KEYBOARD_SUPPRESS_MS = 120
-
+const RECORD_EVENT_DEDUP_MS = 120
+const FN_KEYBOARD_DISAMBIGUATION_MS = 120
 const bindingListeners = new Set<() => void>()
 
 let shortcutRuntimePaused = false
@@ -41,7 +44,7 @@ export async function getShortcutDefaultBindings(): Promise<ShortcutBindings> {
     return filterShortcutBindingsByCapabilities(DEFAULT_BINDINGS, capabilities)
   }
 
-  return toWebShortcutBindings(DEFAULT_BINDINGS)
+  return toWebShortcutBindings(DEFAULT_KEYBOARD_BINDINGS)
 }
 
 /**
@@ -49,27 +52,37 @@ export async function getShortcutDefaultBindings(): Promise<ShortcutBindings> {
  * Web 平台只能保存页面内快捷键配置，不能注册系统级全局快捷键
  */
 export async function setShortcutBindings(bindings: ShortcutBindings): Promise<void> {
+  const normalized = normalizeShortcutBindingsOrThrow(bindings)
   const ipc = getShortcutConfigIpc()
   if (ipc) {
-    await ipc.setBindings(normalizeShortcutBindings(bindings))
+    await ipc.setBindings(normalized)
     emitShortcutBindingsChanged()
     return
   }
 
-  writeWebShortcutBindings(toWebShortcutBindings(bindings))
+  writeWebShortcutBindings(toWebShortcutBindings(normalized))
   emitShortcutBindingsChanged()
 }
 
-/** 当前运行环境的快捷键捕获能力 */
-export async function getShortcutCapabilities(): Promise<ShortcutRuntimeCapabilities> {
+/** 当前实际可用的快捷键捕获能力，含权限与 native backend 状态，用于判定窗口内 runtime 该认领什么 */
+export async function getShortcutRuntimeCapabilities(): Promise<ShortcutRuntimeCapabilities> {
   const ipc = getShortcutConfigIpc()
   if (ipc)
-    return ipc.getCapabilities()
+    return ipc.getRuntimeCapabilities()
 
-  return cloneShortcutRuntimeCapabilities(WEB_SHORTCUT_CAPABILITIES)
+  return WEB_SHORTCUT_CAPABILITIES
 }
 
-/** 订阅快捷键配置变更，供运行时重新加载绑定 */
+/**
+ * 把窗口内捕获到的快捷键交给业务执行。
+ *
+ * 桌面端业务动作都在主进程，渲染端只做捕获；Web 端暂无对应业务，由调用方自行接管
+ */
+export async function triggerShortcutAction(event: ShortcutRuntimeEvent): Promise<void> {
+  await getShortcutConfigIpc()?.trigger({ id: event.id, phase: event.phase })
+}
+
+/** 订阅快捷键配置或运行时能力变更，供运行时重新加载绑定 */
 export function subscribeShortcutBindings(listener: () => void): () => void {
   bindingListeners.add(listener)
 
@@ -79,10 +92,12 @@ export function subscribeShortcutBindings(listener: () => void): () => void {
   }
 
   window.addEventListener('storage', handleStorage)
+  const offRuntimeChanged = getShortcutConfigIpc()?.on('runtimeChanged', () => listener())
 
   return () => {
     bindingListeners.delete(listener)
     window.removeEventListener('storage', handleStorage)
+    offRuntimeChanged?.()
   }
 }
 
@@ -117,58 +132,90 @@ export async function resumeShortcutRecord(): Promise<void> {
  * 绑定录制事件源。
  * Electron 桌面走 IPC + native/uIOhook，Web 走 DOM KeyboardEvent fallback
  */
-export function bindShortcutRecordEvents(emit: (event: ShortcutRecordEvent) => void): () => void {
+export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOptions): () => void {
+  const { emit, onReset } = options
   const cleanupFns: Array<() => void> = []
-  const ipc = getElectronIpc()
   let fnActive = false
   let suppressKeyboardUntil = 0
+  let recentKeyboardEvent: ShortcutRecordEvent | null = null
+  const pendingKeyboardTimers = new Set<ReturnType<typeof setTimeout>>()
 
-  if (ipc?.fn) {
-    cleanupFns.push(
-      ipc.fn.on('down', () => {
-        fnActive = true
-        emit({
-          phase: 'down',
-          chord: { source: 'fn', key: 'Fn' },
-          timestamp: Date.now(),
-        })
-      }),
-      ipc.fn.on('up', () => {
-        fnActive = false
-        emit({
-          phase: 'up',
-          chord: { source: 'fn', key: 'Fn' },
-          timestamp: Date.now(),
-        })
-      }),
-      ipc.fn.on('combo', ({ key, modifiers }) => {
-        suppressKeyboardUntil = Date.now() + FN_COMBO_KEYBOARD_SUPPRESS_MS
-        emit({
-          phase: 'press',
-          chord: { source: 'fn', key, modifiers },
-          timestamp: Date.now(),
-        })
-      }),
-    )
+  /** native/uIOhook 与 DOM fallback 可能同时报告同一个物理按键，只交给录制状态机一次 */
+  const emitRecordEvent = (event: ShortcutRecordEvent): void => {
+    if (event.chord.source === 'keyboard') {
+      if (recentKeyboardEvent
+        && recentKeyboardEvent.phase === event.phase
+        && recentKeyboardEvent.chord.source === 'keyboard'
+        && recentKeyboardEvent.chord.key === event.chord.key
+        && JSON.stringify(recentKeyboardEvent.chord.modifiers) === JSON.stringify(event.chord.modifiers)
+        && Math.abs(event.timestamp - recentKeyboardEvent.timestamp) <= RECORD_EVENT_DEDUP_MS) {
+        return
+      }
+      recentKeyboardEvent = event
+    }
+
+    emit(event)
   }
 
-  if (ipc?.shortcutConfig) {
-    cleanupFns.push(ipc.shortcutConfig.on('record', (event) => {
-      /** Fn combo 已由 native helper 合成为 fn chord，忽略同一物理动作产生的底层 keyboard 噪音 */
+  /** 等待独立的 Fn native 事件源先到达，避免把 Fn combo 同时录成普通 keyboard */
+  const emitKeyboardRecordEvent = (event: ShortcutRecordEvent): void => {
+    const timer = setTimeout(() => {
+      pendingKeyboardTimers.delete(timer)
       if (fnActive || Date.now() < suppressKeyboardUntil)
         return
+      emitRecordEvent(event)
+    }, FN_KEYBOARD_DISAMBIGUATION_MS)
+    pendingKeyboardTimers.add(timer)
+  }
 
-      emit(event)
+  if (isElectron()) {
+    const ipc = window.$ipc
+    cleanupFns.push(
+      ipc.fn.on('raw', (event) => {
+        if (event.type === 'reset') {
+          fnActive = false
+          suppressKeyboardUntil = 0
+          recentKeyboardEvent = null
+          onReset()
+          return
+        }
+
+        if (event.chord.key === 'Fn')
+          fnActive = event.phase === 'down'
+        suppressKeyboardUntil = Date.now() + FN_KEYBOARD_DISAMBIGUATION_MS
+
+        emitRecordEvent({
+          phase: event.phase,
+          chord: event.chord,
+          timestamp: event.timestamp,
+        })
+      }),
+      ipc.shortcutConfig.on('record', (event) => {
+        /** Fn combo 已由 native helper 合成为 fn chord，忽略同一物理动作产生的底层 keyboard 噪音 */
+        emitKeyboardRecordEvent(event)
+      }),
+    )
+
+    /** uIOhook 不可用时普通 keyboard 仍可在设置页通过 DOM 录制；Fn 事件仍只依赖 native */
+    cleanupFns.push(bindBrowserShortcutRecordEvents((event) => {
+      emitKeyboardRecordEvent(event)
     }))
   }
   else {
-    cleanupFns.push(bindBrowserShortcutRecordEvents(emit))
+    cleanupFns.push(bindBrowserShortcutRecordEvents(emitRecordEvent))
   }
 
   return () => {
+    pendingKeyboardTimers.forEach(clearTimeout)
+    pendingKeyboardTimers.clear()
     for (const cleanup of cleanupFns)
       cleanup()
   }
+}
+
+type BindShortcutRecordEventsOptions = {
+  emit: (event: ShortcutRecordEvent) => void
+  onReset: () => void
 }
 
 function getShortcutConfigIpc(): Window['$ipc']['shortcutConfig'] | null {
@@ -177,23 +224,17 @@ function getShortcutConfigIpc(): Window['$ipc']['shortcutConfig'] | null {
     : null
 }
 
-function getElectronIpc(): Window['$ipc'] | null {
-  return isElectron()
-    ? window.$ipc
-    : null
-}
-
 function readWebShortcutBindings(): ShortcutBindings {
   try {
     const raw = window.localStorage.getItem(WEB_SHORTCUT_BINDINGS_KEY)
     if (!raw)
-      return toWebShortcutBindings(DEFAULT_BINDINGS)
+      return toWebShortcutBindings(DEFAULT_KEYBOARD_BINDINGS)
 
     const parsed = JSON.parse(raw) as ShortcutBindings
-    return toWebShortcutBindings({ ...DEFAULT_BINDINGS, ...parsed })
+    return toWebShortcutBindings({ ...DEFAULT_KEYBOARD_BINDINGS, ...parsed })
   }
   catch {
-    return toWebShortcutBindings(DEFAULT_BINDINGS)
+    return toWebShortcutBindings(DEFAULT_KEYBOARD_BINDINGS)
   }
 }
 
@@ -206,16 +247,19 @@ function writeWebShortcutBindings(bindings: ShortcutBindings): void {
 
 function toWebShortcutBindings(bindings: ShortcutBindings): ShortcutBindings {
   const normalized = resolveShortcutBindingConflicts(normalizeShortcutBindings(bindings))
-  const localBindings: ShortcutBindings = Object.fromEntries(
-    Object.entries(normalized).map(([id, binding]) => [
-      id,
-      binding
-        ? { ...binding, scope: 'local' as const }
-        : null,
-    ]),
+  const actionBindings: ShortcutBindings = Object.fromEntries(
+    SHORTCUT_ACTIONS.map((action) => {
+      const binding = normalized[action.id]
+      return [
+        action.id,
+        binding
+          ? { ...binding, scope: action.scope }
+          : null,
+      ]
+    }),
   )
 
-  return filterShortcutBindingsByCapabilities(localBindings, WEB_SHORTCUT_CAPABILITIES)
+  return actionBindings
 }
 
 function emitShortcutBindingsChanged(): void {

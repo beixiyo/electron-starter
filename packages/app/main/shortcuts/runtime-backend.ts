@@ -14,7 +14,7 @@ export type ShortcutRuntimeBackendDescriptor = ShortcutRuntimeProviderDescriptor
 export type ShortcutRuntimeBackend = ShortcutRuntimeBackendDescriptor & {
   /** 清理该 backend 现有注册和运行态 */
   reset: () => void
-  /** 按当前外部状态同步底层资源，例如 native helper 启停 */
+  /** 注册项就绪后按当前外部状态同步底层资源，例如 native helper 启停 */
   sync?: () => void
   /** 根据已过滤的 binding 重新注册该 backend */
   apply: (bindings: ShortcutBindings, context: ShortcutRuntimeBackendContext) => void

@@ -8,7 +8,7 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { setIpcServiceErrorLogger } from '@ipc/core/service'
 import { focusService } from '@ipc/services/focus/service'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
-import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
+import { createShortcutConfigService, notifyShortcutRuntimeChanged } from '@ipc/services/shortcut-config/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
@@ -36,6 +36,7 @@ import {
   holdStateManager,
   onShortcutRuntimeSyncRequested,
   reapplyShortcutRuntime,
+  requestShortcutRuntimeSync,
   setupFnKeyIpc,
 } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
@@ -77,11 +78,12 @@ initDeeplink(() => {
 
   createMainWindow()
 
-  reapplyAppShortcutRuntime()
-  createShortcutConfigService((bindings) => {
-    reapplyShortcutRuntime(bindings, SHORTCUT_ACTION_HANDLERS)
+  createShortcutConfigService({
+    onReapply: requestShortcutRuntimeSync,
+    onTrigger: handleShortcutAction,
   })
   onShortcutRuntimeSyncRequested(reapplyAppShortcutRuntime)
+  reapplyAppShortcutRuntime()
 
   initSelectionHook()
 
@@ -402,6 +404,7 @@ function createMainWindow(): void {
 
 function reapplyAppShortcutRuntime(): void {
   reapplyShortcutRuntime(readShortcutBindings(), SHORTCUT_ACTION_HANDLERS)
+  notifyShortcutRuntimeChanged()
 }
 
 function showShortcutTestWindow(

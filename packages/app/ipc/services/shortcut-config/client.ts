@@ -3,5 +3,5 @@ import { createServiceClient } from '@ipc/core'
 
 export const shortcutConfigClient = createServiceClient<ShortcutConfigContract>(
   'shortcut-config',
-  ['getBindings', 'setBindings', 'getCapabilities', 'pauseForRecord', 'resumeAfterRecord'],
+  ['getBindings', 'setBindings', 'getCapabilities', 'getRuntimeCapabilities', 'pauseForRecord', 'resumeAfterRecord', 'trigger'],
 )

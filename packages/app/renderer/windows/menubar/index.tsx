@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { cn } from 'utils'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import { initRendererDiagnostics } from '@/logging'
+import { useShortcutRuntime } from '@/shortcuts/useShortcutRuntime'
 import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
 
 import 'styles/css/index.css'
@@ -12,6 +13,7 @@ initRendererDiagnostics()
 
 function MenuBarApp() {
   useTheme()
+  useShortcutRuntime()
   useRoundedWindowHitTest(WindowType.MENUBAR, () => [
     getInsetWindowHitTestRegion(SHADOW_INSET, 16),
   ])

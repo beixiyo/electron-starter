@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { resetFnShortcutStates, stopFnKeyListener } from './fn'
+import { resetFnKeyIpc, stopFnKeyListener } from './fn'
 import { resetKeyboardGestureShortcutStates } from './global'
 import { holdStateManager } from './hold'
 
@@ -19,7 +19,7 @@ app.on('will-quit', () => {
 
   if (process.platform === 'darwin') {
     /** 清理 fn 键快捷键状态 */
-    resetFnShortcutStates()
+    resetFnKeyIpc()
 
     /** 停止 fn-listener Swift 子进程 */
     stopFnKeyListener()

@@ -1,57 +1,81 @@
-import type { FnComboKey, FnModifier } from '@ipc/services/fn/contract'
+import type { FnNativeEvent } from '@ipc/services/fn/contract'
 import { NativeBridge } from '../../native-bridge'
 import { requestShortcutRuntimeSync } from '../runtime-sync'
+import { createFnNativeProtocolDecoder } from './protocol'
 
-export type FnComboEvent = { key: FnComboKey, modifiers: FnModifier[] }
+type FnListenerBackendHealth = 'unknown' | 'healthy' | 'unavailable'
+
+let fnListenerHealth: FnListenerBackendHealth = 'unknown'
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null
+
+const decoder = createFnNativeProtocolDecoder({
+  onInvalidLine: reason => console.warn(`[fn] 忽略无效 native 事件: ${reason}`),
+})
 
 const bridge = new NativeBridge<FnEvents>({
   name: 'fn-listener',
   logStderr: true,
-  onUnexpectedExit: requestShortcutRuntimeSync,
+  onUnexpectedExit: handleUnexpectedExit,
   parseLine(line, bus) {
-    if (line === 'FN_DOWN') {
-      bus.emit('key', 'down')
-    }
-    else if (line === 'FN_UP') {
-      bus.emit('key', 'up')
-    }
-    else if (line.startsWith('FN_COMBO_')) {
-      const rest = line.slice(9)
-      const colonIdx = rest.indexOf(':')
-      if (colonIdx === -1) {
-        bus.emit('combo', { key: rest as FnComboKey, modifiers: [] })
-      }
-      else {
-        const key = rest.slice(0, colonIdx) as FnComboKey
-        const modifiers = rest.slice(colonIdx + 1).split(',') as FnModifier[]
-        bus.emit('combo', { key, modifiers })
-      }
-    }
+    const event = decoder.decode(line)
+    if (event)
+      bus.emit('raw', event)
   },
 })
 
-export const startFnKeyListener = () => bridge.start()
-export const stopFnKeyListener = () => bridge.stop()
-export const restartFnKeyListener = () => bridge.restart()
-export const isFnKeyListenerRunning = () => bridge.running
-
-export function addFnKeyListener(listener: (event: FnKeyEvent) => void): () => void {
-  return bridge.events.on('key', listener)
+/** 当前运行时是否可以尝试使用 Fn 原生辅助进程 */
+export function canUseFnKeyListenerBackend(): boolean {
+  return fnListenerHealth !== 'unavailable'
 }
 
-export function removeFnKeyListener(listener: (event: FnKeyEvent) => void): void {
-  bridge.events.off('key', listener)
+export function startFnKeyListener(): void {
+  if (process.platform !== 'darwin')
+    return
+
+  fnListenerHealth = 'healthy'
+  clearRecoveryTimer()
+  if (!bridge.running)
+    emitGenerationReset()
+  bridge.start()
 }
 
-export function addFnComboListener(listener: (combo: FnComboEvent) => void): () => void {
-  return bridge.events.on('combo', listener)
+export function stopFnKeyListener(): void {
+  if (bridge.running)
+    emitGenerationReset()
+  bridge.stop()
+}
+
+export function addFnRawEventListener(listener: (event: FnNativeEvent) => void): () => void {
+  return bridge.events.on('raw', listener)
+}
+
+function handleUnexpectedExit(): void {
+  fnListenerHealth = 'unavailable'
+  emitGenerationReset()
+  requestShortcutRuntimeSync()
+
+  if (recoveryTimer)
+    return
+
+  recoveryTimer = setTimeout(() => {
+    recoveryTimer = null
+    fnListenerHealth = 'unknown'
+    requestShortcutRuntimeSync()
+  }, 5_000)
+  recoveryTimer.unref?.()
+}
+
+function emitGenerationReset(): void {
+  bridge.events.emit('raw', decoder.resetGeneration(Date.now()))
+}
+
+function clearRecoveryTimer(): void {
+  if (!recoveryTimer)
+    return
+  clearTimeout(recoveryTimer)
+  recoveryTimer = null
 }
 
 type FnEvents = {
-  key: FnKeyEvent
-  combo: FnComboEvent
+  raw: FnNativeEvent
 }
-
-export type FnKeyEvent = 'down' | 'up'
-export type FnKeyListener = (event: FnKeyEvent) => void
-export type FnComboListener = (combo: FnComboEvent) => void

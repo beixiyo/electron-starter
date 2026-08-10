@@ -4,21 +4,19 @@ import type {
   ShortcutGestureRuntimeEntry,
   ShortcutGestureType,
   ShortcutModifier,
-  ShortcutRecordEvent,
   ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
-import { createMainDiagnosticLogger } from '@main/logging'
-import { createShortcutGestureEngine } from '@shared/shortcuts'
+import { createShortcutGestureEngine, KEYBOARD_MODIFIER_BY_CODE } from '@shared/shortcuts'
 import { uIOhook } from 'uiohook-napi'
-import { isSuspended } from '../fn'
+import { createMainDiagnosticLogger } from '../../logging'
 import { resolveKeyGroup } from '../hold/resolve-key-group'
+import { isShortcutRuntimeSuspended } from '../suspension'
 import { acquireHook, releaseHook } from '../uiohook-lifecycle'
-
-const log = createMainDiagnosticLogger('shortcut.runtime')
 
 /** action id → 已解析的 keyboard gesture 注册项 */
 const registeredShortcuts = new Map<string, RegisteredKeyboardGestureShortcut>()
+const log = createMainDiagnosticLogger('shortcut.runtime')
 
 /** 当前 backend 是否已经占用 uIOhook lifecycle 引用计数 */
 let hookAcquired = false
@@ -28,7 +26,7 @@ let listenerBound = false
 
 const gestureEngine = createShortcutGestureEngine<KeyboardGestureBinding>({
   entries: [],
-  isPaused,
+  isPaused: isShortcutRuntimeSuspended,
   emit: emitKeyboardGestureEvent,
 })
 
@@ -53,7 +51,7 @@ export function registerKeyboardGestureShortcut(config: KeyboardGestureShortcutC
     registeredShortcuts.delete(id)
     syncGestureEngineEntries()
     maybeStopHook()
-    log.error('gesture.register-failed', 'keyboard gesture shortcut registration failed', error, {
+    log.error('keyboard-register.failed', '键盘手势快捷键注册失败', error, {
       id,
       key: binding.chord.key,
       gesture: binding.gesture,
@@ -66,8 +64,8 @@ export function registerKeyboardGestureShortcut(config: KeyboardGestureShortcutC
  * 取消所有键盘手势快捷键，并清理按键状态
  */
 export function unregisterKeyboardGestureShortcuts(): void {
+  gestureEngine.updateEntries([])
   registeredShortcuts.clear()
-  syncGestureEngineEntries()
   maybeStopHook()
 }
 
@@ -80,8 +78,8 @@ export function resetKeyboardGestureShortcutStates(): void {
 }
 
 function handleKeyDown(event: UiohookKeyboardEvent): void {
-  if (isSuspended()) {
-    gestureEngine.clear()
+  if (isShortcutRuntimeSuspended()) {
+    gestureEngine.cancelActiveGestures()
     return
   }
 
@@ -90,7 +88,11 @@ function handleKeyDown(event: UiohookKeyboardEvent): void {
     if (!matchesShortcut(event, shortcut.match))
       continue
 
-    gestureEngine.handle(toRecordEvent('down', shortcut.binding, timestamp))
+    gestureEngine.handle({
+      phase: 'down',
+      chord: shortcut.binding.chord,
+      timestamp,
+    })
   }
 }
 
@@ -100,7 +102,11 @@ function handleKeyUp(event: UiohookKeyboardEvent): void {
     if (!isKeyWithinGroups(event.keycode, shortcut.match.mainKeyGroup))
       continue
 
-    gestureEngine.handle(toRecordEvent('up', shortcut.binding, timestamp))
+    gestureEngine.handle({
+      phase: 'up',
+      chord: shortcut.binding.chord,
+      timestamp,
+    })
   }
 }
 
@@ -117,18 +123,6 @@ function emitKeyboardGestureEvent(event: ShortcutRuntimeEvent & { binding: Keybo
   shortcut.onRelease?.('hold')
 }
 
-function toRecordEvent(
-  phase: Extract<ShortcutRecordEvent['phase'], 'down' | 'up'>,
-  binding: KeyboardGestureBinding,
-  timestamp: number,
-): ShortcutRecordEvent {
-  return {
-    phase,
-    chord: binding.chord,
-    timestamp,
-  }
-}
-
 function syncGestureEngineEntries(): void {
   gestureEngine.updateEntries(
     Array.from(registeredShortcuts.values()).map((shortcut): ShortcutGestureRuntimeEntry<KeyboardGestureBinding> => ({
@@ -140,33 +134,36 @@ function syncGestureEngineEntries(): void {
 }
 
 function createChordMatch(chord: KeyboardShortcutChord): KeyboardChordMatch {
+  const mainKeyModifier = KEYBOARD_MODIFIER_BY_CODE[chord.key]
+  if (mainKeyModifier) {
+    const modifiers = [mainKeyModifier, ...chord.modifiers]
+    return {
+      mainKeyGroup: Array.from(new Set(modifiers.flatMap(modifier => resolveKeyGroup(modifier)))),
+      requiredModifiers: createRequiredModifiers(modifiers),
+    }
+  }
+
   return {
     mainKeyGroup: resolveKeyGroup(chord.key),
     requiredModifiers: createRequiredModifiers(chord.modifiers),
   }
 }
 
-function createRequiredModifiers(modifiers: ShortcutModifier[]): Set<ModifierState> {
-  const required = new Set<ModifierState>()
+function createRequiredModifiers(modifiers: ShortcutModifier[]): Set<Exclude<ShortcutModifier, 'Primary'>> {
+  const required = new Set<Exclude<ShortcutModifier, 'Primary'>>()
 
   for (const modifier of modifiers) {
     switch (modifier) {
       case 'Primary':
         required.add(process.platform === 'darwin'
-          ? 'meta'
-          : 'control')
+          ? 'Meta'
+          : 'Control')
         break
       case 'Meta':
-        required.add('meta')
-        break
       case 'Control':
-        required.add('control')
-        break
       case 'Alt':
-        required.add('alt')
-        break
       case 'Shift':
-        required.add('shift')
+        required.add(modifier)
         break
     }
   }
@@ -179,11 +176,14 @@ function matchesShortcut(event: UiohookKeyboardEvent, match: KeyboardChordMatch)
     && matchesModifiers(event, match.requiredModifiers)
 }
 
-function matchesModifiers(event: UiohookKeyboardEvent, requiredModifiers: Set<ModifierState>): boolean {
-  return event.metaKey === requiredModifiers.has('meta')
-    && event.ctrlKey === requiredModifiers.has('control')
-    && event.altKey === requiredModifiers.has('alt')
-    && event.shiftKey === requiredModifiers.has('shift')
+function matchesModifiers(
+  event: UiohookKeyboardEvent,
+  requiredModifiers: Set<Exclude<ShortcutModifier, 'Primary'>>,
+): boolean {
+  return event.metaKey === requiredModifiers.has('Meta')
+    && event.ctrlKey === requiredModifiers.has('Control')
+    && event.altKey === requiredModifiers.has('Alt')
+    && event.shiftKey === requiredModifiers.has('Shift')
 }
 
 function isKeyWithinGroups(keycode: number, group: number[]): boolean {
@@ -219,10 +219,6 @@ function maybeStopHook(): void {
   }
 }
 
-function isPaused(): boolean {
-  return isSuspended()
-}
-
 export type KeyboardGestureShortcutConfig = {
   /** action id，用于隔离每个绑定的 runtime 状态 */
   id: string
@@ -244,7 +240,5 @@ type RegisteredKeyboardGestureShortcut = KeyboardGestureShortcutConfig & {
 
 type KeyboardChordMatch = {
   mainKeyGroup: number[]
-  requiredModifiers: Set<ModifierState>
+  requiredModifiers: Set<Exclude<ShortcutModifier, 'Primary'>>
 }
-
-type ModifierState = 'meta' | 'control' | 'alt' | 'shift'

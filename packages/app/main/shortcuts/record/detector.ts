@@ -1,17 +1,10 @@
 import type { KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
+import { normalizeKeyboardCode, normalizeKeyboardShortcutChord, releaseActiveKeyboardChord } from '@shared/shortcuts'
 import { uIOhook, UiohookKey } from 'uiohook-napi'
 import { acquireHook, releaseHook } from '../uiohook-lifecycle'
 
-const MODIFIER_CODES: Set<number> = new Set([
-  UiohookKey.Ctrl,
-  UiohookKey.CtrlRight,
-  UiohookKey.Shift,
-  UiohookKey.ShiftRight,
-  UiohookKey.Alt,
-  UiohookKey.AltRight,
-  UiohookKey.Meta,
-  UiohookKey.MetaRight,
+const IGNORED_KEY_CODES: ReadonlySet<number> = new Set([
   UiohookKey.CapsLock,
   UiohookKey.NumLock,
   UiohookKey.ScrollLock,
@@ -59,9 +52,9 @@ export function startRecordShortcutDetection(emit: (event: ShortcutRecordEvent) 
       hookAcquired = true
     }
   }
-  catch (error) {
+  catch {
+    /** renderer 的 DOM 录制仍可继续；这里只撤下不可用的全局 hook */
     stopRecordShortcutDetection()
-    throw error
   }
 }
 
@@ -91,7 +84,7 @@ export function stopRecordShortcutDetection(): void {
 function handleKeyDown(event: UiohookKeyboardEvent): void {
   if (!activeEmit)
     return
-  if (MODIFIER_CODES.has(event.keycode))
+  if (IGNORED_KEY_CODES.has(event.keycode))
     return
   if (activeChords.has(event.keycode))
     return
@@ -112,11 +105,10 @@ function handleKeyUp(event: UiohookKeyboardEvent): void {
   if (!activeEmit)
     return
 
-  const chord = activeChords.get(event.keycode)
+  const chord = releaseActiveKeyboardChord(activeChords, event.keycode)
   if (!chord)
     return
 
-  activeChords.delete(event.keycode)
   activeEmit({
     phase: 'up',
     chord,
@@ -125,15 +117,11 @@ function handleKeyUp(event: UiohookKeyboardEvent): void {
 }
 
 function toKeyboardShortcutChord(event: UiohookKeyboardEvent): KeyboardShortcutChord | null {
-  const key = keycodeToName(event.keycode)
+  const key = normalizeKeyboardCode(keycodeToName(event.keycode))
   if (!key)
     return null
 
-  return {
-    source: 'keyboard',
-    key,
-    modifiers: getModifiers(event),
-  }
+  return normalizeKeyboardShortcutChord(key, getModifiers(event))
 }
 
 function keycodeToName(keycode: number): string | null {

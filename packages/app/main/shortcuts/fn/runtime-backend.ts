@@ -1,31 +1,55 @@
 import type {
-  FnComboKey,
-  FnModifier,
   FnShortcutChord,
   ShortcutBinding,
-  ShortcutBindings,
-  ShortcutModifier,
+  ShortcutGestureRuntimeEntry,
+  ShortcutRecordEvent,
+  ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import type {
   ShortcutRuntimeBackend,
   ShortcutRuntimeBackendContext,
   ShortcutRuntimeEntry,
 } from '../runtime-backend'
-import type { FnShortcutsConfig } from './types'
-import { normalizeShortcutModifiers } from '@shared/shortcuts'
+import { createShortcutGestureEngine } from '@shared/shortcuts'
 import { canUseFnShortcutBackend } from '../capabilities'
 import { FN_SHORTCUT_RUNTIME_PROVIDER } from '../providers'
 import { getShortcutRuntimeEntries } from '../runtime-backend'
-import { startFnKeyListener, stopFnKeyListener } from './core'
-import { registerFnShortcuts, resetShortcutHandlers } from './state-machine'
+import { isShortcutRuntimeSuspended } from '../suspension'
+import { addFnRawEventListener, startFnKeyListener, stopFnKeyListener } from './core'
+
+type FnBinding = ShortcutBinding & { chord: FnShortcutChord }
+type FnRuntimeEntry = ShortcutRuntimeEntry<FnBinding>
+
+let registeredEntries = new Map<string, FnRuntimeEntry>()
+let removeRawListener: (() => void) | null = null
+let runtimeContext: ShortcutRuntimeBackendContext | null = null
+
+const gestureEngine = createShortcutGestureEngine<FnBinding>({
+  entries: [],
+  isPaused: isShortcutRuntimeSuspended,
+  emit: emitFnGestureEvent,
+})
 
 export const fnShortcutRuntimeBackend: ShortcutRuntimeBackend = {
   ...FN_SHORTCUT_RUNTIME_PROVIDER,
-  reset: resetShortcutHandlers,
+  reset: resetFnRuntime,
   sync: syncFnListenerRuntime,
   apply(bindings, context) {
-    registerFnShortcutBindings(bindings, context)
+    resetFnRuntime()
+    runtimeContext = context
+    const entries = getShortcutRuntimeEntries(bindings, context, isFnBinding)
+    registeredEntries = new Map(entries.map(entry => [entry.id, entry]))
+    gestureEngine.updateEntries(entries.map(toGestureEntry))
+    removeRawListener = addFnRawEventListener(handleFnRawEvent)
   },
+}
+
+function resetFnRuntime(): void {
+  removeRawListener?.()
+  removeRawListener = null
+  gestureEngine.updateEntries([])
+  registeredEntries.clear()
+  runtimeContext = null
 }
 
 function syncFnListenerRuntime(): void {
@@ -40,109 +64,43 @@ function syncFnListenerRuntime(): void {
   stopFnKeyListener()
 }
 
-function registerFnShortcutBindings(
-  bindings: ShortcutBindings,
-  context: ShortcutRuntimeBackendContext,
-): void {
-  if (process.platform !== 'darwin')
+function handleFnRawEvent(event: Parameters<Parameters<typeof addFnRawEventListener>[0]>[0]): void {
+  if (event.type === 'reset') {
+    gestureEngine.cancelActiveGestures()
+    return
+  }
+
+  if (event.phase === 'down' && event.chord.key !== 'Fn') {
+    gestureEngine.cancelChord({ source: 'fn', key: 'Fn' })
+  }
+
+  const recordEvent: ShortcutRecordEvent = {
+    phase: event.phase,
+    chord: event.chord,
+    timestamp: event.timestamp,
+  }
+  gestureEngine.handle(recordEvent)
+}
+
+function emitFnGestureEvent(event: ShortcutRuntimeEvent & { binding: FnBinding }): void {
+  const entry = registeredEntries.get(event.id)
+  const context = runtimeContext
+  if (!entry || !context)
+    return
+  if (event.phase === 'trigger' && !context.canTrigger(entry.binding))
     return
 
-  let holdEntry: FnRuntimeEntry | null = null
-  let doublePressEntry: FnRuntimeEntry | null = null
-
-  const entries = getShortcutRuntimeEntries(bindings, context, isFnBinding)
-  const combos = entries.flatMap((entry) => {
-    const { binding } = entry
-    if (binding.chord.key === 'Fn') {
-      if (binding.gesture === 'hold')
-        holdEntry = entry
-      if (binding.gesture === 'doublePress')
-        doublePressEntry = entry
-      return []
-    }
-
-    if (binding.gesture !== 'press' && binding.gesture !== 'doublePress')
-      return []
-
-    const { key, modifiers } = binding.chord
-    return [{
-      key: key as FnComboKey,
-      modifiers: normalizeFnModifiers(modifiers),
-      gesture: binding.gesture,
-      intervalMs: binding.intervalMs,
-      onTrigger: () => {
-        if (!context.canTrigger(binding))
-          return
-
-        context.emit({
-          ...entry,
-          phase: 'trigger',
-          gesture: binding.gesture,
-        })
-      },
-    }]
-  })
-
-  registerFnShortcuts({
-    hold: holdEntry
-      ? createFnHoldShortcutConfig(holdEntry, context)
-      : undefined,
-    doublePress: doublePressEntry
-      ? createFnDoublePressShortcutConfig(doublePressEntry, context)
-      : undefined,
-    combos,
-  })
+  context.emit({ ...entry, phase: event.phase, gesture: event.gesture })
 }
 
-function createFnHoldShortcutConfig(
-  entry: FnRuntimeEntry,
-  context: ShortcutRuntimeBackendContext,
-): NonNullable<FnShortcutsConfig['hold']> {
-  const { binding } = entry
-
+function toGestureEntry(entry: FnRuntimeEntry): ShortcutGestureRuntimeEntry<FnBinding> {
   return {
-    canStart: () => context.canTrigger(binding),
-    onStart: () => context.emit({
-      ...entry,
-      phase: 'trigger',
-      gesture: 'hold',
-    }),
-    onRelease: () => context.emit({
-      ...entry,
-      phase: 'release',
-      gesture: 'hold',
-    }),
+    id: entry.id,
+    binding: entry.binding,
+    canStart: () => runtimeContext?.canTrigger(entry.binding) ?? false,
   }
 }
 
-function createFnDoublePressShortcutConfig(
-  entry: FnRuntimeEntry,
-  context: ShortcutRuntimeBackendContext,
-): NonNullable<FnShortcutsConfig['doublePress']> {
-  const { binding } = entry
-
-  return {
-    onTrigger: () => {
-      if (!context.canTrigger(binding))
-        return
-
-      context.emit({
-        ...entry,
-        phase: 'trigger',
-        gesture: 'doublePress',
-      })
-    },
-  }
-}
-
-function isFnBinding(
-  binding: ShortcutBinding | null,
-): binding is ShortcutBinding & { chord: FnShortcutChord } {
+function isFnBinding(binding: ShortcutBinding | null): binding is FnBinding {
   return !!binding && binding.chord.source === 'fn'
 }
-
-function normalizeFnModifiers(modifiers: ShortcutModifier[] | undefined): FnModifier[] {
-  return normalizeShortcutModifiers(modifiers ?? [])
-}
-
-type FnRuntimeEntry = ShortcutRuntimeEntry<ShortcutBinding & { chord: FnShortcutChord }>

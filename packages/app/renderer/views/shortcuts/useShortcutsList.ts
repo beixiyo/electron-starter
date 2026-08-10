@@ -1,4 +1,3 @@
-import type { ShortcutScope } from '@shared/shortcuts'
 import type { ShortcutAction, ShortcutBinding } from './types'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useState } from 'react'
@@ -73,26 +72,13 @@ export function useShortcutsList() {
     })
   })
 
-  const updateBindingScope = useLatestCallback((id: string, scope: ShortcutScope) => {
-    setActions((prev) => {
-      const next = prev.map(a => a.id === id && a.binding
-        ? { ...a, binding: { ...a.binding, scope } }
-        : a)
-
-      void setShortcutBindings(
-        Object.fromEntries(next.map(a => [a.id, a.binding])),
-      )
-      return next
-    })
-  })
-
   const resetToDefault = useLatestCallback((id: string) => {
     const def = defaultActions.find(a => a.id === id)
     if (def)
       updateBinding(id, def.binding)
   })
 
-  return { actions, updateBinding, replaceBinding, updateBindingScope, resetToDefault }
+  return { actions, updateBinding, replaceBinding, resetToDefault }
 }
 
 function persistBindings(actions: ShortcutAction[]): Promise<void> {
