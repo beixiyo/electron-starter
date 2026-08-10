@@ -13,16 +13,13 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-
     "----- dev -----": "-----",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "dev:web": "vite --config vite.config.web.ts",
-
     "----- native -----": "-----",
     "build:native": "bash scripts/build-native.sh",
     "build:native:mac": "bash scripts/build-native.sh --platform=mac",
-
     "----- build -----": "-----",
     "build": "electron-vite build",
     "build:win": "node ./scripts/build-for.mjs --platform=win",
@@ -37,14 +34,12 @@
     "build:unpack": "node ./scripts/build-for.mjs --platform=dir && bun scripts/selfsign-app.ts install",
     "build:unpack:test": "node ./scripts/build-for.mjs --platform=dir --mode=test && bun scripts/selfsign-app.ts install",
     "build:unpack:prod": "node ./scripts/build-for.mjs --platform=dir --mode=production && bun scripts/selfsign-app.ts install",
-
     "----- signing -----": "-----",
     "sign:setup": "bun scripts/selfsign-app.ts setup",
     "sign:install": "bun scripts/selfsign-app.ts install",
     "sign:cleanup": "bun scripts/selfsign-app.ts cleanup",
     "// pack:installed:mac": "发给别人后若提示无法打开，在对方电脑运行：xattr -dr com.apple.quarantine /Applications/app.app && open /Applications/app.app",
     "pack:installed:mac": "rm -f \"$HOME/Desktop/app-test.zip\" && ditto -c -k --keepParent \"$HOME/Applications/app.app\" \"$HOME/Desktop/app-test.zip\"",
-
     "----- update-local -----": "-----",
     "update:build:mac": "node ./scripts/build-for.mjs --platform=mac --mode=test --localUpdate --localUpdatePayloadKb=4096",
     "update:build:mac:next": "bun scripts/create-local-update-feed.ts --buildOnly",
@@ -52,7 +47,6 @@
     "update:serve:slow": "bun scripts/serve-update-feed.ts --rateKbps=512",
     "update:feed:mac": "bun scripts/create-local-update-feed.ts",
     "update:feed:mac:current": "pnpm run update:build:mac && pnpm run update:serve:slow",
-
     "----- update-upload -----": "-----",
     "update:upload:gcs": "bun scripts/upload-gcs-update-feed.ts",
     "update:upload:gcs:test": "bun scripts/upload-gcs-update-feed.ts --envPath=.env.test --latestDmgAlias=app-test-latest.dmg",
@@ -60,10 +54,8 @@
     "update:feed:mac:gcs": "bun scripts/create-local-update-feed.ts --upload",
     "update:feed:mac:selfsign": "bun scripts/create-local-update-feed.ts --selfSign",
     "update:feed:mac:selfsign:gcs": "bun scripts/create-local-update-feed.ts --selfSign --upload",
-
     "----- lifecycle -----": "-----",
     "postinstall": "node node_modules/electron/install.js && electron-builder install-app-deps",
-
     "----- diagnostics -----": "-----",
     "diagnose:mac-permissions": "bash scripts/diagnose-mac-permissions.sh"
   },
@@ -81,7 +73,7 @@
     "@electron-toolkit/tsconfig": "^2.0.0",
     "@electron-toolkit/utils": "^4.0.0",
     "@jl-org/auth": "^1.0.2",
-    "@jl-org/tool": "4.0.3",
+    "@jl-org/tool": "5.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "comps": "workspace:*",
     "config": "workspace:*",
@@ -90,6 +82,7 @@
     "electron-vite": "6.0.0-beta.1",
     "hooks": "workspace:*",
     "http-api": "workspace:*",
+    "i18n": "workspace:*",
     "motion": "12.27.0",
     "pako": "^2.1.0",
     "react": "19.2.4",

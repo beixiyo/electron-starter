@@ -1,19 +1,17 @@
 'use client'
 
 import type { DatePickerProps, DatePickerRef, DatePickerTriggerContext } from './types'
-import { forwardRef, memo, useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, memo, useCallback } from 'react'
+import { formatDatePickerDate, formatDatePickerTimeParts } from 'utils'
 import { useT } from '../../i18n'
 import { useFormField } from '../Form'
 import { Calendar as CalendarComponent } from './Calendar'
 import { PickerBase } from './components/PickerBase'
 import { PickerInput } from './components/PickerInput'
 import { usePickerState } from './hooks/usePickerState'
+import { useSinglePickerValue } from './hooks/useSinglePickerValue'
 import {
-  formatDate,
   getFormatByPrecision,
-  getInitialDate,
-  getTimeFormatByPrecision,
-  isDateEqual,
   preserveTimeFromDate,
 } from './utils'
 
@@ -38,7 +36,11 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
   maxDate,
   className,
   inputClassName,
+  triggerVariant = 'default',
   dropdownClassName,
+  dropdownZIndex,
+  timeDropdownClassName,
+  timeDropdownZIndex,
   calendarClassName,
   name,
   error,
@@ -49,6 +51,9 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
   use12Hours = false,
   closeOnSelect = false,
   minuteStep = 1,
+  enableTimeKeyboardInput = true,
+  enableTimeUnitPopover = true,
+  enableTimeInputWheel = true,
   icon,
   yearRange,
   prevIcon,
@@ -75,7 +80,7 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
   } = useFormField<Date | null>({
     name,
     value,
-    defaultValue: null,
+    defaultValue: defaultValue ?? null,
     error,
     errorMessage,
     onChange,
@@ -92,62 +97,46 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
     ref,
   })
 
-  const [internalValue, setInternalValue] = useState<Date | null>(() =>
-    actualValue ?? defaultValue ?? null,
-  )
-
-  const [currentMonth, setCurrentMonth] = useState<Date>(() =>
-    getInitialDate(actualValue, defaultValue),
-  )
-
-  const initialValueRef = useRef<Date | null>(null)
-
-  useEffect(() => {
-    if (actualValue !== undefined) {
-      setInternalValue(actualValue)
-      if (actualValue)
-        setCurrentMonth(actualValue)
-    }
-  }, [actualValue])
-
-  useEffect(() => {
-    if (isOpen) {
-      initialValueRef.current = internalValue
-    }
-    else {
-      if (onConfirm && !isDateEqual(initialValueRef.current, internalValue)) {
-        onConfirm(internalValue)
-      }
-    }
-  }, [isOpen])
+  const {
+    value: internalValue,
+    viewDate: currentMonth,
+    setViewDate: setCurrentMonth,
+    updateValue,
+  } = useSinglePickerValue({
+    externalValue: actualValue,
+    defaultValue,
+    isOpen,
+    onChange: nextValue => handleChangeVal(nextValue, undefined as any),
+    onConfirm,
+  })
 
   const handleDateSelect = useCallback((date: Date) => {
     const finalDate = preserveTimeFromDate(date, internalValue, precision)
-    setInternalValue(finalDate)
-    handleChangeVal(finalDate, undefined as any)
+    updateValue(finalDate)
     if (precision === 'day' && closeOnSelect)
       setOpen(false)
-  }, [handleChangeVal, precision, internalValue, setOpen, closeOnSelect])
+  }, [precision, internalValue, setOpen, closeOnSelect, updateValue])
 
   const handleClear = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
-    setInternalValue(null)
-    handleChangeVal(null, undefined as any)
-  }, [handleChangeVal])
+    updateValue(null)
+  }, [updateValue])
 
-  const displayValue = formatDate(internalValue, actualFormat)
-
-  const timeFormat = getTimeFormatByPrecision(precision, use12Hours)
-  const timeValue = internalValue && timeFormat
-    ? formatDate(internalValue, timeFormat)
-    : ''
-
-  const ampm = use12Hours && internalValue && precision !== 'day'
-    ? (internalValue.getHours() >= 12
-        ? t('datePicker.pm')
-        : t('datePicker.am'))
-    : ''
   const periodPosition = t('datePicker.periodPosition') as 'left' | 'right'
+  const displayValue = internalValue
+    ? formatDatePickerDate(internalValue, { dateFormat: actualFormat })
+    : ''
+  const timeParts = internalValue && precision !== 'day'
+    ? formatDatePickerTimeParts(internalValue, {
+        precision,
+        use12Hours,
+        amLabel: t('datePicker.am'),
+        pmLabel: t('datePicker.pm'),
+        periodPosition,
+      })
+    : { timeValue: '', period: '' }
+  const timeValue = timeParts.timeValue
+  const ampm = timeParts.period
 
   const defaultTriggerContext: DatePickerTriggerContext = {
     value: internalValue,
@@ -168,6 +157,7 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
     inputClassName,
     icon,
     clearIcon,
+    triggerVariant,
   }
 
   const triggerContent = renderTrigger
@@ -197,6 +187,7 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
             ampm={ ampm }
             timeValue={ timeValue }
             periodPosition={ periodPosition }
+            triggerVariant={ triggerVariant }
           />
         )
 
@@ -208,9 +199,11 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
       placement={ placement }
       offset={ offset }
       onClickOutside={ onClickOutside }
+      onConfirm={ () => setOpen(false) }
       onBlur={ handleBlur }
       className={ className }
       dropdownClassName={ dropdownClassName }
+      dropdownZIndex={ dropdownZIndex }
       error={ actualError }
       errorMessage={ actualErrorMessage }
       dropdown={
@@ -227,8 +220,7 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
           precision={ precision }
           use12Hours={ use12Hours }
           onTimeChange={ (date) => {
-            setInternalValue(date)
-            handleChangeVal(date, undefined as any)
+            updateValue(date)
           } }
           onConfirm={ () => setOpen(false) }
           yearRange={ yearRange }
@@ -237,9 +229,14 @@ const InnerDatePicker = forwardRef<DatePickerRef, DatePickerProps>(({
           superPrevIcon={ superPrevIcon }
           superNextIcon={ superNextIcon }
           timeIcon={ timeIcon }
+          timeDropdownClassName={ timeDropdownClassName }
+          timeDropdownZIndex={ timeDropdownZIndex }
           extraFooter={ extraFooter }
           renderCell={ renderCell }
           minuteStep={ minuteStep }
+          enableTimeKeyboardInput={ enableTimeKeyboardInput }
+          enableTimeUnitPopover={ enableTimeUnitPopover }
+          enableTimeInputWheel={ enableTimeInputWheel }
           onAddTime={ onAddTime }
         />
       }

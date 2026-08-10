@@ -1,6 +1,7 @@
 'use client'
 
-import { useShortCutKey } from 'hooks'
+import type { FloatingPlacement } from 'hooks'
+import { useKeyboardLayer, useTheme } from 'hooks'
 import { memo, useRef } from 'react'
 import { cn } from 'utils'
 import { Z } from '../../../constants/z-index'
@@ -15,14 +16,18 @@ interface PickerBaseProps {
   setOpen: (open: boolean) => void
   trigger: React.ReactNode
   dropdown: React.ReactNode
-  placement?: any
+  placement?: FloatingPlacement
   offset?: number
   onClickOutside?: () => void
+  onDismiss?: (reason: PickerDismissReason) => void
+  onConfirm?: () => void
   onBlur?: () => void
   className?: string
   dropdownClassName?: string
+  dropdownZIndex?: number
   error?: boolean
   errorMessage?: string
+  fullWidth?: boolean
 }
 
 export const PickerBase = memo<PickerBaseProps>(({
@@ -33,16 +38,21 @@ export const PickerBase = memo<PickerBaseProps>(({
   placement = 'bottom-start',
   offset = 4,
   onClickOutside,
+  onDismiss,
+  onConfirm,
   onBlur,
   className,
   dropdownClassName,
+  dropdownZIndex,
   error,
   errorMessage,
+  fullWidth = true,
 }) => {
+  const [theme] = useTheme()
   const triggerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const { style } = usePickerFloating({
+  const { style, shouldAnimate } = usePickerFloating({
     enabled: isOpen,
     triggerRef,
     dropdownRef,
@@ -56,38 +66,58 @@ export const PickerBase = memo<PickerBaseProps>(({
     dropdownRef,
     onClickOutside,
     onClose: () => {
-      setOpen(false)
+      if (onDismiss)
+        onDismiss('outside')
+      else
+        setOpen(false)
       onBlur?.()
     },
   })
 
-  useShortCutKey({
-    key: 'Escape',
-    fn: () => {
-      if (isOpen) {
-        setOpen(false)
-        onBlur?.()
+  useKeyboardLayer({
+    active: isOpen,
+    keys: onConfirm
+      ? ['Escape', 'Enter']
+      : ['Escape'],
+    priority: dropdownZIndex ?? Z.dropdown,
+    allowRepeat: false,
+    onKeyDown: (event) => {
+      if (event.key === 'Enter') {
+        onConfirm?.()
+        return
       }
+
+      if (onDismiss)
+        onDismiss('escape')
+      else
+        setOpen(false)
+      onBlur?.()
     },
   })
 
-  const dropdownContent = isOpen && (
+  const dropdownContent = (
     <AnimateShow
+      show={ isOpen && shouldAnimate }
       ref={ dropdownRef }
       variants="fade"
+      animateOnMount={ false }
       style={ {
         ...style,
-        zIndex: Z.dropdown,
+        zIndex: dropdownZIndex ?? Z.dropdown,
       } }
-      className={ cn(CONTAINER_CLASSNAME, dropdownClassName) }
+      className={ cn(
+        CONTAINER_CLASSNAME,
+        theme !== 'light' && 'border border-border',
+        dropdownClassName,
+      ) }
     >
       { dropdown }
     </AnimateShow>
   )
 
   return (
-    <div className={ cn('inline-block w-full', className) }>
-      <div ref={ triggerRef } className="w-full">
+    <div className={ cn('inline-block', fullWidth && 'w-full', className) }>
+      <div ref={ triggerRef } className={ cn(fullWidth && 'w-full') }>
         { trigger }
       </div>
 
@@ -103,3 +133,5 @@ export const PickerBase = memo<PickerBaseProps>(({
 })
 
 PickerBase.displayName = 'PickerBase'
+
+export type PickerDismissReason = 'outside' | 'escape'

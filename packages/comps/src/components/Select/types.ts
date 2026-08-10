@@ -40,6 +40,20 @@ export interface SelectProps<T extends string | string[] = string> extends Selec
   onClickOutside?: () => void
   placeholder?: string
   placeholderIcon?: ReactNode
+  /**
+   * 默认 trigger 有值时是否在 hover 状态下以清除按钮替换下拉箭头
+   *
+   * 仅在非 editable 模式下生效
+   * @default false
+   */
+  clearable?: boolean | SelectClearableConfig
+  /** 用户通过清除按钮移除当前选择后触发 */
+  onClear?: () => void
+  /**
+   * trigger 左侧常驻前缀图标，无论是否已选中都显示
+   * 区别于 {@link SelectProps.placeholderIcon}（仅占位态显示）与 {@link Option.icon}（仅下拉选项显示）
+   */
+  prefixIcon?: ReactNode
 
   disabled?: boolean
   showDownArrow?: boolean
@@ -57,6 +71,11 @@ export interface SelectProps<T extends string | string[] = string> extends Selec
    */
   bordered?: boolean
   /**
+   * 是否显示阴影
+   * @default true
+   */
+  shadowed?: boolean
+  /**
    * 启用 combobox 模式：trigger 变为 input，支持手填自定义值 + 下拉选择
    * - 仅对 single select（非 multiple）生效
    * - blur / Enter 提交当前文本（可以是选项外的任意值）
@@ -69,10 +88,15 @@ export interface SelectProps<T extends string | string[] = string> extends Selec
   /** editable 模式下 input 元素的额外类名 */
   editableInputClassName?: string
   /**
-   * 自定义下拉框宽度
+   * 自定义下拉框固定高度（非级联模式下为固定高度，选项较少时会留白）
    * @default 150
    */
   dropdownHeight?: number
+  /**
+   * 下拉框最大高度（非级联模式）。传入后下拉框高度随内容自适应、超出才滚动，
+   * 优先级高于 `dropdownHeight`；不传则维持 `dropdownHeight` 的固定高度行为
+   */
+  dropdownMaxHeight?: number
 
   /** searchable 模式下搜索词变化时触发 */
   onSearch?: (query: string) => void
@@ -83,4 +107,10 @@ export interface SelectProps<T extends string | string[] = string> extends Selec
   name?: string
   error?: boolean
   errorMessage?: string
+}
+
+/** Select 默认 trigger 的清除按钮配置 */
+export interface SelectClearableConfig {
+  /** 自定义清除图标，默认使用 CloseBtn 的叉号 */
+  clearIcon?: ReactNode
 }

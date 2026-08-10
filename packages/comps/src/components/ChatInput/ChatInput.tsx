@@ -2,51 +2,66 @@
 
 import type { LiveWaveAudioProps } from '../LiveWaveAudio'
 import type { UploaderRef } from '../Uploader'
-import type { ChatInputProps, PromptCategory } from './types'
-import { formatDuration } from '@jl-org/tool'
-import { useLatestCallback } from 'hooks'
+import type { ChatInputMotionConfig, ChatInputProps, PromptCategory } from './types'
+import { deepMerge, formatDuration } from '@jl-org/tool'
+import { useComposedRef, useLatestCallback, useStable } from 'hooks'
 import { motion } from 'motion/react'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { forwardRef, memo, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
 import { useT } from '../../i18n'
 import { LiveWaveAudio, VoiceRecorderPanel } from '../LiveWaveAudio'
 import { Message } from '../Message'
 import { Uploader } from '../Uploader'
-import { AutoCompletePanel, BottomBar, ChatInputArea, HistoryPanel, PromptPanel, VoiceControlButton } from './components'
-
+import {
+  AutoCompletePanel,
+  BottomBar,
+  ChatInputArea,
+  HistoryPanel,
+  PromptPanel,
+  VoiceControlButton,
+} from './components'
 import { PROMPT_CATEGORIES } from './constants'
+
+import { useChatInputEnterKey } from './controllers'
+import { resolveChatInputFeatures } from './features/panels'
+import { useShortcutActions } from './features/shortcuts'
 import {
   useAutoComplete,
   useInputHistory,
   useInteractionHandlers,
   usePanelManager,
   usePromptTemplates,
-  useShortcuts,
   useValueManager,
   useVoiceRecorder,
 } from './hooks'
+import { resolveChatInputShortcuts } from './shortcuts'
 
-const MOTION_INITIAL = { opacity: 0, y: 20 }
-const MOTION_ANIMATE = { opacity: 1, y: 0 }
-const MOTION_EXIT = { opacity: 0, y: -20 }
-const MOTION_TRANSITION = { duration: 0.3 }
+const DEFAULT_MOTION_CONFIG = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -20 },
+  transition: { duration: 0.3 },
+} satisfies Required<ChatInputMotionConfig>
 
 /**
  * ChatInput 统一组件
  * 支持提示词模板、输入历史、自动补全、文件上传等功能
  */
-export const ChatInput = memo<ChatInputProps>((props) => {
+const InnerChatInput = forwardRef<HTMLTextAreaElement, ChatInputProps>((props, ref) => {
   const {
     value,
     placeholder,
     disabled = false,
     loading = false,
+    allowEmptySubmit = false,
+    shortcuts,
+    features,
     disableInput,
     disableVoice,
-    enablePromptTemplates = true,
-    enableHistory = true,
+    enablePromptTemplates,
+    enableHistory,
     enableHelper = true,
-    enableAutoComplete = true,
+    enableAutoComplete,
     customTemplates,
     maxHistoryCount = 50,
     enableUploader = true,
@@ -58,9 +73,16 @@ export const ChatInput = memo<ChatInputProps>((props) => {
     enableVoiceRecorder = false,
     onVoiceModeChange,
     voiceModes,
+    topContent,
     renderActions,
+    renderVoicePanel,
+    renderVoiceControl,
+    autoResize = true,
+    minRows = 1,
+    maxRows = 8,
     containerClassName,
     className,
+    motionConfig,
     style,
     onChange,
     onSubmit,
@@ -86,7 +108,7 @@ export const ChatInput = memo<ChatInputProps>((props) => {
 
   /** Refs */
   const containerRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { elementRef: textareaRef, setRef: setTextareaRef } = useComposedRef<HTMLTextAreaElement>({ ref })
   const chatInputAreaRef = useRef<HTMLDivElement>(null)
   /** 拖拽区域：覆盖「预览栏 + 输入区」整块，避免拖到预览栏无法识别 */
   const dragAreaRef = useRef<HTMLDivElement>(null)
@@ -95,9 +117,6 @@ export const ChatInput = memo<ChatInputProps>((props) => {
   /** 点击底部回形针 → 触发上提的单实例 Uploader 选文件 */
   const handleUploaderClick = useLatestCallback(() => uploaderRef.current?.click())
 
-  /** 稳定化的模板引用 */
-  const stableTemplates = useMemo(() => customTemplates || [], [customTemplates])
-
   /** 自定义 Hooks */
   const { actualValue, handleChangeVal } = useValueManager(value, onChange)
 
@@ -105,16 +124,46 @@ export const ChatInput = memo<ChatInputProps>((props) => {
   const textBeforeVoiceRef = useRef('')
 
   const t = useT()
+  const stableShortcuts = useStable(shortcuts)
+  const resolvedShortcuts = useMemo(() => resolveChatInputShortcuts(stableShortcuts), [stableShortcuts])
+  const stableFeatures = useStable(features)
+  const stableTemplates = useStable(customTemplates)
+  const stableMotionConfig = useStable(motionConfig)
+  const resolvedMotionConfig = useMemo(() =>
+    deepMerge<Required<ChatInputMotionConfig>>(DEFAULT_MOTION_CONFIG, stableMotionConfig ?? {}), [stableMotionConfig])
+
+  const resolvedFeatures = useMemo(() =>
+    resolveChatInputFeatures({
+      features: stableFeatures,
+      enablePromptTemplates,
+      enableHistory,
+      enableAutoComplete,
+      customTemplates: stableTemplates,
+      maxHistoryCount,
+    }), [
+    stableFeatures,
+    enablePromptTemplates,
+    enableHistory,
+    enableAutoComplete,
+    stableTemplates,
+    maxHistoryCount,
+  ])
 
   /** 文件变更：转成 base64 列表交给外部 */
-  const handleFilesChange = useLatestCallback((files: { base64: string }[]) => onFilesChange?.(files.map(item => item.base64)))
+  const handleFilesChange = useLatestCallback((files: { base64: string }[]) =>
+    onFilesChange?.(files.map(item => item.base64)),
+  )
   /** 数组级去重：已在列表中的图片（base64 相同）直接过滤掉，交给 Uploader 的 shouldFilterOut */
   const filterDuplicate = useLatestCallback((_file: File, base64: string) => uploadedFiles.includes(base64))
   /** 被去重过滤掉的图片：提示用户 */
-  const handleFiltered = useLatestCallback((files: { base64: string }[]) => Message.warning(t('chatInput.upload.duplicateRemoved', { count: files.length })))
+  const handleFiltered = useLatestCallback((files: { base64: string }[]) =>
+    Message.warning(t('chatInput.upload.duplicateRemoved', { count: files.length })),
+  )
 
   /** 超限提示 */
-  const handleExceedCount = useLatestCallback(() => Message.warning(t('chatInput.upload.exceedCount', { count: maxCount ?? 0 })))
+  const handleExceedCount = useLatestCallback(() =>
+    Message.warning(t('chatInput.upload.exceedCount', { count: maxCount ?? 0 })),
+  )
   const handleExceedSize = useLatestCallback(() => Message.warning(t('chatInput.upload.exceedSize')))
   const handleExceedPixels = useLatestCallback(() => Message.warning(t('chatInput.upload.exceedPixels')))
 
@@ -130,9 +179,24 @@ export const ChatInput = memo<ChatInputProps>((props) => {
     handleShowHistoryPanelToggle,
   } = usePanelManager(containerRef)
 
-  const promptTemplatesHook = usePromptTemplates(stableTemplates)
-  const inputHistoryHook = useInputHistory(maxHistoryCount)
-  const autoCompleteHook = useAutoComplete(promptTemplatesHook.templates, inputHistoryHook.histories, enableAutoComplete)
+  const promptTemplatesHook = usePromptTemplates({
+    enabled: resolvedFeatures.promptTemplates.enabled,
+    templates: resolvedFeatures.promptTemplates.templates,
+    includeDefaults: resolvedFeatures.promptTemplates.includeDefaults,
+    adapter: resolvedFeatures.promptTemplates.adapter,
+  })
+  const inputHistoryHook = useInputHistory({
+    enabled: resolvedFeatures.history.enabled,
+    maxCount: resolvedFeatures.history.maxCount,
+    items: resolvedFeatures.history.items,
+    adapter: resolvedFeatures.history.adapter,
+  })
+  const autoCompleteHook = useAutoComplete({
+    enabled: resolvedFeatures.autocomplete.enabled,
+    templates: promptTemplatesHook.templates,
+    histories: inputHistoryHook.histories,
+    adapter: resolvedFeatures.autocomplete.adapter,
+  })
 
   const {
     handleInputChange,
@@ -143,8 +207,9 @@ export const ChatInput = memo<ChatInputProps>((props) => {
   } = useInteractionHandlers({
     loading,
     disabled,
-    enableHistory,
-    enableAutoComplete,
+    allowEmptySubmit,
+    enableHistory: resolvedFeatures.history.enabled,
+    enableAutoComplete: resolvedFeatures.autocomplete.enabled,
     onSubmit,
     onTemplateSelect,
     onHistorySelect,
@@ -178,7 +243,6 @@ export const ChatInput = memo<ChatInputProps>((props) => {
     handleVoicePlayToggle,
     handleWaveformError,
     handleRecordingFinish,
-    handleStreamReady,
     handleStreamEnd,
   } = useVoiceRecorder({
     enableVoiceRecorder,
@@ -198,33 +262,56 @@ export const ChatInput = memo<ChatInputProps>((props) => {
   })
 
   /** 包装 handleVoiceButtonClick，在开始语音转文本时记录当前输入值 */
-  const handleVoiceButtonClickWrapper = useCallback(() => {
+  const handleVoiceButtonClickWrapper = useLatestCallback(() => {
     /** 如果当前是 text 模式且即将开始录音，记录当前输入值 */
     if (voiceMode === 'text' && voiceStatus !== 'recording') {
       textBeforeVoiceRef.current = actualValue
     }
     handleVoiceButtonClick()
-  }, [voiceMode, voiceStatus, actualValue, handleVoiceButtonClick])
-
-  useShortcuts({
-    enablePromptTemplates,
-    setShowPromptPanel,
-    setPromptHighlightIndex,
-    enableHistory,
-    setShowHistoryPanel,
-    setHistoryHighlightIndex,
-    setShowAutoComplete,
-    handleSubmit,
-    setSearchQuery,
-    textareaRef,
   })
 
-  const handleVoiceDownload = () => {
+  useShortcutActions({
+    shortcuts: resolvedShortcuts,
+    promptEnabled: resolvedFeatures.promptTemplates.enabled,
+    historyEnabled: resolvedFeatures.history.enabled,
+    openPrompt: () => {
+      setShowPromptPanel(true)
+      setShowHistoryPanel(false)
+      setShowAutoComplete(false)
+      setSearchQuery('')
+      setPromptHighlightIndex(0)
+    },
+    openHistory: () => {
+      setShowHistoryPanel(true)
+      setShowPromptPanel(false)
+      setShowAutoComplete(false)
+      setSearchQuery('')
+      setHistoryHighlightIndex(0)
+    },
+  })
+
+  const autoCompleteVisible = resolvedFeatures.autocomplete.enabled
+    && showAutoComplete
+    && !showPromptPanel
+    && !showHistoryPanel
+  const selectedAutoCompleteSuggestion = autoCompleteHook.getSelectedSuggestion()
+  const handlePressEnter = useChatInputEnterKey({
+    textareaRef,
+    value: actualValue,
+    shortcuts: resolvedShortcuts,
+    autoCompleteVisible,
+    selectedSuggestion: selectedAutoCompleteSuggestion,
+    onChange: handleChangeVal,
+    onSubmit: handleSubmit,
+    onAutoCompleteSelect: handleAutoCompleteSelect,
+  })
+
+  const handleVoiceDownload = useLatestCallback(() => {
     const recorder = LiveWaveAudioRef.current?.getRecorder()
     if (recorder) {
       recorder.download()
     }
-  }
+  })
 
   /**
    * 计算 LiveWaveAudio 组件的 state
@@ -246,17 +333,32 @@ export const ChatInput = memo<ChatInputProps>((props) => {
   const isInputLockedByVoice = (!disableVoice) && (voiceStatus === 'recording' || voiceStatus === 'processing')
   const voiceDurationLabel = useMemo(() => formatDuration(recordingDuration), [recordingDuration])
   const voiceControlDisabled = disabled || loading || !!disableVoice
+  const customVoiceControlNode = enableVoiceRecorder
+    ? renderVoiceControl?.({
+        status: voiceStatus,
+        disabled: voiceControlDisabled,
+        panelVisible: isVoicePanelVisible,
+        onClick: handleVoiceButtonClickWrapper,
+        voiceMode,
+        onVoiceModeChange: setVoiceMode,
+        availableModes: voiceModes,
+        DefaultVoiceControl: VoiceControlButton,
+      })
+    : undefined
+
   const voiceControlNode = enableVoiceRecorder
-    ? (
-        <VoiceControlButton
-          status={ voiceStatus }
-          disabled={ voiceControlDisabled }
-          onClick={ handleVoiceButtonClickWrapper }
-          voiceMode={ voiceMode }
-          onVoiceModeChange={ setVoiceMode }
-          availableModes={ voiceModes }
-        />
-      )
+    ? customVoiceControlNode !== undefined
+      ? customVoiceControlNode
+      : (
+          <VoiceControlButton
+            status={ voiceStatus }
+            disabled={ voiceControlDisabled }
+            onClick={ handleVoiceButtonClickWrapper }
+            voiceMode={ voiceMode }
+            onVoiceModeChange={ setVoiceMode }
+            availableModes={ voiceModes }
+          />
+        )
     : null
 
   /** 主输入区域：文本框 + 语音面板 + 底部栏；启用上传时由下方单实例 Uploader 包裹 */
@@ -264,14 +366,21 @@ export const ChatInput = memo<ChatInputProps>((props) => {
     <div
       ref={ chatInputAreaRef }
       className={ cn(
-        'relative flex h-32 flex-col rounded-3xl',
+        'relative flex flex-col rounded-3xl',
+        /** 非自动高度时维持固定高度，由 textarea flex-1 撑满 */
+        !autoResize && 'h-32',
         enableUploader && !disabled && 'cursor-text',
         className,
       ) }
     >
+      { topContent }
+
       <ChatInputArea
-        textareaRef={ textareaRef }
+        textareaRef={ setTextareaRef }
         value={ actualValue }
+        autoResize={ autoResize }
+        minRows={ minRows }
+        maxRows={ maxRows }
         onChange={ handleInputChange }
         onFocus={ () => {
           setIsFocused(true)
@@ -281,31 +390,30 @@ export const ChatInput = memo<ChatInputProps>((props) => {
           setIsFocused(false)
           onBlur?.()
         } }
-        onPressEnter={ (e) => {
-          /** 阻止事件冒泡，允许普通Enter键换行 */
-          e.stopPropagation()
-        } }
+        onPressEnter={ handlePressEnter }
         placeholder={ placeholder }
         disabled={ disabled || !!disableInput || isInputLockedByVoice }
       />
 
       { enableVoiceRecorder && !disableVoice && (
         <VoiceRecorderPanel
+          renderPanel={ renderVoicePanel }
           visible={ isVoicePanelVisible }
           status={ voiceStatus }
           hasRecording={ Boolean(voiceRecording) }
           durationLabel={ voiceDurationLabel }
           voiceMode={ voiceMode }
-          waveform={ <LiveWaveAudio
-            ref={ LiveWaveAudioRef }
-            state={ getWaveformState() }
-            height={ 96 }
-            className="h-24 w-full rounded-2xl bg-background/60 dark:bg-backgroundMuted/40"
-            onError={ handleWaveformError }
-            onStreamReady={ handleStreamReady }
-            onStreamEnd={ handleStreamEnd }
-            onRecordingFinish={ handleRecordingFinish }
-          /> }
+          waveform={
+            <LiveWaveAudio
+              ref={ LiveWaveAudioRef }
+              state={ getWaveformState() }
+              height={ 96 }
+              className="h-24 w-full rounded-2xl bg-background/60 dark:bg-backgroundMuted/40"
+              onError={ handleWaveformError }
+              onStreamEnd={ handleStreamEnd }
+              onRecordingFinish={ handleRecordingFinish }
+            />
+          }
           isPlaying={ isPlayingVoice }
           errorMessage={ isVoicePanelVisible
             ? voiceError
@@ -323,14 +431,16 @@ export const ChatInput = memo<ChatInputProps>((props) => {
         />
       ) }
 
-      {/* 底部控制区域 */ }
+      { /* 底部控制区域 */ }
       <BottomBar
-        enablePromptTemplates={ enablePromptTemplates }
-        enableHistory={ enableHistory }
+        enablePromptTemplates={ resolvedFeatures.promptTemplates.enabled }
+        enableHistory={ resolvedFeatures.history.enabled }
         enableUploader={ enableUploader }
         enableHelper={ enableHelper }
         loading={ loading }
         disabled={ disabled || isInputLockedByVoice }
+        allowEmptySubmit={ allowEmptySubmit }
+        shortcuts={ resolvedShortcuts }
         actualValue={ actualValue }
         showPromptPanel={ showPromptPanel }
         showHistoryPanel={ showHistoryPanel }
@@ -338,10 +448,11 @@ export const ChatInput = memo<ChatInputProps>((props) => {
         chatInputAreaRef={ chatInputAreaRef }
         onFilesChange={ handleFilesChange }
         onFileRemove={ onFileRemove }
-        onSubmit={ () => handleSubmit({
-          images: uploadedFiles,
-          voice: voiceRecording || undefined,
-        }) }
+        onSubmit={ () =>
+          handleSubmit({
+            images: uploadedFiles,
+            voice: voiceRecording || undefined,
+          }) }
         onShowPromptPanelToggle={ handleShowPromptPanelToggle }
         onShowHistoryPanelToggle={ handleShowHistoryPanelToggle }
         onUploaderClick={ handleUploaderClick }
@@ -351,114 +462,111 @@ export const ChatInput = memo<ChatInputProps>((props) => {
     </div>
   )
 
-  return (<>
-    <motion.div
-      ref={ containerRef }
-      initial={ MOTION_INITIAL }
-      animate={ MOTION_ANIMATE }
-      exit={ MOTION_EXIT }
-      transition={ MOTION_TRANSITION }
-      className={ cn(
-        'relative w-full mx-auto bg-background border overflow-hidden rounded-3xl hover:border-border3',
-        'transition-all duration-100 shrink-0',
-        isFocused
-          ? 'border-border3'
-          : 'border-border',
-        containerClassName,
-      ) }
-      style={ style }
-    >
-      { enableUploader
-        ? (
-            <Uploader
-              ref={ uploaderRef }
-              mode="card"
-              multiple
-              accept={ accept }
-              distinct
-              previewImgs={ uploadedFiles }
-              maxCount={ maxCount }
-              maxSize={ maxSize }
-              maxPixels={ maxPixels }
-              onChange={ handleFilesChange }
-              onRemove={ onFileRemove }
-              shouldFilterOut={ filterDuplicate }
-              onFiltered={ handleFiltered }
-              onExceedCount={ handleExceedCount }
-              onExceedSize={ handleExceedSize }
-              onExceedPixels={ handleExceedPixels }
-              pasteEls={ [textareaRef] }
-              dragAreaEl={ dragAreaRef }
-              renderUploadArea={ ({ renderPreviewList }) => (
+  return (
+    <>
+      <motion.div
+        ref={ containerRef }
+        initial={ resolvedMotionConfig.initial }
+        animate={ resolvedMotionConfig.animate }
+        exit={ resolvedMotionConfig.exit }
+        transition={ resolvedMotionConfig.transition }
+        className={ cn(
+          'relative w-full mx-auto bg-background border overflow-hidden rounded-3xl hover:border-border2',
+          'transition-all duration-100 shrink-0',
+          /** 聚焦仅做细微变色 border → border2，与 Textarea 一致，保持素雅（不用对比强烈的 border3） */
+          isFocused
+            ? 'border-border2'
+            : 'border-border',
+          containerClassName,
+        ) }
+        style={ style }
+      >
+        { enableUploader
+          ? (
+              <Uploader
+                ref={ uploaderRef }
+                mode="card"
+                multiple
+                accept={ accept }
+                distinct
+                previewImgs={ uploadedFiles }
+                maxCount={ maxCount }
+                maxSize={ maxSize }
+                maxPixels={ maxPixels }
+                onChange={ handleFilesChange }
+                onRemove={ onFileRemove }
+                shouldFilterOut={ filterDuplicate }
+                onFiltered={ handleFiltered }
+                onExceedCount={ handleExceedCount }
+                onExceedSize={ handleExceedSize }
+                onExceedPixels={ handleExceedPixels }
+                pasteEls={ [textareaRef] }
+                dragAreaEl={ dragAreaRef }
+                renderUploadArea={ ({ renderPreviewList }) => (
                 /** 拖拽区域覆盖「预览栏 + 输入区」整块；relative 供拖拽高亮覆盖层定位 */
-                <div ref={ dragAreaRef } className="relative flex flex-col">
-                  {/* 顶部一排预览（仅有图时渲染），由 Uploader 的 PreviewList 接管 */ }
-                  { uploadedFiles.length > 0 && renderPreviewList({
-                    className: 'flex-nowrap gap-2 px-3 pt-3 pb-1 mt-0 scrollbar-thin scrollbar-thumb-border3',
-                    previewConfig: { width: 56, height: 56, renderAddTrigger: () => null },
-                  }) }
-                  { inputArea }
-                </div>
-              ) }
-            />
-          )
-        : inputArea }
-    </motion.div>
+                  <div ref={ dragAreaRef } className="relative flex flex-col">
+                    { /* 顶部一排预览（仅有图时渲染），由 Uploader 的 PreviewList 接管 */ }
+                    { uploadedFiles.length > 0 && renderPreviewList({
+                      className: 'flex-nowrap gap-2 px-3 pt-3 pb-1 mt-0 scrollbar-thin scrollbar-thumb-border3',
+                      previewConfig: { width: 56, height: 56, renderAddTrigger: () => null },
+                    }) }
+                    { inputArea }
+                  </div>
+                ) }
+              />
+            )
+          : inputArea }
+      </motion.div>
 
-    { !isVoicePanelVisible && voiceError && (
-      <div className="mt-3 rounded-xl border border-danger/40 bg-dangerBg/20 px-3 py-2 text-xs text-danger">
-        { voiceError }
-      </div>
-    ) }
+      { !isVoicePanelVisible && voiceError && (
+        <div className="mt-3 rounded-xl border border-danger/40 bg-dangerBg/20 px-3 py-2 text-xs text-danger">
+          { voiceError }
+        </div>
+      ) }
 
-    {/* 提示词面板 */ }
-    <PromptPanel
-      visible={ showPromptPanel }
-      searchQuery={ searchQuery }
-      selectedCategory={ selectedCategory }
-      highlightedIndex={ promptHighlightIndex }
-      templates={ selectedCategory
-        ? promptTemplatesHook.getTemplatesByCategory(selectedCategory)
-        : promptTemplatesHook.searchTemplates(searchQuery) }
-      categories={ PROMPT_CATEGORIES }
-      onTemplateSelect={ handleTemplateSelect }
-      onCategorySelect={ setSelectedCategory }
-      onClose={ () => setShowPromptPanel(false) }
-      onHighlightChange={ setPromptHighlightIndex }
-    />
+      { /* 提示词面板 */ }
+      <PromptPanel
+        visible={ resolvedFeatures.promptTemplates.enabled && showPromptPanel }
+        searchQuery={ searchQuery }
+        selectedCategory={ selectedCategory }
+        highlightedIndex={ promptHighlightIndex }
+        templates={ selectedCategory
+          ? promptTemplatesHook.getTemplatesByCategory(selectedCategory)
+          : promptTemplatesHook.searchTemplates(searchQuery) }
+        categories={ PROMPT_CATEGORIES }
+        onTemplateSelect={ handleTemplateSelect }
+        onCategorySelect={ setSelectedCategory }
+        onClose={ () => setShowPromptPanel(false) }
+        onHighlightChange={ setPromptHighlightIndex }
+      />
 
-    {/* 历史记录面板 */ }
-    <HistoryPanel
-      visible={ showHistoryPanel }
-      searchQuery={ searchQuery }
-      highlightedIndex={ historyHighlightIndex }
-      histories={ inputHistoryHook.searchHistory(searchQuery) }
-      onHistorySelect={ handleHistorySelect }
-      onHistoryDelete={ inputHistoryHook.deleteHistory }
-      onClearAll={ inputHistoryHook.clearAllHistory }
-      onClose={ () => setShowHistoryPanel(false) }
-      onHighlightChange={ setHistoryHighlightIndex }
-    />
+      { /* 历史记录面板 */ }
+      <HistoryPanel
+        visible={ resolvedFeatures.history.enabled && showHistoryPanel }
+        searchQuery={ searchQuery }
+        highlightedIndex={ historyHighlightIndex }
+        histories={ inputHistoryHook.searchHistory(searchQuery) }
+        onHistorySelect={ handleHistorySelect }
+        onHistoryDelete={ inputHistoryHook.deleteHistory }
+        onClearAll={ inputHistoryHook.clearAllHistory }
+        onClose={ () => setShowHistoryPanel(false) }
+        onHighlightChange={ setHistoryHighlightIndex }
+      />
 
-    {/* 自动补全面板 */ }
-    <AutoCompletePanel
-      visible={ showAutoComplete && !showPromptPanel && !showHistoryPanel }
-      suggestions={ autoCompleteHook.suggestions }
-      selectedIndex={ autoCompleteHook.suggestions.findIndex(s => s === autoCompleteHook.getSelectedSuggestion()) }
-      inputElement={ textareaRef.current }
-      followCursor
-      onSuggestionSelect={ handleAutoCompleteSelect }
-      onClose={ () => setShowAutoComplete(false) }
-      onSelectionChange={ (index) => {
-        if (index >= 0 && index < autoCompleteHook.suggestions.length) {
-          autoCompleteHook.selectNext()
-        }
-        else {
-          autoCompleteHook.selectPrevious()
-        }
-      } }
-    />
-  </>)
+      { /* 自动补全面板 */ }
+      <AutoCompletePanel
+        visible={ autoCompleteVisible }
+        suggestions={ autoCompleteHook.suggestions }
+        selectedIndex={ autoCompleteHook.suggestions.findIndex(s => s === autoCompleteHook.getSelectedSuggestion()) }
+        inputElement={ textareaRef.current }
+        followCursor
+        onSuggestionSelect={ handleAutoCompleteSelect }
+        onClose={ () => setShowAutoComplete(false) }
+        onSelectionChange={ autoCompleteHook.setSelectedIndex }
+      />
+    </>
+  )
 })
 
+export const ChatInput = memo(InnerChatInput)
 ChatInput.displayName = 'ChatInput'

@@ -1,11 +1,16 @@
 'use client'
 
+import type { HTMLMotionProps } from 'motion/react'
 import type { ChangeEvent } from 'react'
 import type { Rounded, Size } from '../../types'
-import { forwardRef, memo, useCallback, useState } from 'react'
+import { useLatestCallback } from 'hooks'
+import { motion } from 'motion/react'
+import { forwardRef, memo, useCallback, useId, useState } from 'react'
 import { cn } from 'utils'
 import { getRoundedStyles } from '../../utils/roundedUtils'
 import { useFormField } from '../Form'
+
+const DEFAULT_UNDERLINE_TRANSITION = { duration: 0.5 } satisfies HTMLMotionProps<'div'>['transition']
 
 const InnerInput = forwardRef<HTMLInputElement, InputProps>((
   props,
@@ -14,11 +19,16 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
   const {
     style,
     className,
+    wrapperClassName,
     containerClassName,
     size = 'md' as Size,
     label,
     labelClassName,
     labelPosition = 'top',
+    variant = 'default',
+    underlineTransition = DEFAULT_UNDERLINE_TRANSITION,
+    bordered = true,
+    shadowed = false,
     disabled = false,
     readOnly = false,
     disabledClass,
@@ -31,7 +41,9 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
     errorMessage,
     required = false,
     prefix,
+    prefixClassName,
     suffix,
+    suffixClassName,
     rounded = 'lg',
     onFocus,
     onBlur,
@@ -42,6 +54,7 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
     defaultValue,
     type,
     name,
+    id,
     ...rest
   } = props
 
@@ -63,6 +76,12 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
 
   const [isFocused, setIsFocused] = useState(false)
 
+  /** 用于 label/错误信息与 input 的无障碍关联，外部传入 id 优先 */
+  const reactId = useId()
+  const inputId = id ?? reactId
+  const errorMessageId = `${inputId}-error`
+  const hasError = !!actualError && !!actualErrorMessage
+
   /** 处理输入变化 */
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
@@ -72,23 +91,23 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
     [handleChangeVal],
   )
 
-  const handleFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+  const handleFocus = useLatestCallback((e: React.FocusEvent<HTMLInputElement>) => {
     setIsFocused(true)
     onFocus?.(e)
-  }, [onFocus])
+  })
 
-  const handleBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+  const handleBlur = useLatestCallback((e: React.FocusEvent<HTMLInputElement>) => {
     setIsFocused(false)
     handleFieldBlur()
     onBlur?.(e)
-  }, [onBlur, handleFieldBlur])
+  })
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useLatestCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     onKeyDown?.(e)
     if (e.key === 'Enter' && onPressEnter) {
       onPressEnter(e)
     }
-  }, [onKeyDown, onPressEnter])
+  })
 
   const sizeClasses = {
     sm: 'h-8 text-sm',
@@ -116,6 +135,7 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
   const sizeStyles = getSizeStyles()
 
   const { className: roundedClass, style: roundedStyle } = getRoundedStyles(rounded)
+  const isUnderlined = variant === 'underlined'
 
   const inputClasses = cn(
     'w-full outline-hidden bg-transparent text-text',
@@ -128,16 +148,21 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
   )
 
   const containerClasses = cn(
-    'relative w-full flex items-center border',
-    roundedClass,
+    'relative w-full flex items-center',
+    !isUnderlined && bordered && 'border',
+    !isUnderlined && roundedClass,
     sizeStyles.className,
     {
-      'border-border bg-background': !actualError && !disabled,
-      'border-danger focus-within:border-danger focus-within:ring-1 focus-within:ring-danger/20': actualError && !disabled,
-      'border-border bg-background2 text-textDisabled cursor-not-allowed': disabled,
-      'border-border2': isFocused && !actualError && !disabled,
-      'hover:border-border2': !isFocused && !actualError && !disabled,
+      'bg-background': !isUnderlined && !actualError && !disabled,
+      'border-border': !isUnderlined && bordered && (!actualError || disabled),
+      'focus-within:ring-1 focus-within:ring-danger/20': !isUnderlined && actualError && !disabled,
+      'border-danger': !isUnderlined && bordered && actualError && !disabled,
+      'bg-background2 text-textDisabled cursor-not-allowed': !isUnderlined && disabled,
+      'border-border2': !isUnderlined && bordered && isFocused && !actualError && !disabled,
+      'hover:border-border2': !isUnderlined && bordered && !isFocused && !actualError && !disabled,
+      'cursor-not-allowed': isUnderlined && disabled,
     },
+    shadowed && 'shadow-card',
     disabled && disabledContainerClass,
     actualError && errorContainerClass,
     isFocused && focusContainerClass,
@@ -145,14 +170,15 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
   )
 
   const renderInput = () => (
-    <div className={ containerClasses } style={ { ...sizeStyles.style, ...roundedStyle } }>
+    <div className={ containerClasses } style={ { ...sizeStyles.style, ...(!isUnderlined && roundedStyle) } }>
       { prefix && (
-        <div className="flex items-center justify-center pl-3 text-text2">
+        <div className={ cn('flex items-center justify-center pl-3 text-text2', prefixClassName) }>
           { prefix }
         </div>
       ) }
       <input
         ref={ ref }
+        id={ inputId }
         type={ type }
         value={ actualValue }
         className={ cn(
@@ -167,6 +193,14 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
         ) }
         disabled={ disabled }
         readOnly={ readOnly }
+        aria-invalid={ actualError || undefined }
+        aria-required={ required || undefined }
+        aria-errormessage={ hasError
+          ? errorMessageId
+          : undefined }
+        aria-describedby={ hasError
+          ? errorMessageId
+          : undefined }
         onFocus={ handleFocus }
         onBlur={ handleBlur }
         onKeyDown={ handleKeyDown }
@@ -175,9 +209,33 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
         { ...rest }
       />
       { suffix && (
-        <div className="flex items-center justify-center pr-3 text-text2">
+        <div className={ cn('flex items-center justify-center pr-3 text-text2', suffixClassName) }>
           { suffix }
         </div>
+      ) }
+      { isUnderlined && (
+        <>
+          <div
+            className={ cn(
+              'pointer-events-none absolute inset-x-0 bottom-0 h-px',
+              actualError
+                ? 'bg-danger'
+                : 'bg-border',
+            ) }
+          />
+          { !actualError && (
+            <motion.div
+              initial={ false }
+              animate={ {
+                scaleX: isFocused && !disabled
+                  ? 1
+                  : 0,
+              } }
+              transition={ underlineTransition }
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-px origin-left bg-brand"
+            />
+          ) }
+        </>
       ) }
     </div>
   )
@@ -191,10 +249,12 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
           'flex flex-col gap-1': labelPosition === 'top',
           'flex flex-row items-center gap-2': labelPosition === 'left',
         },
+        wrapperClassName,
       ) }
     >
       { label && (
         <label
+          htmlFor={ inputId }
           className={ cn(
             'block text-text',
             {
@@ -206,19 +266,17 @@ const InnerInput = forwardRef<HTMLInputElement, InputProps>((
             },
             labelClassName,
           ) }
-          style={
-            typeof size === 'number'
-              ? { fontSize: `${size * 0.4}px` }
-              : undefined
-          }
+          style={ typeof size === 'number'
+            ? { fontSize: `${size * 0.4}px` }
+            : undefined }
         >
           { label }
           { required && <span className="ml-1 text-rose-500">*</span> }
         </label>
       ) }
       { renderInput() }
-      { actualError && actualErrorMessage && (
-        <div className="mt-1 text-sm text-rose-500">
+      { hasError && (
+        <div id={ errorMessageId } className="mt-1 text-sm text-rose-500">
           { actualErrorMessage }
         </div>
       ) }
@@ -230,12 +288,16 @@ InnerInput.displayName = 'Input'
 export const Input = memo(InnerInput) as typeof InnerInput
 
 export type InputProps
-  = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value' | 'size' | 'prefix'>
+  = & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'value' | 'size' | 'prefix'>
     & {
     /**
      * 容器类名
      */
       containerClassName?: string
+      /**
+       * 最外层容器类名
+       */
+      wrapperClassName?: string
       /**
        * label 类名（用于自定义 label 样式）
        */
@@ -279,6 +341,25 @@ export type InputProps
        */
       labelPosition?: 'top' | 'left'
       /**
+       * 输入框视觉样式
+       * @default 'default'
+       */
+      variant?: 'default' | 'underlined'
+      /**
+       * 下划线变体的聚焦动画配置，仅在 variant 为 underlined 时生效
+       */
+      underlineTransition?: HTMLMotionProps<'div'>['transition']
+      /**
+       * 是否显示方框边框；下划线变体始终保留底线
+       * @default true
+       */
+      bordered?: boolean
+      /**
+       * 是否显示阴影
+       * @default false
+       */
+      shadowed?: boolean
+      /**
        * 是否禁用
        * @default false
        */
@@ -307,9 +388,17 @@ export type InputProps
        */
       prefix?: React.ReactNode
       /**
+       * 前缀容器类名
+       */
+      prefixClassName?: string
+      /**
        * 后缀内容
        */
       suffix?: React.ReactNode
+      /**
+       * 后缀容器类名
+       */
+      suffixClassName?: string
       /**
        * 圆角大小
        * @default 'md'

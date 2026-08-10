@@ -26,6 +26,10 @@
     "lint": "eslint ./src --fix"
   },
   "dependencies": {
-    "@jl-org/http": "^1.2.0"
+    "@jl-org/http": "^1.2.5",
+    "@jl-org/tool": "5.0.0"
+  },
+  "devDependencies": {
+    "@jl-org/ts-tool": "0.0.8"
   }
 }

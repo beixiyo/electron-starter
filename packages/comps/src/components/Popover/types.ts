@@ -1,7 +1,11 @@
 import type { Variants } from 'motion/react'
+import type { FloatingArrowConfig } from '../FloatingArrow'
 
 /** Popover 显示位置 */
 export type PopoverPosition = 'top' | 'bottom' | 'left' | 'right'
+
+/** Popover 交叉轴对齐方式 */
+export type PopoverAlign = 'start' | 'center' | 'end'
 
 /** Popover 触发方式 */
 export type PopoverTrigger = 'hover' | 'click' | 'command'
@@ -21,6 +25,10 @@ export interface PopoverProps {
    */
   contentClassName?: string
   /**
+   * 内容元素的样式
+   */
+  contentStyle?: React.CSSProperties
+  /**
    * 触发器元素的样式
    */
   style?: React.CSSProperties
@@ -37,6 +45,14 @@ export interface PopoverProps {
    * @default 'top'
    */
   position?: PopoverPosition
+  /**
+   * 交叉轴对齐方式（与 `position` 的垂直方向）：
+   * - `'start'`：与触发器起始边对齐（如 `position='right'` 时子菜单顶部与触发行对齐）
+   * - `'center'`：相对触发器居中
+   * - `'end'`：与触发器结束边对齐
+   * @default 'center'
+   */
+  align?: PopoverAlign
   /**
    * 触发 Popover 的方式
    * - 'hover': 鼠标悬停触发
@@ -74,6 +90,11 @@ export interface PopoverProps {
    * @default true
    */
   clickOutsideToClose?: boolean
+  /**
+   * 浮层打开时触发关闭的键盘按键。
+   * @default ['Escape']
+   */
+  closeKeys?: string[]
   /**
    * Popover 打开时的回调
    */
@@ -113,6 +134,11 @@ export interface PopoverProps {
    * @default light: false, dark: true
    */
   bordered?: boolean
+  /**
+   * 是否显示气泡箭头。传对象时可配置箭头尺寸、偏移和样式
+   * @default true
+   */
+  arrow?: FloatingArrowConfig
 }
 
 /**

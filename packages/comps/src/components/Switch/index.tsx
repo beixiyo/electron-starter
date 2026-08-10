@@ -4,7 +4,7 @@ import type { VariantProps } from 'class-variance-authority'
 import type { SizeStyle } from '../../types'
 import { cva } from 'class-variance-authority'
 import { useLatestCallback } from 'hooks'
-import React, { memo } from 'react'
+import React, { memo, useId } from 'react'
 import { cn } from 'utils'
 import { useFormField } from '../Form'
 
@@ -31,7 +31,7 @@ const trackVariants = cva(
         sm: 'w-9 h-5',
         md: 'w-11 h-6',
         lg: 'w-14 h-7',
-      } as SizeStyle,
+      },
       checked: {
         true: 'bg-blue-600 dark:bg-blue-500',
         false: 'bg-gray-200 dark:bg-gray-700',
@@ -70,29 +70,36 @@ const thumbVariants = cva(
         false: '',
       },
     },
-    compoundVariants: [
-      {
-        size: 'sm',
-        checked: true,
-        class: 'translate-x-4',
-      },
-      {
-        size: 'md',
-        checked: true,
-        class: 'translate-x-5',
-      },
-      {
-        size: 'lg',
-        checked: true,
-        class: 'translate-x-7',
-      },
-    ],
     defaultVariants: {
       size: 'md',
       checked: false,
     },
   },
 )
+
+const switchSizeConfig = {
+  sm: {
+    trackWidth: 36,
+    trackHeight: 20,
+    thumbWidth: 16,
+    thumbHeight: 16,
+    thumbInset: 2,
+  },
+  md: {
+    trackWidth: 44,
+    trackHeight: 24,
+    thumbWidth: 20,
+    thumbHeight: 20,
+    thumbInset: 2,
+  },
+  lg: {
+    trackWidth: 56,
+    trackHeight: 28,
+    thumbWidth: 24,
+    thumbHeight: 24,
+    thumbInset: 2,
+  },
+} satisfies Record<keyof SizeStyle, SwitchSizeConfig>
 
 export const Switch = memo<SwitchProps>((props) => {
   const {
@@ -109,13 +116,25 @@ export const Switch = memo<SwitchProps>((props) => {
     errorMessage,
     icon,
     withGradient = false,
-    iconClassName,
     label,
     labelClassName,
     defaultChecked = false,
+    trackWidth,
+    trackHeight,
+    trackClassName,
+    thumbWidth,
+    thumbHeight,
+    thumbInset,
+    thumbClassName,
+    ariaLabel,
   } = props
   /** 添加内部状态用于非受控模式 */
   const [internalChecked, setInternalChecked] = React.useState(defaultChecked)
+
+  /** 稳定 id，用于 label 关联与 errorMessage 的 aria-describedby */
+  const generatedId = useId()
+  const inputId = name ?? generatedId
+  const errorId = `${inputId}-error`
 
   /** 判断是否为受控组件 */
   const isControlled = checked !== undefined
@@ -140,6 +159,47 @@ export const Switch = memo<SwitchProps>((props) => {
   const realChecked = isControlled
     ? formChecked
     : internalChecked
+  const sizePreset = switchSizeConfig[size ?? 'md']
+  const actualTrackWidth = trackWidth ?? sizePreset.trackWidth
+  const actualTrackHeight = trackHeight ?? sizePreset.trackHeight
+  const actualThumbWidth = thumbWidth ?? sizePreset.thumbWidth
+  const actualThumbHeight = thumbHeight ?? sizePreset.thumbHeight
+  const actualThumbInset = thumbInset ?? sizePreset.thumbInset
+  const checkedThumbOffset = Math.max(
+    actualTrackWidth - actualThumbWidth - actualThumbInset * 2,
+    0,
+  )
+  const hasCustomSize = trackWidth !== undefined
+    || trackHeight !== undefined
+    || thumbWidth !== undefined
+    || thumbHeight !== undefined
+    || thumbInset !== undefined
+
+  const trackStyle = {
+    ...(realChecked && !withGradient
+      ? { background }
+      : undefined),
+    ...(hasCustomSize
+      ? {
+          width: actualTrackWidth,
+          height: actualTrackHeight,
+        }
+      : undefined),
+  } satisfies React.CSSProperties
+
+  const thumbStyle = {
+    transform: realChecked
+      ? `translateX(${checkedThumbOffset}px)`
+      : 'translateX(0)',
+    ...(hasCustomSize
+      ? {
+          top: actualThumbInset,
+          left: actualThumbInset,
+          width: actualThumbWidth,
+          height: actualThumbHeight,
+        }
+      : undefined),
+  } satisfies React.CSSProperties
 
   const handleChange = useLatestCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled)
@@ -171,27 +231,40 @@ export const Switch = memo<SwitchProps>((props) => {
             : 'default',
         })) }>
           <input
+            id={ inputId }
             type="checkbox"
             className="sr-only"
             checked={ realChecked }
             onChange={ handleChange }
             disabled={ disabled }
             name={ name }
+            aria-label={ ariaLabel ?? (typeof label === 'string'
+              ? label
+              : undefined) }
+            aria-describedby={ actualError && actualErrorMessage
+              ? errorId
+              : undefined }
           />
           <div
-            className={ cn(trackVariants({
-              size,
-              checked: realChecked,
-              withGradient,
-            })) }
-            style={ realChecked && !withGradient
-              ? { background }
+            className={ cn(
+              trackVariants({
+                size,
+                checked: realChecked,
+                withGradient,
+              }),
+              trackClassName,
+            ) }
+            style={ Object.keys(trackStyle).length
+              ? trackStyle
               : undefined }
           >
-            <div className={ cn(
-              thumbVariants({ size, checked: realChecked }),
-              iconClassName,
-            ) }>
+            <div
+              className={ cn(
+                thumbVariants({ size, checked: realChecked }),
+                thumbClassName,
+              ) }
+              style={ thumbStyle }
+            >
               { icon && icon }
               { !icon && realChecked && checkedIcon }
               { !icon && !realChecked && uncheckedIcon }
@@ -199,13 +272,22 @@ export const Switch = memo<SwitchProps>((props) => {
           </div>
         </label>
         { label && (
-          <span className={ cn('ml-2 text-sm text-gray-700 dark:text-gray-300', labelClassName) }>
+          <label
+            htmlFor={ inputId }
+            className={ cn(
+              'ml-2 text-sm text-gray-700 dark:text-gray-300',
+              disabled
+                ? 'cursor-not-allowed opacity-50'
+                : 'cursor-pointer',
+              labelClassName,
+            ) }
+          >
             { label }
-          </span>
+          </label>
         ) }
       </div>
       { actualError && actualErrorMessage && (
-        <div className="mt-1 text-sm text-rose-500">
+        <div id={ errorId } className="mt-1 text-sm text-rose-500">
           { actualErrorMessage }
         </div>
       ) }
@@ -213,7 +295,15 @@ export const Switch = memo<SwitchProps>((props) => {
   )
 })
 
-interface SwitchProps extends VariantProps<typeof trackVariants> {
+/**
+ * Switch 组件属性
+ */
+export interface SwitchProps extends VariantProps<typeof trackVariants> {
+  /**
+   * 尺寸
+   * @default 'md'
+   */
+  size?: 'sm' | 'md' | 'lg' | null
   /**
    * 是否选中（受控模式）
    * @default false
@@ -234,7 +324,8 @@ interface SwitchProps extends VariantProps<typeof trackVariants> {
    */
   disabled?: boolean
   /**
-   * 自定义背景颜色
+   * 自定义选中背景，支持颜色或 CSS background 表达式
+   * @default 'rgb(var(--button) / 1)'
    */
   background?: string
   /**
@@ -246,7 +337,8 @@ interface SwitchProps extends VariantProps<typeof trackVariants> {
    */
   uncheckedIcon?: React.ReactElement
   /**
-   * 中心图标（无论选中与否都显示）
+   * 中心图标（无论选中与否都显示）。
+   * 优先级高于 checkedIcon / uncheckedIcon：传入 icon 后将忽略后两者
    */
   icon?: React.ReactElement
   /**
@@ -272,9 +364,34 @@ interface SwitchProps extends VariantProps<typeof trackVariants> {
    */
   errorMessage?: string
   /**
-   * 开关按钮自定义类名
+   * 轨道宽度，单位 px
    */
-  iconClassName?: string
+  trackWidth?: number
+  /**
+   * 轨道高度，单位 px
+   */
+  trackHeight?: number
+  /**
+   * 轨道自定义类名
+   */
+  trackClassName?: string
+  /**
+   * 滑块宽度，单位 px
+   */
+  thumbWidth?: number
+  /**
+   * 滑块高度，单位 px
+   */
+  thumbHeight?: number
+  /**
+   * 滑块距离轨道边缘的内缩距离，单位 px
+   * @default 2
+   */
+  thumbInset?: number
+  /**
+   * 滑块自定义类名
+   */
+  thumbClassName?: string
   /**
    * 开关标签文本
    */
@@ -283,6 +400,18 @@ interface SwitchProps extends VariantProps<typeof trackVariants> {
    * 标签类名
    */
   labelClassName?: string
+  /**
+   * 无障碍标签。未传时若 label 为字符串会自动用作 aria-label
+   */
+  ariaLabel?: string
 }
 
 Switch.displayName = 'Switch'
+
+type SwitchSizeConfig = {
+  trackWidth: number
+  trackHeight: number
+  thumbWidth: number
+  thumbHeight: number
+  thumbInset: number
+}

@@ -1,10 +1,11 @@
 import { HtmlPreview } from '.'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { echartsHtml, sampleHtml } from './test.data'
 
-export default function HtmlPreviewTest() {
+function HtmlPreviewTest() {
   return (
-    <div className="relative h-screen overflow-auto p-8 space-y-8 dark:bg-black">
+    <div className="relative h-screen overflow-auto p-8 space-y-8 bg-background text-text">
       <ThemeToggle />
 
       <HtmlPreview
@@ -18,6 +19,10 @@ export default function HtmlPreviewTest() {
         title="可拖动的图表预览"
         initialPosition={ { x: 100, y: 100 } }
       />
+
+      <GithubSourceLink />
     </div>
   )
 }
+
+export default HtmlPreviewTest

@@ -3,10 +3,11 @@
 import { useState } from 'react'
 import { PhoneCarousel } from '.'
 import { Button } from '../Button'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { Slider } from '../Slider'
 import { ThemeToggle } from '../ThemeToggle'
 
-export default function Page() {
+function Page() {
   const [showPreview, setShowPreview] = useState(true)
   const [scale, setScale] = useState(1)
   const imgs = Array.from({ length: 5 }, (_, i) => `https://picsum.photos/id/${i}/600/400`)
@@ -23,19 +24,20 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-gray-100 dark:bg-gray-900">
-      <div className="fixed right-0 top-0 z-50 flex gap-4 p-4">
+    <div className="min-h-screen overflow-hidden bg-background text-text">
+      <div className="fixed right-0 top-0 z-50 flex items-center gap-4 p-4">
         <ThemeToggle></ThemeToggle>
+        <GithubSourceLink className="static" />
         <Button
           onClick={ () => setShowPreview(!showPreview) }
-          className="rounded-md bg-gray-200 px-4 py-2 dark:bg-gray-700 dark:text-white"
+          className="rounded-md bg-background3 px-4 py-2"
         >
           { showPreview
             ? '隐藏预览图'
             : '显示预览图' }
         </Button>
         <div className="w-72 flex items-center gap-2">
-          <span className="text-sm font-medium dark:text-white">
+          <span className="text-sm font-medium">
             缩放:
           </span>
           <Slider
@@ -49,14 +51,14 @@ export default function Page() {
               position: 'bottom',
             } }
           />
-          <span className="text-sm font-medium dark:text-white">
+          <span className="text-sm font-medium">
             { (scale * 100).toFixed(0) }
             %
           </span>
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col items-center justify-center px-4 pt-24 pb-12">
         <PhoneCarousel
           imgs={ imgs }
           showPreview={ showPreview }
@@ -69,6 +71,9 @@ export default function Page() {
           initialCommentCount={ 42 }
         />
       </div>
+
     </div>
   )
 }
+
+export default Page

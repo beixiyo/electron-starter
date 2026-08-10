@@ -34,7 +34,7 @@ export const PermissionModal = memo<PermissionModalProps>((props) => {
       isOpen={ isOpen }
       onClose={ onClose }
       width={ 520 }
-      showCloseBtn={ dismissable }
+      fixedCloseBtn={ dismissable }
       clickOutsideClose={ false }
       escToClose={ dismissable }
       header={ null }

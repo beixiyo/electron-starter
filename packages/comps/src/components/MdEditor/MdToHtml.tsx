@@ -1,8 +1,10 @@
 'use client'
 
-import { useCustomEffect, useInsertStyle, useWatchThrottleState } from 'hooks'
-import { forwardRef, memo, useState } from 'react'
+import { useWatchThrottleState } from 'hooks'
+import { forwardRef, memo, useEffect, useState } from 'react'
 import { cn, mdToHTML } from 'utils'
+import 'styles/css/github-markdown.css'
+import 'styles/css/markdown-task-list.css'
 
 export const MdToHtml = memo(forwardRef<MdToHtmlRef, MdToHtmlProps>((
   {
@@ -14,29 +16,39 @@ export const MdToHtml = memo(forwardRef<MdToHtmlRef, MdToHtmlProps>((
     skipXSS = false,
     postProcess,
     preprocessMarkdownFormat = true,
+    withMarkdownBodyStyles = true,
   },
   ref,
 ) => {
   const [html, setHtml] = useState('')
   const throttleContent = useWatchThrottleState(content, throttleTime)
 
-  useInsertStyle(new URL('styles/css/github-markdown.css', import.meta.url).href)
+  useEffect(() => {
+    if (!needParse)
+      return
 
-  useCustomEffect(async () => {
-    if (needParse) {
-      const html = await mdToHTML(throttleContent, {
-        skipXSS,
-        postProcess,
-        preprocessMarkdownFormat,
-      })
-      setHtml(html)
+    /** 同步失效标记，防止流式更新时旧解析结果覆盖新结果（last-write-wins） */
+    let cancelled = false
+
+    mdToHTML(throttleContent, {
+      skipXSS,
+      postProcess,
+      preprocessMarkdownFormat,
+    }).then((result) => {
+      if (!cancelled)
+        setHtml(result)
+    })
+
+    return () => {
+      cancelled = true
     }
   }, [throttleContent, needParse, skipXSS, postProcess, preprocessMarkdownFormat])
 
   return <div
     ref={ ref }
     className={ cn(
-      'MdToHtmlContainer markdown-body overflow-auto',
+      'MdToHtmlContainer overflow-auto',
+      withMarkdownBodyStyles && 'markdown-body',
       className,
     ) }
     style={ style }
@@ -69,6 +81,11 @@ export type MdToHtmlProps = {
    * @default true
    */
   preprocessMarkdownFormat?: boolean
+  /**
+   * 是否应用内置 GitHub Markdown 样式
+   * @default true
+   */
+  withMarkdownBodyStyles?: boolean
 }
 & React.DetailedHTMLProps<React.ImgHTMLAttributes<HTMLDivElement>, HTMLDivElement>
 

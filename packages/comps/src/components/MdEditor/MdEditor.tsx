@@ -27,8 +27,6 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
   const [isEditMode, setIsEditMode] = useState(defaultEditMode)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [currentLayout, setCurrentLayout] = useState<LayoutMode>('auto')
-  const [isEditorScrolling, setIsEditorScrolling] = useState(false)
-  const [isPreviewScrolling, setIsPreviewScrolling] = useState(false)
   const [verticalPanelHeight, setVerticalPanelHeight] = useState<number>()
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -36,6 +34,12 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const previewPanelRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+
+  /** 滚动互斥锁用 ref 持有，避免每次滚动触发 setState 重渲染；用 rAF 复位而非 setTimeout */
+  const isEditorScrollingRef = useRef(false)
+  const isPreviewScrollingRef = useRef(false)
+  const editorScrollRafRef = useRef<number>(undefined)
+  const previewScrollRafRef = useRef<number>(undefined)
 
   const syncVerticalPanelHeight = useCallback((height?: number) => {
     setVerticalPanelHeight((prev) => {
@@ -112,10 +116,11 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
 
   /** 处理滚动同步 */
   const handleEditorScroll = useCallback(() => {
-    if (isPreviewScrolling || !textareaRef.current || !previewRef.current)
+    /** 由 preview 反向驱动的滚动，跳过避免抖动 */
+    if (isPreviewScrollingRef.current || !textareaRef.current || !previewRef.current)
       return
 
-    setIsEditorScrolling(true)
+    isEditorScrollingRef.current = true
 
     const editor = textareaRef.current
     const preview = previewRef.current
@@ -125,14 +130,18 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
 
     preview.scrollTop = previewTargetScrollTop
 
-    setTimeout(() => setIsEditorScrolling(false), 100)
-  }, [isPreviewScrolling])
+    if (editorScrollRafRef.current !== undefined)
+      cancelAnimationFrame(editorScrollRafRef.current)
+    editorScrollRafRef.current = requestAnimationFrame(() => {
+      isEditorScrollingRef.current = false
+    })
+  }, [])
 
   const handlePreviewScroll = useCallback(() => {
-    if (isEditorScrolling || !textareaRef.current || !previewRef.current)
+    if (isEditorScrollingRef.current || !textareaRef.current || !previewRef.current)
       return
 
-    setIsPreviewScrolling(true)
+    isPreviewScrollingRef.current = true
 
     const editor = textareaRef.current
     const preview = previewRef.current
@@ -142,8 +151,12 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
 
     editor.scrollTop = editorTargetScrollTop
 
-    setTimeout(() => setIsPreviewScrolling(false), 100)
-  }, [isEditorScrolling])
+    if (previewScrollRafRef.current !== undefined)
+      cancelAnimationFrame(previewScrollRafRef.current)
+    previewScrollRafRef.current = requestAnimationFrame(() => {
+      isPreviewScrollingRef.current = false
+    })
+  }, [])
 
   /** 添加滚动事件监听 */
   useEffect(() => {
@@ -157,6 +170,10 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
       return () => {
         editorElem.removeEventListener('scroll', handleEditorScroll)
         previewElem.removeEventListener('scroll', handlePreviewScroll)
+        if (editorScrollRafRef.current !== undefined)
+          cancelAnimationFrame(editorScrollRafRef.current)
+        if (previewScrollRafRef.current !== undefined)
+          cancelAnimationFrame(previewScrollRafRef.current)
       }
     }
   }, [isEditMode, handleEditorScroll, handlePreviewScroll])
@@ -197,14 +214,14 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
 
   const defaultHeader = (
     <div
-      className="flex items-center justify-between from-slate-50 to-gray-50 bg-linear-to-r px-5 py-3"
+      className="flex items-center justify-between border-b border-border bg-background2 px-5 py-3 text-text"
       style={ {
         height: headerHeight,
       } }
     >
       <div className="flex items-center gap-3">
         <TitleBarButtons />
-        <h2 className="text-gray-800 font-semibold dark:text-gray-200">{ title }</h2>
+        <h2 className="font-semibold">{ title }</h2>
       </div>
 
       <div className="flex items-center gap-4">
@@ -260,6 +277,8 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
           ? 'fixed inset-2 z-dropdown'
           : 'h-full relative',
         className,
+        /** 全屏时排在 className 之后，覆盖外部传入的固定宽高（否则 inset-2 的 bottom/right 会被显式 height/width 忽略，导致只占半屏） */
+        isFullscreen && 'h-auto w-auto',
       ) }
       variants={ containerVariants }
       initial="hidden"
@@ -304,7 +323,7 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
               className={ cn(
                 'flex-1 flex min-h-0 flex-col overflow-hidden',
                 currentLayout === 'horizontal'
-                  ? 'border-r border-gray-200 dark:border-gray-700'
+                  ? 'border-r border-border'
                   : '',
               ) }
               data-panel="editor"
@@ -320,7 +339,7 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
                 value={ content }
                 onChange={ e => onChange?.(e.target.value) }
                 placeholder={ placeholder }
-                className="w-full flex-1 resize-none border-none bg-transparent p-4 text-sm text-gray-800 leading-relaxed font-mono outline-hidden dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500"
+                className="w-full flex-1 resize-none border-none bg-transparent p-4 text-sm text-text leading-relaxed font-mono outline-hidden placeholder:text-text3"
                 style={ {
                   minHeight: currentLayout === 'vertical'
                     ? '200px'
@@ -331,7 +350,7 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
 
             {/* 分隔线 */ }
             { currentLayout === 'vertical' && (
-              <div className="h-px bg-gray-200 shrink-0 dark:bg-gray-700" />
+              <div className="h-px bg-border shrink-0" />
             ) }
 
             {/* 预览区域 */ }

@@ -18,6 +18,11 @@ export const CalendarCell = memo<CalendarCellProps>(({
   isTempStart,
   isTempEnd,
   isInRange,
+  visualRangePosition,
+  isWeekStart,
+  isWeekEnd,
+  rangeStartLabel = 'Start',
+  rangeEndLabel = 'End',
   onClick,
   onMouseEnter,
   className,
@@ -29,6 +34,34 @@ export const CalendarCell = memo<CalendarCellProps>(({
   const isConfirmed = isSelected || isRangeStart || isRangeEnd
   /** 是否为临时预览点 */
   const isTemp = (isTempStart || isTempEnd) && !isConfirmed
+  const hasRangeBackground = !!isInRange
+
+  const fallbackRangePosition = isRangeStart || isTempStart
+    ? isRangeEnd || isTempEnd
+      ? 'single'
+      : 'start'
+    : isRangeEnd || isTempEnd
+      ? 'end'
+      : hasRangeBackground
+        ? 'middle'
+        : undefined
+
+  const rangePosition = visualRangePosition ?? fallbackRangePosition
+  const isVisualRangeStart = rangePosition === 'start' || rangePosition === 'single'
+  const isVisualRangeEnd = rangePosition === 'end' || rangePosition === 'single'
+
+  const showRangeConnector = hasRangeBackground
+    && !(isVisualRangeStart && isVisualRangeEnd)
+    && !(isVisualRangeStart && isWeekEnd)
+    && !(isVisualRangeEnd && isWeekStart)
+
+  const boundaryLabel = isRangeStart && isRangeEnd
+    ? `${rangeStartLabel} · ${rangeEndLabel}`
+    : isRangeStart
+      ? rangeStartLabel
+      : isRangeEnd
+        ? rangeEndLabel
+        : undefined
 
   return (
     <button
@@ -39,27 +72,67 @@ export const CalendarCell = memo<CalendarCellProps>(({
       aria-label={ formatDate(date, 'yyyy-MM-dd') }
       aria-selected={ isConfirmed || isTemp }
       aria-disabled={ isDisabled }
+      data-range-position={ rangePosition }
       className={ cn(
-        'relative size-8 flex items-center justify-center rounded-full',
-        'transition-all duration-300 cursor-pointer hover:bg-background3',
+        'relative flex h-10 w-full items-end justify-center p-0',
+        'cursor-pointer',
         'disabled:cursor-not-allowed disabled:opacity-50',
         {
           'text-textDisabled': !isCurrentMonth && isPreviousMonth,
           'text-text4': (!isCurrentMonth && isNextMonth) || (isCurrentMonth && !isToday && isBeforeToday(date)),
-          'text-text': isCurrentMonth && (isToday || !isBeforeToday(date)),
-          // 1. 已确定的选中点 (单个选中 或 范围的起始点) - 使用中性色 (黑白)
-          'bg-button text-button3 z-20 hover:bg-button/70': isConfirmed,
-          // 3. 范围内的中间区域 - 使用浅品牌色
-          'bg-brand/10 text-text': isInRange && !isConfirmed && !isTemp,
-          // 4. 今天（非选中状态）
-          'bg-brand/10': isToday && !isConfirmed && !isTemp,
+          'text-text': isCurrentMonth && !isToday && !isBeforeToday(date),
+          'text-brand font-semibold': isToday && !isConfirmed,
+          'text-button3': isConfirmed,
         },
         className,
       ) }
     >
-      { renderCell
-        ? renderCell(date)
-        : <span className="relative z-10 text-sm">{ dayNumber }</span> }
+      { boundaryLabel && (
+        <span className="absolute -top-1 truncate text-center text-[10px] leading-2.5 text-brand">
+          { boundaryLabel }
+        </span>
+      ) }
+
+      { showRangeConnector && (
+        <span
+          aria-hidden="true"
+          className={ cn(
+            'absolute bottom-0 h-8 bg-brand/10',
+            isVisualRangeStart && 'left-1/2 right-0',
+            isVisualRangeEnd && 'left-0 right-1/2',
+            !isVisualRangeStart && !isVisualRangeEnd && 'inset-x-0',
+            !isVisualRangeStart && isWeekStart && 'rounded-l-full',
+            !isVisualRangeEnd && isWeekEnd && 'rounded-r-full',
+          ) }
+        />
+      ) }
+
+      <span
+        className={ cn(
+          'group/day relative z-10 flex size-8 items-center justify-center rounded-full text-sm transition-colors duration-200',
+          {
+            'bg-button text-button3 hover:bg-button/70': isConfirmed,
+          },
+        ) }
+      >
+        { !isConfirmed && (
+          <>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full bg-background opacity-0 group-hover/day:opacity-100"
+            />
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 rounded-full bg-brand/20 opacity-0 transition-opacity duration-0 group-hover/day:opacity-100 group-hover/day:duration-200"
+            />
+          </>
+        ) }
+        <span className="relative z-10">
+          { renderCell
+            ? renderCell(date)
+            : dayNumber }
+        </span>
+      </span>
     </button>
   )
 })

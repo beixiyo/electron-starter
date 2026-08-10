@@ -13,14 +13,14 @@ importers:
         specifier: ^1.0.9
         version: 1.0.91(@types/node@24.12.4)
       '@jl-org/http':
-        specifier: ^1.2.4
-        version: 1.2.4
+        specifier: ^1.2.5
+        version: 1.2.5
       '@jl-org/react-router':
-        specifier: ^0.0.8
-        version: 0.0.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        specifier: ^0.1.3
+        version: 0.1.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@jl-org/tool':
-        specifier: 4.0.2
-        version: 4.0.2
+        specifier: 5.0.0
+        version: 5.0.0
       '@tanstack/react-query':
         specifier: ^5.59.20
         version: 5.100.14(react@19.2.4)
@@ -77,8 +77,8 @@ importers:
         specifier: ^0.0.8
         version: 0.0.8
       '@jl-org/vite-auto-route':
-        specifier: ^2.0.1
-        version: 2.0.1
+        specifier: ^2.0.2
+        version: 2.0.2
       '@tailwindcss/vite':
         specifier: ^4.3.0
         version: 4.3.0(vite@8.0.14(@types/node@24.12.4)(jiti@2.7.0)(sass@1.100.0)(yaml@2.9.0))
@@ -171,14 +171,14 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@jl-org/tool':
-        specifier: 4.0.3
-        version: 4.0.3
+        specifier: 5.0.0
+        version: 5.0.0
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.2(vite@8.0.14(@types/node@24.13.3)(jiti@2.7.0)(sass@1.100.0)(yaml@2.9.0))
       comps:
         specifier: workspace:*
-        version: file:packages/comps(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+        version: file:packages/comps(i18n@file:packages/i18n(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       config:
         specifier: workspace:*
         version: link:../config
@@ -196,7 +196,10 @@ importers:
         version: link:../hooks
       http-api:
         specifier: workspace:*
-        version: file:packages/http-api
+        version: link:../http-api
+      i18n:
+        specifier: workspace:*
+        version: link:../i18n
       motion:
         specifier: 12.27.0
         version: 12.27.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -230,15 +233,21 @@ importers:
 
   packages/comps:
     dependencies:
+      '@jl-org/tool':
+        specifier: ^4.0.3
+        version: 4.0.3
       '@tanstack/react-table':
         specifier: ^8.21.3
         version: 8.21.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tanstack/react-virtual':
-        specifier: ^3.13.12
-        version: 3.13.26(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      config:
-        specifier: workspace:*
-        version: link:../config
+        specifier: ^3.14.2
+        version: 3.14.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      class-variance-authority:
+        specifier: ^0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       date-fns:
         specifier: ^4.1.0
         version: 4.3.0
@@ -248,43 +257,94 @@ importers:
       i18n:
         specifier: workspace:*
         version: link:../i18n
+      lucide-react:
+        specifier: ^0.514.0
+        version: 0.514.0(react@19.2.4)
       motion:
         specifier: ^12.27.0
         version: 12.27.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.4(react@19.2.4)
       styles:
         specifier: workspace:*
         version: link:../styles
       utils:
         specifier: workspace:*
         version: link:../utils
-
-  packages/config: {}
-
-  packages/hooks:
-    dependencies:
+    devDependencies:
+      '@faker-js/faker':
+        specifier: ^10.2.0
+        version: 10.5.0
+      '@jl-org/react-router':
+        specifier: ^0.1.3
+        version: 0.1.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@jl-org/ts-tool':
+        specifier: ^0.0.8
+        version: 0.0.8
       config:
         specifier: workspace:*
         version: link:../config
-      styles:
+
+  packages/config:
+    dependencies:
+      '@jl-org/tool':
+        specifier: ^5.0.0
+        version: 5.0.0
+
+  packages/hooks:
+    dependencies:
+      '@jl-org/tool':
+        specifier: ^5.0.0
+        version: 5.0.0
+      config:
         specifier: workspace:*
-        version: link:../styles
+        version: link:../config
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.4(react@19.2.4)
 
   packages/http-api:
     dependencies:
       '@jl-org/http':
-        specifier: ^1.2.0
-        version: 1.2.4
+        specifier: ^1.2.5
+        version: 1.2.5
+      '@jl-org/tool':
+        specifier: 5.0.0
+        version: 5.0.0
+    devDependencies:
+      '@jl-org/ts-tool':
+        specifier: 0.0.8
+        version: 0.0.8
 
   packages/i18n:
     dependencies:
+      '@jl-org/tool':
+        specifier: ^5.0.0
+        version: 5.0.0
+      hooks:
+        specifier: workspace:*
+        version: link:../hooks
       react:
-        specifier: ^19.2.1
+        specifier: ^19.2.4
         version: 19.2.4
 
   packages/styles: {}
 
   packages/utils:
     dependencies:
+      '@jl-org/tool':
+        specifier: ^5.0.0
+        version: 5.0.0
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       config:
         specifier: workspace:*
         version: link:../config
@@ -292,8 +352,17 @@ importers:
         specifier: ^15.0.7
         version: 15.0.12
       nanoid:
-        specifier: ^5.1.11
-        version: 5.1.11
+        specifier: ^5.1.16
+        version: 5.1.16
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.4(react@19.2.4)
+      tailwind-merge:
+        specifier: ^2.5.4
+        version: 2.6.1
       xss:
         specifier: ^1.0.15
         version: 1.0.15
@@ -801,6 +870,10 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@faker-js/faker@10.5.0':
+    resolution: {integrity: sha512-bsxD8WLS5lIj7aaoCx1YJkktqYj5vlBUE6HWzu2Q51ksrGJ0H737ECCKlFU7Yf8Br45z9t99frBp/J7kzbMPAg==}
+    engines: {node: ^20.19.0 || ^22.13.0 || ^23.5.0 || >=24.0.0, npm: '>=10'}
+
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
@@ -1141,10 +1214,6 @@ packages:
   '@jl-org/eslint-plugins@1.0.0':
     resolution: {integrity: sha512-mntGFsumnV/KZowqM6CCjsmRbYdx6RN3UaJSTu6PoOHynfr5ihAMXEAmUumW3uQ6ZK6yDgzWu21iIJXw84DIuQ==}
 
-  '@jl-org/http@1.2.4':
-    resolution: {integrity: sha512-HgTz4hV4xQBZqkKz2MHiv8EPdqA2eBkS0dFiQHSgjoc16tBlGs05Wf+Gk9mHunagVDOW20UNCHPlGbZFU1J4Vw==}
-    hasBin: true
-
   '@jl-org/http@1.2.5':
     resolution: {integrity: sha512-ZXCm5Emmqh9K/G9gPZBI3qVB6uXBgI7NUEqF5oN6AldXAk0gz2ODaPJWaUVZt3277eiwPA0e0QbUd4349hNbiw==}
     hasBin: true
@@ -1161,23 +1230,23 @@ packages:
       rotating-file-stream:
         optional: true
 
-  '@jl-org/react-router@0.0.8':
-    resolution: {integrity: sha512-x064XjxCK1KJSsJeYbhD3WEhEY8yf/lQP6w1Egq1zeWG4GrT/42YSa+K2sPDKczjf/habqCvCXhMIZwz73APoA==}
+  '@jl-org/react-router@0.1.3':
+    resolution: {integrity: sha512-2/x2F4q4IpgnH9Va+FGREvP+dYWp5D76FV5Qg0Lg4u8LuR3ddA2E3dmwJ4IciUt2i3lmcYBZh7bMsn0nfL5ACg==}
     peerDependencies:
       react: '>=18.3.1'
       react-dom: '>=18.3.1'
 
-  '@jl-org/tool@4.0.2':
-    resolution: {integrity: sha512-GJEv7PZejvqb782dVSU+BugqiC2k5AJwgbLYPZDIMMiY9XBtwGEUt+WYRSE1FtabfeLFvxj4cLmDUh0tdKsPlA==}
-
   '@jl-org/tool@4.0.3':
     resolution: {integrity: sha512-XH30hSbTD0nDgfTYkhjR6Pqp62jO4JcYkDAZa3eyvcZuTllmsRoWD7YL5GIw0U6ZZ5Ty96EPpfjXSu987Uct8Q==}
+
+  '@jl-org/tool@5.0.0':
+    resolution: {integrity: sha512-+XdbhVEgLoTiG/HJ4m+/jCXsoUBiC+hGuoo9UDlJbGRdtFC0PRvGGKuoqyZ6yw/4aDX4vltnKFCZ8w0X187DzA==}
 
   '@jl-org/ts-tool@0.0.8':
     resolution: {integrity: sha512-2YwGmzod5LBOi7cKknRXn2H9xcp99OhokZJ55t+kg7wvPST4obcwLxO03ji0gVuFoHp5BgrkwzDICV+z1a3TDg==}
 
-  '@jl-org/vite-auto-route@2.0.1':
-    resolution: {integrity: sha512-cO9nBpyjz+X6Z31hlCF6YVGiiXswsdRBEjqI8wsdM1NN/sFRjwr8WB2TCZZAjYHbpVuX31xnedFn5qt3RRaekQ==}
+  '@jl-org/vite-auto-route@2.0.2':
+    resolution: {integrity: sha512-8qHbWLYYpwG7Lvmk7rAZHWLLodZj/TbFigFOZXjvhUbwgUqR+8dcJg8Y7jxFWeHlmNh7PR8dDdd29zlXSeljNA==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1696,12 +1765,6 @@ packages:
       react: '>=16.8'
       react-dom: '>=16.8'
 
-  '@tanstack/react-virtual@3.13.26':
-    resolution: {integrity: sha512-DosdgjOxCLahkn0o+ilmZYwEjo1glfMGuRT/j3PQ18yr5XqA8N/BCaL9IJ3B5TRl+nnzyK2IOFgAILwzN3a9xQ==}
-    peerDependencies:
-      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
   '@tanstack/react-virtual@3.14.6':
     resolution: {integrity: sha512-4+Uq8m0/gzO4kMCHUEpTtGX1RnONK0C+g88b2ltwPMWUBiaVarBuWKoPJaz7gj1cKCVRAdyu+U8GcKhwCc2beA==}
     peerDependencies:
@@ -1711,9 +1774,6 @@ packages:
   '@tanstack/table-core@8.21.3':
     resolution: {integrity: sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==}
     engines: {node: '>=12'}
-
-  '@tanstack/virtual-core@3.16.0':
-    resolution: {integrity: sha512-Er2N7q3WOiH6y2JLxsxNX+u2/sLqSsL0bxFgDjuiPiA7vKhZRm+IzcS17vRee3GNXr64UsesA5CAp9yTiIYw9A==}
 
   '@tanstack/virtual-core@3.17.4':
     resolution: {integrity: sha512-nGm5KteqxasUdThLc2izl6dHUqLv0LQj7Nuyo5gYalTPf/U8a9ermvsl7reT+6ioBW1l8WfpP/mcU338nLXpqw==}
@@ -2431,6 +2491,8 @@ packages:
     resolution: {directory: packages/comps, type: directory}
     peerDependencies:
       i18n: workspace:*
+      react: ^19.2.4
+      react-dom: ^19.2.4
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
@@ -3311,6 +3373,9 @@ packages:
 
   hooks@file:packages/hooks:
     resolution: {directory: packages/hooks, type: directory}
+    peerDependencies:
+      react: ^19.2.4
+      react-dom: ^19.2.4
 
   hosted-git-info@4.1.0:
     resolution: {integrity: sha512-kyCuEOWjJqZuDbRHzL8V93NzQhwIB71oFWSyzVo+KPZI+pnQPPxucdkrOZvkLRnrf5URsQM+IJ09Dw29cRALIA==}
@@ -3318,9 +3383,6 @@ packages:
 
   html-parse-stringify@3.0.1:
     resolution: {integrity: sha512-KknJ50kTInJ7qIScF3jeaFRpMpE8/lfiTdzf/twXyPBLAGrLRTmkz3AdTnKeh40X8k9L2fdYwEp/42WGXIRGcg==}
-
-  http-api@file:packages/http-api:
-    resolution: {directory: packages/http-api, type: directory}
 
   http-cache-semantics@4.2.0:
     resolution: {integrity: sha512-dTxcvPXqPvXBQpq5dUr6mEMJX4oIEFv6bwom3FDwKRDsuIjjJGANqhBuoAn9c1RQJIdAKav33ED65E2ys+87QQ==}
@@ -3347,6 +3409,11 @@ packages:
 
   humanize-ms@1.2.1:
     resolution: {integrity: sha512-Fl70vYtsAFb/C06PTS9dZBo7ihau+Tu/DNCk/OyHhea07S+aeMWpFFkUaXRa8fI+ScZbEI8dfSxwY7gxZ9SAVQ==}
+
+  i18n@file:packages/i18n:
+    resolution: {directory: packages/i18n, type: directory}
+    peerDependencies:
+      react: ^19.2.4
 
   i18next-browser-languagedetector@8.2.1:
     resolution: {integrity: sha512-bZg8+4bdmaOiApD7N7BPT9W8MLZG+nPTOFlLiJiT8uzKXFjhxw4v2ierCXOwB5sFDMtuA5G4kgYZ0AznZxQ/cw==}
@@ -4044,8 +4111,8 @@ packages:
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
     hasBin: true
 
-  nanoid@5.1.11:
-    resolution: {integrity: sha512-v+KEsUv2ps74PaSKv0gHTxTCgMXOIfBEbaqa6w6ISIGC7ZsvHN4N9oJ8d4cmf0n5oTzQz2SLmThbQWhjd/8eKg==}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
     engines: {node: ^18 || >=20}
     hasBin: true
 
@@ -4443,10 +4510,6 @@ packages:
 
   quansync@0.2.11:
     resolution: {integrity: sha512-AifT7QEbW9Nri4tAwR5M/uzpBuqfZf+zwaEM/QkzEjj7NBuFD2rBuy0K3dE+8wltbezDV7JMA0WfnCPYRSYbXA==}
-
-  query-string@9.3.1:
-    resolution: {integrity: sha512-5fBfMOcDi5SA9qj5jZhWAcTtDfKF5WFdd2uD9nVNlbxVv1baq65aALy6qofpNEGELHvisjjasxQp7BlM9gvMzw==}
-    engines: {node: '>=18'}
 
   query-string@9.4.1:
     resolution: {integrity: sha512-lSyJeN3RuaG7DZGWThtYRhk96+kEyZ/+doZpERuWbjeFL+Ok3vEat/swU498rAI0NcVt5/RJp8UDuLz7FckxrA==}
@@ -5061,6 +5124,14 @@ packages:
 
   utils@file:packages/utils:
     resolution: {directory: packages/utils, type: directory}
+    peerDependencies:
+      react: ^19.2.4
+      react-dom: ^19.2.4
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
 
   verror@1.10.1:
     resolution: {integrity: sha512-veufcmxri4e3XSrT0xwfUR7kguIkaxBeosDg00yDWhk49wdwkSUrvvsm7nc75e1PUyvIeZj6nS8VQRYz2/S4Xg==}
@@ -5939,6 +6010,8 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@faker-js/faker@10.5.0': {}
+
   '@gar/promisify@1.1.3': {}
 
   '@humanfs/core@0.19.2':
@@ -6321,10 +6394,6 @@ snapshots:
 
   '@jl-org/eslint-plugins@1.0.0': {}
 
-  '@jl-org/http@1.2.4':
-    dependencies:
-      query-string: 9.3.1
-
   '@jl-org/http@1.2.5':
     dependencies:
       query-string: 9.4.1
@@ -6341,20 +6410,20 @@ snapshots:
     optionalDependencies:
       rotating-file-stream: 3.2.9
 
-  '@jl-org/react-router@0.0.8(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
+  '@jl-org/react-router@0.1.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
-      nanoid: 5.1.11
+      nanoid: 5.1.16
       path-to-regexp: 8.4.2
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@jl-org/tool@4.0.2': {}
-
   '@jl-org/tool@4.0.3': {}
+
+  '@jl-org/tool@5.0.0': {}
 
   '@jl-org/ts-tool@0.0.8': {}
 
-  '@jl-org/vite-auto-route@2.0.1': {}
+  '@jl-org/vite-auto-route@2.0.2': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -6796,12 +6865,6 @@ snapshots:
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
 
-  '@tanstack/react-virtual@3.13.26(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
-    dependencies:
-      '@tanstack/virtual-core': 3.16.0
-      react: 19.2.4
-      react-dom: 19.2.4(react@19.2.4)
-
   '@tanstack/react-virtual@3.14.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)':
     dependencies:
       '@tanstack/virtual-core': 3.17.4
@@ -6809,8 +6872,6 @@ snapshots:
       react-dom: 19.2.4(react@19.2.4)
 
   '@tanstack/table-core@8.21.3': {}
-
-  '@tanstack/virtual-core@3.16.0': {}
 
   '@tanstack/virtual-core@3.17.4': {}
 
@@ -7658,20 +7719,24 @@ snapshots:
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
-  comps@file:packages/comps(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+  comps@file:packages/comps(i18n@file:packages/i18n(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
+      '@jl-org/tool': 4.0.3
       '@tanstack/react-table': 8.21.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@tanstack/react-virtual': 3.14.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      config: file:packages/config
+      class-variance-authority: 0.7.1
+      clsx: 2.1.1
       date-fns: 4.4.0
-      hooks: file:packages/hooks
+      hooks: file:packages/hooks(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      i18n: file:packages/i18n(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      lucide-react: 0.514.0(react@19.2.4)
       motion: 12.27.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
       styles: file:packages/styles
-      utils: file:packages/utils
+      utils: file:packages/utils(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     transitivePeerDependencies:
       - '@emotion/is-prop-valid'
-      - react
-      - react-dom
 
   concat-map@0.0.1: {}
 
@@ -7684,7 +7749,9 @@ snapshots:
       glob: 10.5.0
       typescript: 5.9.3
 
-  config@file:packages/config: {}
+  config@file:packages/config:
+    dependencies:
+      '@jl-org/tool': 5.0.0
 
   console-control-strings@1.1.0: {}
 
@@ -8736,10 +8803,12 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hooks@file:packages/hooks:
+  hooks@file:packages/hooks(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
+      '@jl-org/tool': 5.0.0
       config: file:packages/config
-      styles: file:packages/styles
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   hosted-git-info@4.1.0:
     dependencies:
@@ -8748,10 +8817,6 @@ snapshots:
   html-parse-stringify@3.0.1:
     dependencies:
       void-elements: 3.1.0
-
-  http-api@file:packages/http-api:
-    dependencies:
-      '@jl-org/http': 1.2.5
 
   http-cache-semantics@4.2.0: {}
 
@@ -8792,6 +8857,14 @@ snapshots:
   humanize-ms@1.2.1:
     dependencies:
       ms: 2.1.3
+
+  i18n@file:packages/i18n(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
+    dependencies:
+      '@jl-org/tool': 5.0.0
+      hooks: file:packages/hooks(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react: 19.2.4
+    transitivePeerDependencies:
+      - react-dom
 
   i18next-browser-languagedetector@8.2.1:
     dependencies:
@@ -9608,7 +9681,7 @@ snapshots:
 
   nanoid@3.3.16: {}
 
-  nanoid@5.1.11: {}
+  nanoid@5.1.16: {}
 
   natural-compare@1.4.0: {}
 
@@ -10087,12 +10160,6 @@ snapshots:
   punycode@2.3.1: {}
 
   quansync@0.2.11: {}
-
-  query-string@9.3.1:
-    dependencies:
-      decode-uri-component: 0.4.1
-      filter-obj: 5.1.0
-      split-on-first: 3.0.0
 
   query-string@9.4.1:
     dependencies:
@@ -10699,12 +10766,18 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
-  utils@file:packages/utils:
+  utils@file:packages/utils(react-dom@19.2.4(react@19.2.4))(react@19.2.4):
     dependencies:
+      '@jl-org/tool': 5.0.0
+      clsx: 2.1.1
       config: file:packages/config
       marked: 15.0.12
-      nanoid: 5.1.11
+      nanoid: 5.1.16
+      tailwind-merge: 2.6.1
       xss: 1.0.15
+    optionalDependencies:
+      react: 19.2.4
+      react-dom: 19.2.4(react@19.2.4)
 
   verror@1.10.1:
     dependencies:

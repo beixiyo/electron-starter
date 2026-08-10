@@ -1,13 +1,15 @@
 'use client'
 
 import type { DrawerProps } from './types'
+import { useComposedRef, useKeyboardLayer } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
-import { forwardRef, memo, useEffect, useRef } from 'react'
+import { forwardRef, memo, useRef } from 'react'
 import { cn } from 'utils'
 import { Z } from '../../constants/z-index'
 import { CloseBtn } from '../CloseBtn'
 import { Mask } from '../Mask'
 import { getDrawerClasses } from './tool'
+import { useDrawerFocus } from './useDrawerFocus'
 
 export const DrawerFramer = memo(forwardRef<HTMLDivElement, DrawerProps>(
   (
@@ -20,10 +22,14 @@ export const DrawerFramer = memo(forwardRef<HTMLDivElement, DrawerProps>(
       overlay = true,
       closeButton = true,
       closeOnOverlayClick = true,
+      ariaLabel,
+      ariaLabelledby,
     },
     ref,
   ) => {
     const maskRef = useRef<HTMLDivElement>(null)
+    const { setRef, elementRef } = useComposedRef<HTMLDivElement>({ ref })
+    useDrawerFocus(open, elementRef)
 
     // Calculate initial and animate values for different positions
     const getMotionProps = () => {
@@ -50,28 +56,24 @@ export const DrawerFramer = memo(forwardRef<HTMLDivElement, DrawerProps>(
       }
     }
 
-    // Handle escape key press
-    useEffect(() => {
-      const handleEscapeKey = (event: KeyboardEvent) => {
-        if (event.key === 'Escape' && onClose) {
-          onClose()
-        }
-      }
-
-      if (open) {
-        document.addEventListener('keydown', handleEscapeKey)
-      }
-
-      return () => {
-        document.removeEventListener('keydown', handleEscapeKey)
-      }
-    }, [open, onClose])
+    useKeyboardLayer({
+      active: open,
+      keys: ['Escape'],
+      priority: Z.overlay + 1,
+      allowRepeat: false,
+      onKeyDown: onClose,
+    })
 
     const drawerClasses = getDrawerClasses(position, 'absolute bg-white dark:bg-slate-800 shadow-lg')
     const motionProps = getMotionProps()
 
     const Content = <motion.div
-      ref={ ref }
+      ref={ setRef }
+      role="dialog"
+      aria-modal="true"
+      aria-label={ ariaLabel }
+      aria-labelledby={ ariaLabelledby }
+      tabIndex={ -1 }
       className={ cn(drawerClasses, className) }
       initial={ motionProps.initial }
       animate={ motionProps.animate }

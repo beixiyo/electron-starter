@@ -1,19 +1,9 @@
-import type { RefObject } from 'react'
+import type { ChatInputAreaProps } from '../types'
 import { memo } from 'react'
+import { cn } from 'utils'
 import { Textarea } from '../..'
 import { useT } from '../../../i18n'
 import { formatShortcut } from '../constants'
-
-export type ChatInputAreaProps = {
-  value: string
-  textareaRef: RefObject<HTMLTextAreaElement | null>
-  disabled?: boolean
-  placeholder?: string
-  onChange: (value: string) => void
-  onFocus?: () => void
-  onBlur?: () => void
-  onPressEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
-}
 
 export const ChatInputArea = memo<ChatInputAreaProps>((
   {
@@ -21,6 +11,9 @@ export const ChatInputArea = memo<ChatInputAreaProps>((
     textareaRef,
     disabled,
     placeholder,
+    autoResize,
+    minRows,
+    maxRows,
     onChange,
     onFocus,
     onBlur,
@@ -39,8 +32,19 @@ export const ChatInputArea = memo<ChatInputAreaProps>((
       onPressEnter={ onPressEnter }
       placeholder={ placeholder || t('chatInput.placeholder', { shortcut: formatShortcut('/') }) }
       disabled={ disabled }
-      className="min-h-0 flex-1 px-4 text-base leading-relaxed text-text placeholder:text-text2/70 bg-transparent"
-      inputContainerClassName="border-0 bg-background/90 dark:bg-background/80 h-full"
+      autoResize={ autoResize }
+      minRows={ minRows }
+      maxRows={ maxRows }
+      className={ cn(
+        'px-4 text-base leading-relaxed text-text placeholder:text-text2/70 bg-transparent',
+        autoResize
+          ? 'py-2'
+          : 'min-h-0 flex-1',
+      ) }
+      inputContainerClassName={ cn(
+        'border-0 bg-background/90 dark:bg-background/80',
+        !autoResize && 'h-full',
+      ) }
     />
   )
 })

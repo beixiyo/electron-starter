@@ -1,11 +1,15 @@
 'use client'
 
 import type { CascaderProps, CascaderRef } from './types'
-import { useTheme } from 'hooks'
+import { useKeyboardLayer, useTheme } from 'hooks'
+import { ChevronDown } from 'lucide-react'
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { Z } from '../../constants/z-index'
 import { EmptyIcon } from '../../icons/EmptyIcon'
+import { findOption } from '../../utils/optionTree'
 import { AnimateShow } from '../Animate'
+import { CloseBtn } from '../CloseBtn'
 import { useFormField } from '../Form/useFormField'
 import { SafePortal } from '../SafePortal'
 import { CascaderMenu } from './CascaderMenu'
@@ -35,6 +39,8 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
     open: controlledOpen,
     onOpenChange,
     trigger,
+    clearable = false,
+    onClear,
     onTriggerClick,
     placement = 'bottom-start',
     offset = 4,
@@ -42,6 +48,8 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
     dropdownMinWidth = 160,
     className,
     dropdownClassName,
+    menuClassName,
+    dropdownStyle,
     optionClassName,
     optionContentClassName,
     optionLabelClassName,
@@ -55,9 +63,10 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
     clickOutsideIgnoreSelector,
     optionClickIgnoreSelector = DEFAULT_OPTION_CLICK_IGNORE_SELECTOR,
     bordered = theme !== 'light',
+    shadowed = true,
     searchable = false,
     editable = false,
-    placeholder,
+    placeholder = 'Select option',
     editableInputClassName,
     triggerMode = 'click',
     hoverCloseDelay,
@@ -65,6 +74,7 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
   const isControlled = controlledOpen !== undefined
   const triggerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [defaultTriggerHovered, setDefaultTriggerHovered] = useState(false)
 
   const {
     actualValue,
@@ -75,7 +85,7 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
   } = useFormField<string>({
     name,
     value,
-    defaultValue: '',
+    defaultValue: defaultValue ?? '',
     error,
     errorMessage,
     onChange,
@@ -113,6 +123,16 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
     isOpen,
     { placement, offset },
   )
+
+  useKeyboardLayer({
+    active: isOpen,
+    keys: ['Escape'],
+    priority: typeof dropdownStyle?.zIndex === 'number'
+      ? dropdownStyle.zIndex
+      : Z.dropdown,
+    allowRepeat: false,
+    onKeyDown: () => setOpen(false),
+  })
 
   const {
     menuStack,
@@ -156,6 +176,24 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
   } = useCascaderEditable(actualValue, options, handleChangeVal, setOpen)
 
   const [focusSearchToken, setFocusSearchToken] = useState(0)
+  const selectedOption = useMemo(
+    () => findOption(options, internalValue),
+    [internalValue, options],
+  )
+  const clearConfig = typeof clearable === 'object'
+    ? clearable
+    : null
+  const canClearDefaultTrigger = !!clearable && !!internalValue && !disabled
+
+  const handleClearDefaultValue = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation()
+    if (!canClearDefaultTrigger)
+      return
+
+    handleChangeVal('', {} as React.ChangeEvent<HTMLElement>)
+    setOpen(false)
+    onClear?.()
+  }, [canClearDefaultTrigger, handleChangeVal, onClear, setOpen])
 
   const handleFocusMenuByKeyboard = useCallback(() => {
     const firstLevelOptions = menuStack[0] ?? []
@@ -225,11 +263,12 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
       visibilityMode
       animateOnMount={ false }
       display="block"
-      style={ { ...style, zIndex: 50 } }
+      style={ { zIndex: Z.dropdown, ...style, ...dropdownStyle } }
     >
       <div
         className={ cn(
-          'bg-background rounded-xl shadow-card flex text-text',
+          'bg-background overflow-hidden rounded-xl flex text-text',
+          shadowed && 'shadow-card',
           bordered && 'border border-border',
           dropdownClassName,
         ) }
@@ -258,6 +297,7 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
                   labelClassName={ optionLabelClassName }
                   checkIconClassName={ optionCheckIconClassName }
                   chevronIconClassName={ optionChevronIconClassName }
+                  className={ menuClassName }
                 />
               )
             : (
@@ -306,6 +346,7 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
                     labelClassName={ optionLabelClassName }
                     checkIconClassName={ optionCheckIconClassName }
                     chevronIconClassName={ optionChevronIconClassName }
+                    className={ menuClassName }
                   />
                 )) }
               </>
@@ -315,19 +356,22 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
   )
 
   const triggerProps = {
-    ref: triggerRef,
-    role: 'combobox' as const,
-    tabIndex: disabled
+    'ref': triggerRef,
+    'role': 'combobox' as const,
+    'aria-expanded': isOpen,
+    'aria-haspopup': 'listbox' as const,
+    'aria-disabled': disabled || undefined,
+    'tabIndex': disabled
       ? undefined
       : 0,
-    className: cn(
+    'className': cn(
       'inline-block',
       disabled
         ? 'cursor-not-allowed'
         : 'cursor-pointer',
       className,
     ),
-    onKeyDown: handleKeyDown,
+    'onKeyDown': handleKeyDown,
   }
 
   return (
@@ -337,9 +381,17 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
             <div
               ref={ triggerRef }
               role="combobox"
-              className={ cn('inline-block', disabled
-                ? 'cursor-not-allowed'
-                : 'cursor-text', className) }
+              aria-expanded={ isOpen }
+              aria-haspopup="listbox"
+              className={ cn(
+                'inline-flex min-h-9 min-w-48 items-center rounded-xl bg-background px-3 py-1.5 text-sm transition-colors focus-within:bg-background2',
+                shadowed && 'shadow-card',
+                bordered && 'border border-border',
+                disabled
+                  ? 'cursor-not-allowed opacity-50'
+                  : 'cursor-text',
+                className,
+              ) }
               onClick={ () => inputRef.current?.focus() }
             >
               <input
@@ -351,7 +403,7 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
                 onKeyDown={ handleInputKeyDown }
                 disabled={ disabled }
                 placeholder={ placeholder }
-                className={ cn('bg-transparent outline-none w-full', editableInputClassName) }
+                className={ cn('min-w-0 flex-1 bg-transparent outline-none placeholder:text-text2', editableInputClassName) }
               />
             </div>
           )
@@ -367,7 +419,58 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
               </div>
             )
           : (
-              <div { ...triggerProps } />
+              <div
+                { ...triggerProps }
+                onClick={ handleTriggerClick }
+                onMouseEnter={ () => {
+                  setDefaultTriggerHovered(true)
+                  handleTriggerMouseEnter()
+                } }
+                onMouseLeave={ () => {
+                  setDefaultTriggerHovered(false)
+                  handleTriggerMouseLeave()
+                } }
+              >
+                <div className={ cn(
+                  'flex min-h-9 items-center gap-2 rounded-xl bg-background px-3 py-1.5 text-sm transition-colors hover:bg-background2',
+                  shadowed && 'shadow-card',
+                  bordered && 'border border-border',
+                  isOpen && 'bg-background2',
+                  disabled && 'opacity-50',
+                ) }>
+                  <span className={ cn(
+                    'min-w-0 flex-1 truncate',
+                    selectedOption
+                      ? 'text-text'
+                      : 'text-text2',
+                  ) }>
+                    { selectedOption?.label ?? placeholder }
+                  </span>
+
+                  <span className="flex size-5 shrink-0 items-center justify-center">
+                    { canClearDefaultTrigger && defaultTriggerHovered
+                      ? (
+                          <CloseBtn
+                            mode="static"
+                            size={ 20 }
+                            iconSize={ 13 }
+                            strokeWidth={ 3 }
+                            aria-label="Clear selection"
+                            className="rounded-md"
+                            onClick={ handleClearDefaultValue }
+                          >
+                            { clearConfig?.clearIcon }
+                          </CloseBtn>
+                        )
+                      : (
+                          <ChevronDown className={ cn(
+                            'size-4 text-text2 transition-transform',
+                            isOpen && 'rotate-180',
+                          ) } />
+                        ) }
+                  </span>
+                </div>
+              </div>
             ) }
 
       <SafePortal>{ dropdownContent }</SafePortal>

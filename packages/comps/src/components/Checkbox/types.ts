@@ -5,12 +5,12 @@ import type { Size } from '../../types'
 export type CheckmarkProps = {
   /**
    * 组件大小（宽高相等）
-   * @default 24
+   * @default 'md'
    */
   size?: Size
   /**
    * 线条宽度
-   * @default 10
+   * @default 2
    */
   strokeWidth?: number
 
@@ -21,7 +21,7 @@ export type CheckmarkProps = {
   borderColor?: string
   /**
    * 背景颜色
-   * @default 'currentColor'
+   * @default 'transparent'
    */
   backgroundColor?: string
   /**
@@ -46,12 +46,12 @@ export type CheckmarkProps = {
   showCircle?: boolean
   /**
    * 动画持续时间（秒）
-   * @default 0.6
+   * @default 3
    */
   animationDuration?: number
   /**
    * 动画延迟（秒）
-   * @default 0.1
+   * @default 0
    */
   animationDelay?: number
   /**
@@ -91,7 +91,8 @@ export type CheckboxProps = {
    */
   borderColor?: string
   /**
-   * 边框宽度 (px)
+   * 边框宽度 (px)。省略时未选中为 1，选中/半选为 0
+   * （选中后是纯色块，再压一圈描边会让边缘发灰）
    * @default 1
    */
   borderWidth?: number
@@ -152,7 +153,8 @@ export type CheckboxProps = {
    */
   className?: string
   /**
-   * 动画持续时间（秒）
+   * 打勾 / 横线的绘制动画时长（秒）
+   * @default 0.6
    */
   animationDuration?: number
 } & Omit<React.HTMLAttributes<HTMLElement>, 'onChange' | 'defaultChecked'>

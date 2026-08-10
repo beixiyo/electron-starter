@@ -1,14 +1,15 @@
 'use client'
 
 import type { TimePickerProps } from './types'
-import { clamp } from '@jl-org/tool'
-import { getHours, getMinutes, getSeconds, setHours, setMinutes, setSeconds } from 'date-fns'
-import { memo, useCallback, useMemo } from 'react'
+import { getHours, setHours } from 'date-fns'
+import { useLatestCallback } from 'hooks'
+import { memo, useMemo } from 'react'
 import { cn } from 'utils'
 import { useT } from '../../i18n'
 import { Button } from '../Button'
 import { Cascader } from '../Cascader'
-import { Popover } from '../Popover'
+import { QuickTimePopover } from './components/QuickTimePopover'
+import { TimeSegmentInput } from './components/TimeSegmentInput'
 import { DATA_DATE_PICKER_IGNORE } from './constants'
 
 export const TimePicker = memo<TimePickerProps>(({
@@ -19,74 +20,33 @@ export const TimePicker = memo<TimePickerProps>(({
   className,
   use12Hours = false,
   onConfirm,
+  confirmLoading = false,
   showConfirm = true,
   timeIcon,
+  timeDropdownClassName,
+  timeDropdownZIndex,
   minuteStep = 1,
+  quickTimeStep,
+  enableTimeKeyboardInput = true,
+  enableTimeUnitPopover = true,
+  enableTimeInputWheel = true,
+  layout = 'separate',
+  error = false,
 }) => {
   const t = useT()
   const hours = getHours(value)
-  const minutes = getMinutes(value)
-  const seconds = getSeconds(value)
-
   const showHour = precision === 'hour' || precision === 'minute' || precision === 'second'
-  const showMinute = precision === 'minute' || precision === 'second'
   const showSecond = precision === 'second'
 
   const isPM = hours >= 12
+  const isCombinedLayout = layout === 'combined'
 
-  const displayHour = useMemo(() => {
-    if (!use12Hours)
-      return hours
-    const h = hours % 12
-    return h === 0
-      ? 12
-      : h
-  }, [hours, use12Hours])
-
-  const handleHourChange = useCallback((newHour: number) => {
-    let finalHour = newHour
-    if (use12Hours) {
-      if (isPM) {
-        finalHour = newHour === 12
-          ? 12
-          : newHour + 12
-      }
-      else {
-        finalHour = newHour === 12
-          ? 0
-          : newHour
-      }
-    }
-    onChange(setHours(value, finalHour))
-  }, [value, onChange, use12Hours, isPM])
-
-  const handleMinuteChange = useCallback((newMinute: number) => {
-    onChange(setMinutes(value, newMinute))
-  }, [value, onChange])
-
-  const handleSecondChange = useCallback((newSecond: number) => {
-    onChange(setSeconds(value, newSecond))
-  }, [value, onChange])
-
-  const toggleAMPM = useCallback(() => {
+  const toggleAMPM = useLatestCallback(() => {
     const newHour = isPM
       ? hours - 12
       : hours + 12
     onChange(setHours(value, newHour))
-  }, [hours, isPM, onChange, value])
-
-  const hourOptions = useMemo(() => {
-    if (use12Hours) {
-      return Array.from({ length: 12 }, (_, i) => i + 1)
-    }
-    return Array.from({ length: 24 }, (_, i) => i)
-  }, [use12Hours])
-
-  const minuteOptions = useMemo(() => {
-    return Array.from({ length: Math.ceil(60 / minuteStep) }, (_, i) => i * minuteStep)
-  }, [minuteStep])
-
-  const secondOptions = Array.from({ length: 60 }, (_, i) => i)
+  })
 
   const ampmOptions = useMemo(() => [
     { label: t('datePicker.am') || '上午', value: 'AM' },
@@ -94,6 +54,11 @@ export const TimePicker = memo<TimePickerProps>(({
   ], [t])
 
   const periodPosition = t('datePicker.periodPosition') || 'left'
+  const timeDropdownStyle = useMemo(() => {
+    return timeDropdownZIndex == null
+      ? undefined
+      : { zIndex: timeDropdownZIndex }
+  }, [timeDropdownZIndex])
 
   const ampmSelector = useMemo(() => {
     if (!use12Hours)
@@ -112,121 +77,86 @@ export const TimePicker = memo<TimePickerProps>(({
           }
         } }
         trigger={
-          <div className="flex items-center bg-background2 rounded-xl px-3 h-[40px] cursor-pointer select-none text-xs font-medium text-text hover:bg-background3 transition-colors">
+          <div className={ cn(
+            'flex items-center cursor-pointer select-none text-xs font-medium text-text transition-colors',
+            isCombinedLayout
+              ? 'h-auto rounded-none bg-transparent px-0 hover:bg-transparent'
+              : 'h-10 rounded-xl bg-background2 px-3 hover:bg-background3',
+            error && 'text-systemRed',
+          ) }>
             { isPM
               ? t('datePicker.pm') || '下午'
               : t('datePicker.am') || '上午' }
           </div>
         }
-        dropdownClassName="min-w-[80px]!"
+        dropdownClassName={ cn('min-w-[80px]!', timeDropdownClassName) }
+        dropdownStyle={ timeDropdownStyle }
         dropdownProps={ { [DATA_DATE_PICKER_IGNORE]: 'true' } as any }
       />
     )
-  }, [use12Hours, ampmOptions, isPM, disabled, toggleAMPM, t])
-
-  const renderOptionList = (
-    options: number[],
-    selected: number,
-    onSelect: (val: number) => void,
-  ) => (
-    <div
-      className="max-h-60 overflow-y-auto p-2 scrollbar-none"
-      { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
-    >
-      <div
-        className="grid gap-1"
-        style={ {
-          gridTemplateColumns: `repeat(${clamp(options.length, 1, 6)}, 1fr)`,
-        } }
-      >
-        { options.map(option => (
-          <div
-            key={ option }
-            className={ cn(
-              'size-8 flex items-center justify-center text-xs rounded-full cursor-pointer transition-all',
-              option === selected
-                ? 'bg-button text-button3'
-                : 'hover:bg-background3 text-text',
-            ) }
-            onClick={ () => onSelect(option) }
-          >
-            { String(option).padStart(2, '0') }
-          </div>
-        )) }
-      </div>
-    </div>
-  )
+  }, [use12Hours, ampmOptions, isPM, disabled, t, timeDropdownClassName, timeDropdownStyle, isCombinedLayout, error])
 
   if (!showHour)
     return null
 
+  const quickTimeSelector = (
+    <QuickTimePopover
+      value={ value }
+      step={ quickTimeStep }
+      icon={ timeIcon }
+      disabled={ disabled }
+      onChange={ onChange }
+      contentClassName={ timeDropdownClassName }
+      contentStyle={ timeDropdownStyle }
+    />
+  )
+
+  const timeValueControl = <TimeSegmentInput
+    value={ value }
+    onChange={ onChange }
+    precision={ precision }
+    use12Hours={ use12Hours }
+    disabled={ disabled }
+    minuteStep={ minuteStep }
+    enableKeyboardInput={ enableTimeKeyboardInput }
+    enablePopover={ enableTimeUnitPopover }
+    enableWheel={ enableTimeInputWheel }
+    contentClassName={ timeDropdownClassName }
+    contentStyle={ timeDropdownStyle }
+    error={ error }
+  />
+
   return (
-    <div className={ cn('flex items-center justify-between', className) }>
-      <div className="flex items-center gap-2">
+    <div className={ cn(
+      'flex items-center justify-between',
+      isCombinedLayout && 'w-fit',
+      className,
+    ) }>
+      <div
+        className={ cn(
+          'flex items-center gap-2',
+          isCombinedLayout && 'h-10 w-full min-w-max rounded-xl bg-background2 px-2',
+          isCombinedLayout && error && 'text-systemRed',
+        ) }
+        aria-invalid={ error || undefined }>
         { periodPosition === 'left' && ampmSelector }
 
-        <div
-          className="flex items-center justify-center bg-background2 rounded-xl gap-2"
-          style={ {
-            width: showSecond
-              ? 116
-              : 88,
-            height: 40,
-          } }
-        >
-          { timeIcon }
+        { isCombinedLayout && quickTimeSelector }
 
-          <div className="flex items-center gap-1 text-sm text-text">
-            <Popover
-              trigger="click"
-              position="top"
-              disabled={ disabled }
-              content={ renderOptionList(hourOptions, displayHour, handleHourChange) }
+        { isCombinedLayout
+          ? timeValueControl
+          : <div
+              className="flex items-center justify-center bg-background2 rounded-xl gap-2"
+              style={ {
+                width: showSecond
+                  ? 116
+                  : 88,
+                height: 40,
+              } }
             >
-              <div
-                className="cursor-pointer hover:text-brand transition-colors"
-              >
-                { String(displayHour).padStart(2, '0') }
-              </div>
-            </Popover>
-
-            { showMinute && (
-              <>
-                <span className="text-text">:</span>
-                <Popover
-                  trigger="click"
-                  position="top"
-                  disabled={ disabled }
-                  content={ renderOptionList(minuteOptions, minutes, handleMinuteChange) }
-                >
-                  <div
-                    className="cursor-pointer transition-colors hover:text-brand"
-                  >
-                    { String(minutes).padStart(2, '0') }
-                  </div>
-                </Popover>
-              </>
-            ) }
-
-            { showSecond && (
-              <>
-                <span className="text-text4">:</span>
-                <Popover
-                  trigger="click"
-                  position="top"
-                  disabled={ disabled }
-                  content={ renderOptionList(secondOptions, seconds, handleSecondChange) }
-                >
-                  <span
-                    className="cursor-pointer hover:text-brand transition-colors"
-                  >
-                    { String(seconds).padStart(2, '0') }
-                  </span>
-                </Popover>
-              </>
-            ) }
-          </div>
-        </div>
+              { quickTimeSelector }
+              { timeValueControl }
+            </div> }
 
         { periodPosition === 'right' && ampmSelector }
       </div>
@@ -235,8 +165,9 @@ export const TimePicker = memo<TimePickerProps>(({
         <Button
           onClick={ onConfirm }
           disabled={ disabled }
+          loading={ confirmLoading }
           variant="primary"
-          className="h-[40px]"
+          className="h-10"
         >
           { t('datePicker.confirm') || '确认' }
         </Button>

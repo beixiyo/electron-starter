@@ -87,7 +87,71 @@ export type PanelState = {
    * 收起前的宽度（用于恢复）
    */
   widthBeforeCollapse: number
+  /**
+   * 是否因响应式空间不足被临时收起
+   *
+   * 临时收起不会覆盖用户持久化的展开偏好，容器恢复后可自动还原
+   * @default false
+   */
+  responsiveCollapsed?: boolean
 }
+
+/**
+ * 响应式布局重算上下文
+ */
+export type SplitPaneLayoutContext = {
+  /**
+   * 面板配置列表
+   */
+  configs: PanelConfig[]
+  /**
+   * 当前面板状态
+   */
+  states: PanelState[]
+  /**
+   * 容器宽度
+   */
+  containerWidth: number
+  /**
+   * 默认分隔条宽度
+   */
+  dividerSize: number
+  /**
+   * 分隔条宽度列表
+   */
+  dividerSizes?: readonly number[]
+  /**
+   * 面板间距
+   * @default 0
+   */
+  gap: number
+  /**
+   * 触发布局重算的原因
+   */
+  reason: 'init' | 'resize' | 'toggle'
+}
+
+/**
+ * 自定义响应式布局重算函数
+ */
+export type SplitPaneLayoutResolver = (context: SplitPaneLayoutContext) => PanelState[] | null | undefined
+
+/**
+ * 面板显式切换上下文
+ */
+export type SplitPaneToggleContext = SplitPaneLayoutContext & {
+  /** 被切换的面板索引 */
+  panelIndex: number
+  /** 被切换的面板 id */
+  panelId: string
+}
+
+/**
+ * 自定义面板切换结算函数
+ *
+ * 用于多栏布局在一次状态更新内完成互斥收起和展开，避免产生非法中间宽度
+ */
+export type SplitPaneToggleResolver = (context: SplitPaneToggleContext) => PanelState[] | null | undefined
 
 /**
  * SplitPane 子组件 Props
@@ -182,14 +246,30 @@ export type SplitPaneProps = {
    */
   dividerSize?: number
   /**
+   * 分隔条宽度列表，按分隔条索引覆盖 dividerSize
+   *
+   * 未配置的分隔条会回退到 dividerSize
+   * @default undefined
+   */
+  dividerSizes?: readonly number[]
+  /**
    * 面板之间的间距（像素），在分隔条两侧均匀分配
    * @default 0
    */
   gap?: number
   /**
    * 布局变化回调
+   *
+   * 注意：拖拽过程中会随每次 mousemove 高频触发（每帧一次），
+   * 若只需要拖拽结束时的最终布局（用于持久化 / 重计算），请使用 `onResizeEnd`
    */
   onLayoutChange?: (sizes: number[], collapsedStates: boolean[]) => void
+  /**
+   * 拖拽结束（含自动收起结算后）触发一次，回传最终布局
+   *
+   * 相比高频的 `onLayoutChange`，更适合做持久化或重计算
+   */
+  onResizeEnd?: (sizes: number[], collapsedStates: boolean[]) => void
   /**
    * 主题配置
    */
@@ -214,6 +294,36 @@ export type SplitPaneProps = {
    * 未提供或长度不足时，未配置的分隔条默认可拖拽
    */
   draggableDividers?: boolean[]
+  /**
+   * 是否显示分隔条 hover 时的收起 / 展开按钮
+   * @default true
+   */
+  showCollapseButtons?: boolean
+  /**
+   * 是否渲染分隔条视觉线条
+   *
+   * 传入数组时按分隔条索引配置，未配置项默认显示
+   * @default true
+   */
+  showDividerLines?: boolean | readonly boolean[]
+  /**
+   * 容器尺寸变化时的自定义布局重算
+   *
+   * 返回 null / undefined 时保持默认布局状态不变
+   */
+  resolveLayout?: SplitPaneLayoutResolver
+  /**
+   * 自定义面板显式切换结算
+   *
+   * 返回 null / undefined 时使用 SplitPane 默认切换逻辑
+   */
+  resolveToggle?: SplitPaneToggleResolver
+  /**
+   * 外部 resize 信号
+   *
+   * 值变化时会重新测量容器宽度并触发布局重算，不会重挂载面板
+   */
+  resizeSignal?: unknown
 }
 
 /**
@@ -269,6 +379,16 @@ export type DividerProps = {
    * @default true
    */
   draggable?: boolean
+  /**
+   * 是否显示 hover 时的收起 / 展开按钮
+   * @default true
+   */
+  showCollapseButtons?: boolean
+  /**
+   * 是否渲染分隔条视觉线条
+   * @default true
+   */
+  showDividerLine?: boolean
 }
 
 /**

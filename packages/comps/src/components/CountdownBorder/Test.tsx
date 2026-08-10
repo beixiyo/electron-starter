@@ -2,6 +2,7 @@ import { useMotionValue } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { Button } from '../Button'
 import { Card } from '../Card'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ProgressBar } from '../Progress'
 import { Slider } from '../Slider'
 import { ThemeToggle } from '../ThemeToggle'
@@ -34,9 +35,7 @@ function CountdownBorderTest() {
           headerActions={
             <div className="flex gap-2">
               <Button size="sm" onClick={ () => setRunning(value => !value) }>
-                { running
-                  ? 'Pause'
-                  : 'Start' }
+                { running ? 'Pause' : 'Start' }
               </Button>
               <Button size="sm" onClick={ () => setResetKey(value => value + 1) }>Restart</Button>
             </div>
@@ -86,10 +85,7 @@ function CountdownBorderTest() {
                 contentClassName="flex flex-col justify-center px-5"
               >
                 <div className="text-sm font-semibold">Controlled progress</div>
-                <div className="mt-1 text-xs text-text2">
-                  { Math.round(controlledProgress * 100) }
-                  %
-                </div>
+                <div className="mt-1 text-xs text-text2">{ Math.round(controlledProgress * 100) }%</div>
               </CountdownBorder>
 
               <Slider
@@ -123,6 +119,8 @@ function CountdownBorderTest() {
           </Card>
         </div>
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }

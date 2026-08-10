@@ -3,13 +3,14 @@
 import { motion } from 'motion/react'
 import { useState } from 'react'
 import { Button } from '../Button'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { Tooltip } from './index'
 
 /**
  * Tooltip 组件测试页面
  */
-export default function TooltipTest() {
+function TooltipTest() {
   const [visible, setVisible] = useState(false)
 
   const [isExpanded, setIsExpanded] = useState(false)
@@ -24,41 +25,50 @@ export default function TooltipTest() {
         {/* 基础 Tooltip */ }
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">基础 Tooltip</h2>
+          <p className="text-sm text-text2">
+            箭头默认开启；不需要箭头时显式传入 arrow=false
+          </p>
           <div className="flex gap-4">
             <Tooltip content="这是一个基础的 Tooltip">
               <Button className="rounded-sm bg-blue-500 px-4 py-2 text-white hover:bg-blue-600">
-                悬停显示 Tooltip
+                默认箭头
+              </Button>
+            </Tooltip>
+
+            <Tooltip content="这是一个没有箭头的 Tooltip" arrow={ false }>
+              <Button className="rounded-sm bg-blue-500 px-4 py-2 text-white hover:bg-blue-600">
+                关闭箭头
               </Button>
             </Tooltip>
           </div>
         </div>
 
-        {/* 不同位置（带尖尖角 arrow） */ }
+        {/* 不同位置与自定义箭头 */ }
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">不同位置（带尖尖角）</h2>
+          <h2 className="text-lg font-semibold">不同位置与自定义箭头</h2>
           <p className="text-sm text-text2">
-            开启 arrow 后会显示指向触发元素的尖角，底色自动跟随深浅色模式
+            默认箭头会跟随最终 placement 指向触发元素；右侧示例将尺寸配置为 16px
           </p>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <Tooltip content="左侧 Tooltip" placement="left" arrow>
+            <Tooltip content="左侧 Tooltip" placement="left">
               <Button className="w-full rounded-xs bg-green-500 px-4 py-2 text-white hover:bg-green-600">
                 左侧 ◀
               </Button>
             </Tooltip>
 
-            <Tooltip content="顶部 Tooltip" placement="top" arrow>
+            <Tooltip content="顶部 Tooltip" placement="top">
               <Button className="w-full rounded-xs bg-green-500 px-4 py-2 text-white hover:bg-green-600">
                 顶部 ▲
               </Button>
             </Tooltip>
 
-            <Tooltip content="底部 Tooltip" placement="bottom" arrow>
+            <Tooltip content="底部 Tooltip" placement="bottom">
               <Button className="w-full rounded-xs bg-green-500 px-4 py-2 text-white hover:bg-green-600">
                 底部 ▼
               </Button>
             </Tooltip>
 
-            <Tooltip content="右侧 Tooltip" placement="right" arrow>
+            <Tooltip content="右侧 Tooltip" placement="right" arrow={ { size: 16 } }>
               <Button className="w-full rounded-xs bg-green-500 px-4 py-2 text-white hover:bg-green-600">
                 右侧 ▶
               </Button>
@@ -130,7 +140,7 @@ export default function TooltipTest() {
             </Tooltip>
 
             <Button
-              className="rounded-sm bg-gray-500 px-4 py-2 text-white hover:bg-gray-600"
+              variant="default"
               onClick={ () => setVisible(!visible) }
             >
               { visible
@@ -186,26 +196,26 @@ export default function TooltipTest() {
 
         <div>
           <div className="mb-8">
-            <h1 className="mb-4 text-3xl text-gray-900 font-bold dark:text-gray-100">
+            <h1 className="mb-4 text-3xl font-bold">
               Tooltip autoHideOnResize 功能测试
             </h1>
-            <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-text2">
               测试 Tooltip 组件的 autoHideOnResize 属性在元素位置/尺寸变化时的自动隐藏功能
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
             {/* 测试区域 1：尺寸变化 */ }
-            <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-slate-800">
-              <h3 className="mb-4 text-lg text-gray-900 font-semibold dark:text-gray-100">
+            <div className="rounded-lg bg-background2 p-6 shadow-lg">
+              <h3 className="mb-4 text-lg font-semibold">
                 测试 1：尺寸变化
               </h3>
-              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              <p className="mb-4 text-sm text-text2">
                 点击按钮改变容器尺寸，观察 Tooltip 是否自动隐藏
               </p>
 
               <motion.div
-                className="mb-4 rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20"
+                className="mb-4 rounded-lg bg-background3 p-4"
                 animate={ {
                   width: isExpanded
                     ? 300
@@ -218,19 +228,16 @@ export default function TooltipTest() {
               >
                 <div className="h-full flex items-center justify-center">
                   <Tooltip content="这是一个测试 Tooltip" autoHideOnResize>
-                    <button
-                      onClick={ () => setIsExpanded(!isExpanded) }
-                      className="rounded-md bg-blue-600 px-4 py-2 text-white transition-colors hover:bg-blue-700"
-                    >
+                    <Button variant="primary" onClick={ () => setIsExpanded(!isExpanded) }>
                       { isExpanded
                         ? '收缩容器'
                         : '展开容器' }
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               </motion.div>
 
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-text3">
                 当前尺寸:
                 { ' ' }
                 { isExpanded
@@ -241,15 +248,15 @@ export default function TooltipTest() {
             </div>
 
             {/* 测试区域 2：位置变化 */ }
-            <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-slate-800">
-              <h3 className="mb-4 text-lg text-gray-900 font-semibold dark:text-gray-100">
+            <div className="rounded-lg bg-background2 p-6 shadow-lg">
+              <h3 className="mb-4 text-lg font-semibold">
                 测试 2：位置变化
               </h3>
-              <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+              <p className="mb-4 text-sm text-text2">
                 点击按钮改变元素位置，观察 Tooltip 是否自动隐藏
               </p>
 
-              <div className="relative h-48 overflow-hidden rounded-lg bg-gray-100 dark:bg-slate-700">
+              <div className="relative h-48 overflow-hidden rounded-lg bg-background3">
                 <div
                   className="absolute"
                   style={ {
@@ -259,20 +266,21 @@ export default function TooltipTest() {
                   } }
                 >
                   <Tooltip content="位置会改变的按钮" autoHideOnResize>
-                    <button
+                    <Button
+                      variant="success"
+                      size="sm"
                       onClick={ () => setPosition({
                         x: Math.random() * 200,
                         y: Math.random() * 150,
                       }) }
-                      className="rounded-md bg-green-600 px-3 py-2 text-sm text-white transition-colors hover:bg-green-700"
                     >
                       移动位置
-                    </button>
+                    </Button>
                   </Tooltip>
                 </div>
               </div>
 
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <div className="mt-2 text-xs text-text3">
                 当前位置: (
                 { Math.round(position.x) }
                 ,
@@ -284,11 +292,11 @@ export default function TooltipTest() {
           </div>
 
           {/* 说明文档 */ }
-          <div className="mt-8 rounded-lg bg-blue-50 p-6 dark:bg-blue-900/20">
-            <h3 className="mb-3 text-blue-800 font-medium dark:text-blue-200">
+          <div className="mt-8 rounded-lg bg-systemBlue/10 p-6">
+            <h3 className="mb-3 text-info font-medium">
               📖 使用说明
             </h3>
-            <div className="text-sm text-blue-700 space-y-2 dark:text-blue-300">
+            <div className="text-sm text-text2 space-y-2">
               <p>
                 <strong>autoHideOnResize 属性：</strong>
                 当设置为 true 时，Tooltip 会自动监听触发元素的尺寸和位置变化
@@ -309,6 +317,10 @@ export default function TooltipTest() {
           </div>
         </div>
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }
+
+export default TooltipTest

@@ -1,3 +1,5 @@
+'use client'
+
 import type { DividerProps } from './types'
 import { memo, useCallback, useState } from 'react'
 import { cn } from 'utils'
@@ -20,6 +22,8 @@ export const Divider = memo(({
   theme,
   styleConfig,
   draggable = true,
+  showCollapseButtons = true,
+  showDividerLine = true,
 }: DividerProps) => {
   const [isHovered, setIsHovered] = useState(false)
 
@@ -58,6 +62,12 @@ export const Divider = memo(({
 
   return (
     <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="调整面板宽度"
+      tabIndex={ canDrag
+        ? 0
+        : -1 }
       className={ cn(
         'relative shrink-0 select-none transition-colors duration-150',
         styleConfig?.className,
@@ -73,6 +83,9 @@ export const Divider = memo(({
         ...(isHovered
           ? styleConfig?.hoverStyle
           : {}),
+        ...(!showDividerLine
+          ? { backgroundColor: 'transparent' }
+          : {}),
       } }
       onMouseEnter={ handleMouseEnter }
       onMouseLeave={ handleMouseLeave }
@@ -81,7 +94,7 @@ export const Divider = memo(({
         : undefined }
     >
       {/* 收起按钮 */ }
-      { isHovered && (
+      { showCollapseButtons && isHovered && (
         <div className="absolute inset-0 flex items-center justify-center">
           { leftCollapsible && (
             <CollapseButton

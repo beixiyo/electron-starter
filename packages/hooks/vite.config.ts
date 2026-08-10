@@ -1,7 +1,8 @@
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
-import pkg from '../../package.json' with { type: 'json' }
+import { createPackageExternal } from '../../scripts/vite/packageExternal'
+import pkg from './package.json' with { type: 'json' }
 
 export default defineConfig({
   plugins: [
@@ -18,14 +19,7 @@ export default defineConfig({
         : 'cjs'}`,
     },
     rollupOptions: {
-      external: (id) => {
-        /** 匹配所有依赖包及其子路径 */
-        const allDeps = [
-          ...Object.keys(pkg.dependencies || {}),
-          ...Object.keys(pkg.devDependencies || {}),
-        ]
-        return allDeps.some(dep => id === dep || id.startsWith(`${dep}/`))
-      },
+      external: createPackageExternal(pkg),
     },
   },
 })

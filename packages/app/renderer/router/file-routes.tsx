@@ -13,17 +13,6 @@ export const fileRoutes: RouteObject[] = [
         indexFileName: '/page.tsx',
         routerPathFolder: 'views',
         pathPrefix: /^\/views/,
-        /** 使用 customizeRoute 自定义路由项，例如启用懒加载 */
-        customizeRoute: (_context) => {
-          return (route) => {
-            const customizedRoute: RouteObject = {
-              ...route,
-              component: lazy(route.component),
-            }
-
-            return customizedRoute
-          }
-        },
         transformRoute: (route) => {
           return ['/', '/login', '/speak'].includes(route.path)
             ? null

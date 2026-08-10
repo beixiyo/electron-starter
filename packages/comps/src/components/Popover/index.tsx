@@ -1,15 +1,18 @@
 'use client'
 
-import type { RefObject } from 'react'
 import type { PopoverProps, PopoverRef } from './types'
-import { onUnmounted, useClickOutside, useFloatingPosition, useRestoreFocus, useShortCutKey, useTheme } from 'hooks'
+import { useFloatingPosition, useTheme } from 'hooks'
 import { X } from 'lucide-react'
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, memo, useRef } from 'react'
 import { cn } from 'utils'
 import { AnimateShow } from '../Animate'
+import { FloatingArrow, useFloatingArrowState } from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
+import { usePopoverInteractions } from './usePopoverInteractions'
 import { useScrollPortal } from './useScrollPortal'
 import { getVariantByPlacement } from './variants'
+
+const DEFAULT_CLOSE_KEYS = ['Escape']
 
 /**
  * Popover 组件，用于在触发器元素旁边显示浮动内容
@@ -23,10 +26,12 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
     style,
     className,
     contentClassName,
+    contentStyle,
 
     children,
     content,
     position = 'top',
+    align = 'center',
     trigger = 'hover',
     disabled,
     removeDelay = 200,
@@ -34,6 +39,7 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
     offset: offsetProp = 8,
 
     clickOutsideToClose = true,
+    closeKeys = DEFAULT_CLOSE_KEYS,
     showCloseBtn = false,
     onOpen,
     onClose,
@@ -44,14 +50,34 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
     restoreFocusOnOpen = false,
     exitSetMode = false,
     bordered = theme !== 'light',
+    arrow = true,
   } = props
-  const [isOpen, setIsOpen] = useState(false)
-
   const triggerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const wasOpenRef = useRef(false)
+  const {
+    isOpen,
+    setIsOpen,
+    handleClick,
+    handleMouseEnter,
+    handleMouseLeave,
+    handleContentMouseEnter,
+    handleContentMouseLeave,
+  } = usePopoverInteractions({
+    popoverRef: ref,
+    triggerRef,
+    contentRef,
+    trigger,
+    disabled,
+    removeDelay,
+    showDelay,
+    clickOutsideToClose,
+    closeKeys,
+    clickOutsideIgnoreSelector,
+    restoreFocusOnOpen,
+    contentStyle,
+    onOpen,
+    onClose,
+  })
 
   const { scrollPortalTarget, scrollContainerRef } = useScrollPortal(
     triggerRef,
@@ -59,14 +85,14 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
     isOpen,
   )
 
-  const { activeElementRef: activeElementBeforeOpenRef } = useRestoreFocus(isOpen && restoreFocusOnOpen)
-
   const {
     style: floatingStyle,
     placement: actualPosition,
   } = useFloatingPosition(triggerRef, contentRef, {
     enabled: isOpen,
-    placement: position,
+    placement: align === 'center'
+      ? position
+      : `${position}-${align}`,
     offset: offsetProp,
     boundaryPadding: 8,
     flip: true,
@@ -80,144 +106,22 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
       : undefined,
   })
 
-  const handleClose = useCallback(() => {
-    setIsOpen(false)
-  }, [])
-
-  useClickOutside(
-    [triggerRef, contentRef] as RefObject<HTMLElement>[],
-    handleClose,
-    {
-      enabled: isOpen && (trigger === 'click' || trigger === 'command') && clickOutsideToClose,
-      additionalSelectors: clickOutsideIgnoreSelector
-        ? [clickOutsideIgnoreSelector]
-        : [],
-    },
-  )
-
-  useShortCutKey({
-    key: 'Escape',
-    fn: handleClose,
-    el: isOpen && typeof document !== 'undefined'
-      ? document as unknown as HTMLElement
-      : null,
+  const {
+    options: arrowOptions,
+    centerOffset: arrowCenterOffset,
+    fill: arrowFill,
+    style: arrowStyle,
+  } = useFloatingArrowState({
+    arrow,
+    enabled: isOpen,
+    placement: actualPosition,
+    floatingStyle,
+    referenceRef: triggerRef,
+    floatingRef: contentRef,
+    virtualReferenceRect,
   })
-
-  useEffect(() => {
-    if (isOpen) {
-      wasOpenRef.current = true
-      onOpen?.()
-    }
-    else {
-      /** 仅在实际从打开变为关闭时调用 onClose，避免初次 mount 时 isOpen=false 误触发 */
-      if (wasOpenRef.current) {
-        wasOpenRef.current = false
-        onClose?.()
-      }
-    }
-  }, [isOpen, onOpen, onClose])
-
-  onUnmounted(() => {
-    if (closeTimeoutRef.current) {
-      clearTimeout(closeTimeoutRef.current)
-    }
-    if (showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current)
-    }
-  })
-
-  const handleClick = () => {
-    if (disabled)
-      return
-    if (trigger === 'click') {
-      setIsOpen(!isOpen)
-    }
-  }
-
-  const handleMouseEnter = () => {
-    if (disabled)
-      return
-
-    if (trigger === 'hover') {
-      if (closeTimeoutRef.current) {
-        clearTimeout(closeTimeoutRef.current)
-        closeTimeoutRef.current = null
-      }
-      if (showTimeoutRef.current) {
-        clearTimeout(showTimeoutRef.current)
-        showTimeoutRef.current = null
-      }
-
-      if (showDelay <= 0) {
-        setIsOpen(true)
-      }
-      else {
-        showTimeoutRef.current = setTimeout(() => {
-          setIsOpen(true)
-        }, showDelay)
-      }
-    }
-  }
-
-  const removePopover = () => {
-    if (removeDelay <= 0) {
-      setIsOpen(false)
-      return
-    }
-
-    closeTimeoutRef.current = setTimeout(() => {
-      setIsOpen(false)
-    }, removeDelay)
-  }
-
-  const handleMouseLeave = () => {
-    if (disabled)
-      return
-
-    if (trigger === 'hover') {
-      if (showTimeoutRef.current) {
-        clearTimeout(showTimeoutRef.current)
-        showTimeoutRef.current = null
-      }
-      removePopover()
-    }
-  }
-
-  const handleContentMouseEnter = () => {
-    if (disabled)
-      return
-    if (trigger === 'hover') {
-      if (closeTimeoutRef.current) {
-        clearTimeout(closeTimeoutRef.current)
-        closeTimeoutRef.current = null
-      }
-    }
-  }
-
-  const handleContentMouseLeave = () => {
-    if (disabled)
-      return
-    if (trigger === 'hover') {
-      removePopover()
-    }
-  }
-
-  useImperativeHandle(ref, () => ({
-    open: () => {
-      if (disabled || isOpen)
-        return
-
-      if (restoreFocusOnOpen)
-        activeElementBeforeOpenRef.current = document.activeElement as HTMLElement | null
-      setIsOpen(true)
-    },
-    close: () => {
-      setIsOpen(false)
-    },
-  }), [disabled, isOpen, restoreFocusOnOpen])
 
   const variants = getVariantByPlacement(actualPosition)
-
   return (
     <>
       <div
@@ -239,23 +143,39 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
           show={ isOpen }
           ref={ contentRef }
           className={ cn(
-            'z-dropdown rounded-2xl shadow-card bg-background',
+            'z-popover rounded-2xl bg-background drop-shadow-card',
             bordered && 'border border-border',
             contentClassName,
+            arrowOptions && 'overflow-visible',
           ) }
-          style={ floatingStyle }
+          style={ {
+            ...floatingStyle,
+            ...contentStyle,
+          } }
           variants={ variants }
           exitSetMode={ exitSetMode }
           onMouseEnter={ handleContentMouseEnter }
           onMouseLeave={ handleContentMouseLeave }
         >
           { showCloseBtn && <X
-            className={ `absolute top-1 right-2 cursor-pointer text-red-400 font-bold z-dropdown
+            className={ `absolute top-1 right-2 cursor-pointer text-red-400 font-bold z-popover
           hover:text-red-600 duration-300 hover:text-lg` }
             onClick={ () => {
               setIsOpen(false)
             } }
           /> }
+
+          { arrowOptions && (
+            <FloatingArrow
+              placement={ actualPosition }
+              centerOffset={ arrowCenterOffset }
+              size={ arrowOptions.size }
+              bordered={ bordered }
+              fill={ arrowFill }
+              className={ arrowOptions.className }
+              style={ arrowStyle }
+            />
+          ) }
 
           { content }
         </AnimateShow>
@@ -266,4 +186,4 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
 
 Popover.displayName = 'Popover'
 
-export type { PopoverPosition, PopoverProps, PopoverRef, PopoverTrigger } from './types'
+export type { PopoverAlign, PopoverPosition, PopoverProps, PopoverRef, PopoverTrigger } from './types'

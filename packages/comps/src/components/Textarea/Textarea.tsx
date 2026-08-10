@@ -3,7 +3,7 @@
 import type { ChangeEvent } from 'react'
 // import type TurndownService from 'turndown'
 import type { TextareaProps } from './types'
-import { useComposedRef } from 'hooks'
+import { useAutoResize, useComposedRef } from 'hooks'
 import { forwardRef, memo, useCallback, useMemo, useState } from 'react'
 import { cn } from 'utils'
 import { useFormField } from '../Form'
@@ -18,6 +18,8 @@ const InnerTextarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, ref
     placeholder,
     disabled = false,
     readOnly = false,
+    bordered = true,
+    shadowed = false,
     disabledClass,
     disabledContainerClass,
     focusClass,
@@ -25,6 +27,8 @@ const InnerTextarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, ref
     errorClass,
     errorContainerClass,
     autoResize = false,
+    minRows = 1,
+    maxRows,
     maxLength,
     showCount = false,
     error = false,
@@ -100,17 +104,14 @@ const InnerTextarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, ref
 
   const { setRef, elementRef: textareaRef } = useComposedRef<HTMLTextAreaElement>({ ref })
 
-  /** 调整高度的函数 */
-  const adjustHeight = useCallback(() => {
-    const currentTextarea = textareaRef.current
-    if (!currentTextarea || !autoResize) // 仅在 autoResize 为 true 时调整
-      return
-
-    /** 先重置高度以获取正确的 scrollHeight */
-    currentTextarea.style.height = 'auto'
-    const newHeight = currentTextarea.scrollHeight
-    currentTextarea.style.height = `${newHeight}px`
-  }, [autoResize])
+  /** 自动高度逻辑：根据内容变高、超过 maxRows 行内部滚动、同步受控值变化 */
+  const adjustHeight = useAutoResize({
+    inputRef: textareaRef,
+    autoResize,
+    minRows,
+    maxRows,
+    value: actualValue,
+  })
 
   /** 处理输入变化 (由用户输入或程序化粘贴触发) */
   const handleChange = useCallback(
@@ -248,6 +249,8 @@ const InnerTextarea = forwardRef<HTMLTextAreaElement, TextareaProps>((props, ref
     autoResize,
     size,
     disabled,
+    bordered,
+    shadowed,
     className: className || '',
     disabledClass,
     disabledContainerClass,

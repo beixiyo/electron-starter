@@ -4,13 +4,14 @@ import { useState } from 'react'
 import { Border } from '.'
 import { Badge } from '../Badge'
 import { Card } from '../Card'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { Input } from '../Input'
 import { Separator } from '../Separator'
 import { Slider } from '../Slider'
 import { Switch } from '../Switch'
 import { ThemeToggle } from '../ThemeToggle'
 
-export default function BorderDemoPage() {
+function BorderDemoPage() {
   const [dashLength, setDashLength] = useState(10)
   const [dashGap, setDashGap] = useState(12)
   const [strokeColor, setStrokeColor] = useState('#bbbbbb')
@@ -27,7 +28,7 @@ export default function BorderDemoPage() {
       headerActions={ <ThemeToggle /> }
       bodyClassName="space-y-8"
     >
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+      <div className="mx-auto max-w-4xl grid grid-cols-1 gap-8 lg:grid-cols-2">
         <Card
           title="控制面板"
           variant="glass"
@@ -166,6 +167,10 @@ export default function BorderDemoPage() {
           </Border>
         </Card>
       </div>
+
+      <GithubSourceLink />
     </Card>
   )
 }
+
+export default BorderDemoPage

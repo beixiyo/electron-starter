@@ -5,13 +5,15 @@ import type {
   DropdownProps,
   DropdownSection as DropdownSectionType,
 } from './types'
+import { useLatestCallback } from 'hooks'
 import { ChevronDown } from 'lucide-react'
 import { motion } from 'motion/react'
 import { isValidElement, memo } from 'react'
 import { cn } from 'utils'
 import { AnimateShow } from '../Animate'
 import { StackedCards } from '../Card'
-import { getPreviewMeta, resolveCollapsedContent, resolveSectionMaxHeight } from './helpers'
+import { getPreviewMeta, resolveCollapsedContent, resolveSectionMaxHeight, resolveVirtualOptions } from './helpers'
+import { VirtualItemList } from './VirtualItemList'
 
 export const DropdownSection = memo<DropdownSectionProps>(({
   section,
@@ -38,8 +40,19 @@ export const DropdownSection = memo<DropdownSectionProps>(({
   renderCollapsedItem,
   renderCollapsedContent,
   collapsedStackedCards,
+  virtual,
 }) => {
   const maxHeight = resolveSectionMaxHeight(section, sectionMaxHeight)
+  const virtualOptions = resolveVirtualOptions(section, virtual)
+
+  /** 不可折叠的分区恒展开：点击头部无效，默认头部也不画箭头 */
+  const collapsible = section.collapsible !== false
+  const isExpanded = collapsible
+    ? expanded
+    : true
+  const handleToggle = collapsible
+    ? onToggle
+    : undefined
 
   const defaultRenderItem = (item: DropdownItem) => (
     <div className="flex items-center gap-3">
@@ -81,20 +94,21 @@ export const DropdownSection = memo<DropdownSectionProps>(({
     </div>
   )
 
-  const renderDropdownItem = (item: DropdownItem) => {
+  /** 用 useLatestCallback 稳定引用，避免每次渲染重建导致 memo 化的 VirtualItemList 失效 */
+  const renderDropdownItem = useLatestCallback((item: DropdownItem) => {
     if (item.customContent)
       return item.customContent
     if (renderItem)
       return renderItem(item)
     return defaultRenderItem(item)
-  }
+  })
 
-  const getItemClassName = (item: DropdownItem) => cn(
+  const getItemClassName = useLatestCallback((item: DropdownItem) => cn(
     'px-4 py-3 cursor-pointer border-l-4 transition-all duration-300',
     selectedId === item.id
       ? ['bg-brand/10 border-brand', itemActiveClassName]
       : ['border-transparent hover:bg-background2/50 hover:border-border', itemInactiveClassName],
-  )
+  ))
 
   const rawItems = Array.isArray(section.items)
     ? section.items
@@ -141,7 +155,7 @@ export const DropdownSection = memo<DropdownSectionProps>(({
     ? section.items
     : rawItems.length > 0
       ? rawItems.map((rowItem) => {
-          const isBoundLayer = collapsedPreview && expanded && previewItemIds.has(rowItem.id)
+          const isBoundLayer = collapsedPreview && isExpanded && previewItemIds.has(rowItem.id)
           const layoutId = isBoundLayer
             ? `${sectionLayoutId}-${rowItem.id}`
             : undefined
@@ -181,46 +195,49 @@ export const DropdownSection = memo<DropdownSectionProps>(({
     <div className={ itemClassName }>
       { section.header
         ? (
-            <div onClick={ onToggle }>
+            <div onClick={ handleToggle }>
               { typeof section.header === 'function'
-                ? section.header(expanded)
+                ? section.header(isExpanded)
                 : section.header }
             </div>
           )
         : (
             <div
-              onClick={ onToggle }
+              onClick={ handleToggle }
               className={ cn(
-                'w-full flex cursor-pointer items-center justify-between px-4 py-3 text-sm text-text2 transition-all duration-300 hover:opacity-50',
+                'w-full flex items-center justify-between px-4 py-3 text-sm text-text2 transition-all duration-300',
+                collapsible && 'cursor-pointer hover:opacity-50',
               ) }
             >
               <span className={ sectionHeaderClassName }>{ section.name }</span>
-              <motion.div
-                animate={ {
-                  rotate: expanded
-                    ? 180
-                    : 0,
-                } }
-                transition={ { duration: 0.2 } }
-              >
-                <ChevronDown className="h-4 w-4 text-text3" />
-              </motion.div>
+              { collapsible && (
+                <motion.div
+                  animate={ {
+                    rotate: isExpanded
+                      ? 180
+                      : 0,
+                  } }
+                  transition={ { duration: 0.2 } }
+                >
+                  <ChevronDown className="h-4 w-4 text-text3" />
+                </motion.div>
+              ) }
             </div>
           ) }
 
       { collapsedPreview && (
         <AnimateShow
-          show={ !expanded }
+          show={ !isExpanded }
           className={ cn('', collapsedPreviewClassName) }
         >
           { previewLayers > 0 && (
             <div
               onClick={ () => {
                 if (collapsedPreviewClickable)
-                  onToggle()
+                  handleToggle?.()
               } }
               className={ cn(
-                collapsedPreviewClickable && 'cursor-pointer',
+                collapsedPreviewClickable && collapsible && 'cursor-pointer',
               ) }
             >
               <StackedCards
@@ -235,26 +252,37 @@ export const DropdownSection = memo<DropdownSectionProps>(({
       ) }
 
       <AnimateShow
-        show={ expanded }
+        show={ isExpanded }
         className="overflow-hidden"
         visibilityMode
       >
-        { !maxHeight
-          ? content
-          : isValidElement(section.items)
-            ? (
-                <div style={ { height: maxHeight } }>
-                  { content }
-                </div>
-              )
-            : (
-                <div
-                  className="overflow-y-auto"
-                  style={ { maxHeight } }
-                >
-                  { content }
-                </div>
-              ) }
+        { virtualOptions && maxHeight && rawItems.length > 0
+          ? (
+              <VirtualItemList
+                items={ rawItems }
+                maxHeight={ maxHeight }
+                getRowClassName={ getItemClassName }
+                renderRow={ renderDropdownItem }
+                onItemClick={ onClick }
+                { ...virtualOptions }
+              />
+            )
+          : !maxHeight
+              ? content
+              : isValidElement(section.items)
+                ? (
+                    <div style={ { height: maxHeight } }>
+                      { content }
+                    </div>
+                  )
+                : (
+                    <div
+                      className="overflow-y-auto"
+                      style={ { maxHeight } }
+                    >
+                      { content }
+                    </div>
+                  ) }
       </AnimateShow>
     </div>
   )
@@ -287,4 +315,5 @@ export type DropdownSectionProps = {
   renderCollapsedItem: DropdownProps['renderCollapsedItem']
   renderCollapsedContent: DropdownProps['renderCollapsedContent']
   collapsedStackedCards: DropdownProps['collapsedStackedCards']
+  virtual: DropdownProps['virtual']
 }

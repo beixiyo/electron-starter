@@ -16,14 +16,14 @@ export default {
     textSpecial: '255 255 255', // #FFFFFF (Special content)
 
     // 📏 边框 —— 按设计稿更新
-    border: '238 238 238',
+    border: '235 235 235', // 对齐 Figma Border3(#000000 8%)的不透明等价色 ≈ #EBEBEB
     border2: '222 222 222', // Border Secondary #EBEBEB
     border3: '166 166 166',
 
     // 📜 滚动条 —— 轨道与滑块
     scrollbarTrack: 'transparent',
-    scrollbarThumb: 'rgba(0, 0, 0, 0.2)',
-    scrollbarThumbHover: 'rgba(0, 0, 0, 0.35)',
+    scrollbarThumb: 'rgba(0, 0, 0, 0.1)',
+    scrollbarThumbHover: 'rgba(0, 0, 0, 0.1)',
 
     /** 状态色（与 Figma 状态色对齐） */
     success: '52 199 89', // 状态 / 绿 #34c759
@@ -124,14 +124,14 @@ export default {
     textSpecial: '0 0 0',
 
     // 📏 边框 —— 用于组件分界
-    border: '33 33 33',
+    border: '38 38 38', // 对齐 Figma Border3(#FFFFFF 8%)叠深色卡的不透明等价色 ≈ #262626
     border2: '50 50 50',
     border3: '75 75 75',
 
     // 📜 滚动条 —— 轨道与滑块
     scrollbarTrack: 'transparent',
-    scrollbarThumb: 'rgba(255, 255, 255, 0.2)',
-    scrollbarThumbHover: 'rgba(255, 255, 255, 0.35)',
+    scrollbarThumb: 'rgba(107, 114, 128, 0.1)',
+    scrollbarThumbHover: 'rgba(107, 114, 128, 0.1)',
 
     /** 状态色（深色，与 Figma 状态色对齐） */
     success: '48 209 88', // #30D158

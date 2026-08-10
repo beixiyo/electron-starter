@@ -1,14 +1,21 @@
 'use client'
 
 import { Bell, MessageSquareWarning, Settings, User } from 'lucide-react'
-import { memo, useState } from 'react'
+import { memo, useRef, useState } from 'react'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { Tabs } from './Tabs'
 
 const Report = memo(() => {
-  console.log('reload report')
+  const renderCount = useRef(0)
+  renderCount.current++
 
   return <div className="p-4 dark:text-gray-200">
+    <p className="mb-2 text-xs text-text3">
+      渲染次数:
+      { renderCount.current }
+      （KeepAlive 下切换标签不会重渲染）
+    </p>
     <h2 className="mb-4 text-gray-600 dark:text-gray-300">统计数据</h2>
     <h3 className="mb-6 font-medium dark:text-gray-200">每周室内设计服务需求模式</h3>
 
@@ -58,8 +65,15 @@ const Report = memo(() => {
 })
 
 const Analysis = memo(() => {
-  console.log('reload analysis')
+  const renderCount = useRef(0)
+  renderCount.current++
+
   return <div className="p-4 dark:text-gray-200">
+    <p className="mb-2 text-xs text-text3">
+      渲染次数:
+      { renderCount.current }
+      （KeepAlive 下切换标签不会重渲染）
+    </p>
     <h2 className="mb-4 text-gray-600 dark:text-gray-300">分析数据</h2>
   </div>
 })
@@ -96,7 +110,7 @@ const tabItems = [
   },
 ]
 
-export default function TabsTest() {
+function TabsTest() {
   const [activeValue, setActiveValue] = useState('report')
 
   return (
@@ -136,6 +150,10 @@ export default function TabsTest() {
           itemClass="h-96"
         />
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }
+
+export default TabsTest

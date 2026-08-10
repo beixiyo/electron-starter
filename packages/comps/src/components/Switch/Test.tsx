@@ -3,6 +3,7 @@
 import { BarChart3, Globe, MessageCircle, Moon, Sun } from 'lucide-react'
 import { useState } from 'react'
 import { Switch } from '.'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 
 function SwitchDemo() {
@@ -26,7 +27,7 @@ function SwitchDemo() {
             <div className="space-y-4">
               <h2 className="text-lg text-text2 font-semibold">基础用法</h2>
               <div className="flex items-center space-x-4">
-                <Switch onChange={ () => { console.log('onChange') } } />
+                <Switch />
                 <span className="text-text2">默认开关</span>
               </div>
             </div>
@@ -68,6 +69,24 @@ function SwitchDemo() {
               </div>
             </div>
 
+            {/* 自定义滑块宽度 */ }
+            <div className="space-y-4">
+              <h2 className="text-lg text-text2 font-semibold">自定义滑块宽度</h2>
+              <div className="flex items-center space-x-6">
+                <Switch
+                  defaultChecked
+                  withGradient
+                  trackWidth={ 52 }
+                  trackHeight={ 24 }
+                  thumbWidth={ 30 }
+                  thumbHeight={ 20 }
+                  thumbInset={ 2 }
+                  thumbClassName="shadow-none"
+                />
+                <span className="text-text2">长滑块样式</span>
+              </div>
+            </div>
+
             {/* 受控组件 */ }
             <div className="space-y-4">
               <h2 className="text-lg text-text2 font-semibold">受控组件</h2>
@@ -103,7 +122,7 @@ function SwitchDemo() {
                     background="#e5e7eb"
                     withGradient={ false }
                     icon={ <BarChart3 size={ 12 } className="text-white" /> }
-                    iconClassName="bg-linear-to-r from-blue-400 to-purple-500 dark:from-blue-500 dark:to-purple-600"
+                    thumbClassName="bg-linear-to-r from-blue-400 to-purple-500 dark:from-blue-500 dark:to-purple-600"
                   />
                   <span className="text-text2">渐变</span>
                 </div>
@@ -183,6 +202,8 @@ function SwitchDemo() {
           </div>
         </div>
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }

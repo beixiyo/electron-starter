@@ -1,3 +1,5 @@
+'use client'
+
 import type { ReactElement, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import type { PanelConfig, SplitPanePanelProps, SplitPaneProps } from './types'
 import {
@@ -7,6 +9,7 @@ import {
 
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,6 +19,7 @@ import { Divider } from './Divider'
 import { usePanelSizes } from './hooks/usePanelSizes'
 import { usePersistence } from './hooks/usePersistence'
 import { PanelInternal } from './Panel'
+import { getDividerSize } from './utils'
 
 /**
  * SplitPane.Panel 子组件
@@ -25,6 +29,14 @@ function SplitPanePanel({ children }: SplitPanePanelProps) {
 }
 SplitPanePanel.displayName = 'SplitPane.Panel'
 
+function getDividerLineVisible(showDividerLines: SplitPaneProps['showDividerLines'], index: number) {
+  if (Array.isArray(showDividerLines)) {
+    return showDividerLines[index] ?? true
+  }
+
+  return showDividerLines ?? true
+}
+
 /**
  * 分栏布局主组件
  */
@@ -32,13 +44,20 @@ const SplitPaneRoot = memo(({
   children,
   storageKey,
   dividerSize = 4,
+  dividerSizes,
   gap = 0,
   onLayoutChange,
+  onResizeEnd,
   theme,
   className = '',
   animationDuration = 200,
   dividerStyleConfig,
   draggableDividers,
+  showCollapseButtons = true,
+  showDividerLines = true,
+  resolveLayout,
+  resolveToggle,
+  resizeSignal,
 }: SplitPaneProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
@@ -100,14 +119,19 @@ const SplitPaneRoot = memo(({
     onDrag,
     endDrag,
     toggleCollapse,
+    resizeToContainerWidth,
     activeDivider,
   } = usePanelSizes({
     configs: panelConfigs,
     containerWidth,
     dividerSize,
+    dividerSizes,
     gap,
     persistedState,
     onLayoutChange,
+    onResizeEnd,
+    resolveLayout,
+    resolveToggle,
   })
 
   const handleDividerDragStart = useCallback(
@@ -135,15 +159,52 @@ const SplitPaneRoot = memo(({
     if (!container)
       return
 
+    const updateContainerWidth = (width: number) => {
+      /**
+       * 隐藏态（如 keep-alive 的 display:none、首帧布局）会上报 0 宽。
+       * 若用 0 覆盖有效宽度，后续面板数量变化时 usePanelSizes 会因
+       * `containerWidth <= 0` 跳过状态重建，导致新增面板拿不到尺寸 / state。
+       */
+      if (width > 0) {
+        setContainerWidth(width)
+        resizeToContainerWidth(width)
+      }
+    }
+
+    updateContainerWidth(container.getBoundingClientRect().width)
+
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width)
+        updateContainerWidth(entry.contentRect.width)
       }
     })
+    const handleWindowResize = () => {
+      updateContainerWidth(container.getBoundingClientRect().width)
+    }
 
     observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
+    window.addEventListener('resize', handleWindowResize)
+    window.visualViewport?.addEventListener('resize', handleWindowResize)
+
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', handleWindowResize)
+      window.visualViewport?.removeEventListener('resize', handleWindowResize)
+    }
+  }, [resizeToContainerWidth])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container)
+      return
+
+    const width = container.getBoundingClientRect().width
+    if (width <= 0)
+      return
+
+    setContainerWidth(width)
+    resizeToContainerWidth(width)
+  }, [resizeSignal, resizeToContainerWidth])
 
   /** 全局拖拽事件处理 */
   useEffect(() => {
@@ -228,7 +289,7 @@ const SplitPaneRoot = memo(({
     <SplitPaneContext value={ contextValue }>
       <div
         ref={ containerRef }
-        className={ `flex h-full w-full select-none overflow-hidden ${className}` }
+        className={ `flex h-full w-full overflow-hidden ${className}` }
         style={ {
           cursor: activeDivider !== null
             ? 'col-resize'
@@ -239,6 +300,7 @@ const SplitPaneRoot = memo(({
           <div key={ panelConfigs[index].id } className="contents">
             <PanelInternal
               width={ states[index]?.width ?? 0 }
+              minWidth={ panelConfigs[index].minWidth }
               collapsed={ states[index]?.collapsed ?? false }
               isMiddle={ isFlexPanel(index) }
               isDragging={ activeDivider !== null }
@@ -259,7 +321,7 @@ const SplitPaneRoot = memo(({
             { index < panelConfigs.length - 1 && (
               <Divider
                 index={ index }
-                size={ dividerSize }
+                size={ getDividerSize(index, dividerSize, dividerSizes) }
                 leftCollapsible={ panelConfigs[index].collapsible ?? false }
                 rightCollapsible={ panelConfigs[index + 1].collapsible ?? false }
                 leftCollapsed={ states[index]?.collapsed ?? false }
@@ -270,6 +332,8 @@ const SplitPaneRoot = memo(({
                 theme={ theme }
                 styleConfig={ dividerStyleConfig }
                 draggable={ !draggableDividers || draggableDividers[index] !== false }
+                showCollapseButtons={ showCollapseButtons }
+                showDividerLine={ getDividerLineVisible(showDividerLines, index) }
               />
             ) }
           </div>

@@ -10,9 +10,16 @@ function getStorage() {
 /**
  * 计算面板的初始宽度
  */
-export function calculateInitialWidths(configs: PanelConfig[], containerWidth: number, dividerSize: number, gap = 0): number[] {
+export function calculateInitialWidths(
+  configs: PanelConfig[],
+  containerWidth: number,
+  dividerSize: number,
+  gap = 0,
+  dividerSizes?: readonly number[],
+): number[] {
   const dividerCount = configs.length - 1
-  const availableWidth = containerWidth - dividerCount * dividerSize - dividerCount * gap
+  const totalDividerSize = calculateTotalDividerSize(dividerCount, dividerSize, dividerSizes)
+  const availableWidth = containerWidth - totalDividerSize - dividerCount * gap
 
   const widths: number[] = []
   let fixedWidth = 0
@@ -51,6 +58,26 @@ export function calculateInitialWidths(configs: PanelConfig[], containerWidth: n
     }
     return w
   })
+}
+
+/**
+ * 获取指定分隔条尺寸
+ */
+export function getDividerSize(index: number, dividerSize: number, dividerSizes?: readonly number[]): number {
+  return dividerSizes?.[index] ?? dividerSize
+}
+
+/**
+ * 计算所有分隔条占用宽度
+ */
+function calculateTotalDividerSize(dividerCount: number, dividerSize: number, dividerSizes?: readonly number[]): number {
+  let total = 0
+
+  for (let index = 0; index < dividerCount; index++) {
+    total += getDividerSize(index, dividerSize, dividerSizes)
+  }
+
+  return total
 }
 
 /**
@@ -93,8 +120,12 @@ export function loadPersistedState(key: string): { sizes: number[], collapsedSta
 export function savePersistedState(key: string, states: PanelState[]): void {
   try {
     const data = {
-      sizes: states.map(s => s.width),
-      collapsedStates: states.map(s => s.collapsed),
+      sizes: states.map(s => s.responsiveCollapsed
+        ? s.widthBeforeCollapse
+        : s.width),
+      collapsedStates: states.map(s => s.responsiveCollapsed
+        ? false
+        : s.collapsed),
       widthsBeforeCollapse: states.map(s => s.widthBeforeCollapse),
     }
     getStorage()?.setItem(key, JSON.stringify(data))

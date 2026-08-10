@@ -1,8 +1,13 @@
 'use client'
 
+import type { FloatingArrowConfig } from '../FloatingArrow'
 import { motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
+import {
+  FloatingArrow,
+  useFloatingArrowState,
+} from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
 import { useTooltip } from './useTooltip'
 
@@ -17,10 +22,11 @@ export const Tooltip = memo<TooltipProps>((props) => {
     offset = 8,
     className,
     contentClassName,
-    arrow = false,
+    arrow = true,
     formatter,
     delay = 0,
     autoHideOnResize = false,
+    interactive = false,
     ...rest
   } = props
 
@@ -44,36 +50,31 @@ export const Tooltip = memo<TooltipProps>((props) => {
     delay,
     autoHideOnResize,
   })
-
-  /**
-   * 获取箭头样式
-   *
-   * 箭头是一个旋转 45° 的小方块（菱形），复用 Tooltip 的 `bg-background`，
-   * 让深浅色模式自动适配。通过半重叠 + 负 z-index 隐藏靠内的两条边，
-   * 只露出朝外的尖角，从而形成类似对话框的尖尖角，与无边框气泡自然衔接
-   */
-  const getArrowStyle = (placement: TooltipPlacement) => {
-    switch (placement) {
-      case 'top':
-        return { bottom: 0, left: '50%', transform: 'translate(-50%, 50%) rotate(45deg)' }
-      case 'bottom':
-        return { top: 0, left: '50%', transform: 'translate(-50%, -50%) rotate(45deg)' }
-      case 'left':
-        return { right: 0, top: '50%', transform: 'translate(50%, -50%) rotate(45deg)' }
-      case 'right':
-        return { left: 0, top: '50%', transform: 'translate(-50%, -50%) rotate(45deg)' }
-      default:
-        return {}
-    }
-  }
+  const {
+    options: arrowOptions,
+    centerOffset: arrowCenterOffset,
+    fill: arrowFill,
+    style: arrowStyle,
+  } = useFloatingArrowState({
+    arrow,
+    enabled: shouldShow,
+    placement: resolvedPlacement,
+    floatingStyle: style,
+    referenceRef: triggerRef,
+    floatingRef: tooltipRef,
+  })
 
   /** 格式化内容 */
   const formattedContent = formatter && typeof content === 'number'
     ? formatter(content)
     : content
 
-  /** Tooltip 内容 */
-  const tooltipContent = shouldShow && formattedContent
+  /**
+   * Tooltip 内容
+   * 用显式判空而非真值判断，避免数字 0 / 空字符串等合法内容被吞掉
+   */
+  const hasContent = formattedContent != null && formattedContent !== ''
+  const tooltipContent = shouldShow && hasContent
     ? (
         <motion.div
           ref={ tooltipRef }
@@ -82,20 +83,28 @@ export const Tooltip = memo<TooltipProps>((props) => {
           exit={ { opacity: 0, scale: 0.8 } }
           transition={ { duration: 0.15 } }
           className={ cn(
-            'fixed z-tooltip px-2.5 py-1.5 rounded-lg pointer-events-none w-max max-w-[60vw] wrap-break-word text-xs',
+            'fixed z-tooltip px-2.5 py-1.5 rounded-lg w-max max-w-[60vw] wrap-break-word text-xs',
+            /** 默认不拦截指针事件；interactive 时允许浮层内交互（点击链接/按钮等） */
+            interactive
+              ? 'pointer-events-auto'
+              : 'pointer-events-none',
             /** 深色模式黑底、浅色模式白底，自动跟随主题 */
-            'bg-background text-text shadow-card',
+            'bg-background text-text drop-shadow-card',
             contentClassName,
           ) }
           style={ style }
         >
           { formattedContent }
 
-          {/* 类似对话框的尖尖角：旋转方块，复用气泡的底色，与无边框气泡保持一致 */ }
-          { arrow && resolvedPlacement && (
-            <div
-              className="absolute z-[-1] size-2 bg-background"
-              style={ getArrowStyle(resolvedPlacement) }
+          {/* 与其他浮层共用同一套尖角绘制和接缝处理 */ }
+          { arrowOptions && resolvedPlacement && (
+            <FloatingArrow
+              placement={ resolvedPlacement }
+              centerOffset={ arrowCenterOffset }
+              size={ arrowOptions.size }
+              fill={ arrowFill }
+              className={ arrowOptions.className }
+              style={ arrowStyle }
             />
           ) }
         </motion.div>
@@ -175,9 +184,9 @@ export type TooltipProps = {
   contentClassName?: string
   /**
    * 是否显示类似对话框的尖尖角（箭头）
-   * @default false
+   * @default true
    */
-  arrow?: boolean
+  arrow?: FloatingArrowConfig
   /**
    * 内容格式化函数
    */
@@ -192,4 +201,10 @@ export type TooltipProps = {
    * @default false
    */
   autoHideOnResize?: boolean
+  /**
+   * 是否允许在浮层内部交互（去掉 pointer-events-none）
+   * 配合 trigger='click' 在浮层中放可点击内容（链接/按钮）时开启
+   * @default false
+   */
+  interactive?: boolean
 } & Omit<React.HTMLAttributes<HTMLDivElement>, 'content'>

@@ -1,11 +1,12 @@
 'use client'
 
-import type { InputHistory } from '../types'
-import { useShortCutKey } from 'hooks'
+import type { HistoryPanelProps, InputHistory } from '../types'
+import { useKeyboardLayer, useLatestCallback, useShortCutKey } from 'hooks'
 import { BookOpen, Clock, History, RotateCcw, Search, Trash2, X, Zap } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { Z } from '../../../constants/z-index'
 import { useT } from '../../../i18n'
 
 export const HistoryPanel = memo<HistoryPanelProps>((
@@ -75,16 +76,16 @@ export const HistoryPanel = memo<HistoryPanelProps>((
   }, [histories, searchQuery])
 
   /** 处理历史记录选择 */
-  const handleHistorySelect = useCallback((history: InputHistory) => {
+  const handleHistorySelect = useLatestCallback((history: InputHistory) => {
     onHistorySelect(history)
     onClose()
-  }, [onHistorySelect, onClose])
+  })
 
   /** 处理删除历史记录 */
-  const handleHistoryDelete = useCallback((e: React.MouseEvent, id: string) => {
+  const handleHistoryDelete = useLatestCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     onHistoryDelete(id)
-  }, [onHistoryDelete])
+  })
 
   /** 处理Enter键选择当前高亮的历史记录 */
   const handleEnterSelect = useCallback(() => {
@@ -94,29 +95,29 @@ export const HistoryPanel = memo<HistoryPanelProps>((
         handleHistorySelect(filtered[highlightedIndex])
       }
     }
-  }, [visible, highlightedIndex, filteredHistories, handleHistorySelect])
+  }, [visible, highlightedIndex, filteredHistories])
 
   /** 添加快捷键支持 */
   // #region
-  /** ESC键关闭面板 */
-  useShortCutKey({
-    key: 'Escape',
-    fn: () => {
-      if (visible) {
-        onClose()
-      }
-    },
+  useKeyboardLayer({
+    active: visible,
+    keys: ['Escape'],
+    priority: Z.dropdown,
+    allowRepeat: false,
+    onKeyDown: onClose,
   })
 
   /** Enter键选择当前高亮的历史记录 */
   useShortCutKey({
     key: 'Enter',
+    enabled: visible,
     fn: handleEnterSelect,
   })
 
   /** 上下箭头键导航 */
   useShortCutKey({
     key: 'ArrowUp',
+    enabled: visible,
     fn: (e) => {
       if (visible) {
         e.preventDefault()
@@ -128,6 +129,7 @@ export const HistoryPanel = memo<HistoryPanelProps>((
 
   useShortCutKey({
     key: 'ArrowDown',
+    enabled: visible,
     fn: (e) => {
       if (visible) {
         e.preventDefault()
@@ -386,26 +388,3 @@ export const HistoryPanel = memo<HistoryPanelProps>((
 })
 
 HistoryPanel.displayName = 'HistoryPanel'
-
-/**
- * 历史记录面板属性
- */
-export interface HistoryPanelProps {
-  /** 是否显示 */
-  visible: boolean
-  /** 搜索关键词 */
-  searchQuery: string
-  /** 高亮的索引 */
-  highlightedIndex: number
-  /** 历史记录列表 */
-  histories: InputHistory[]
-  /** 自定义样式类名 */
-  className?: string
-
-  /** 事件回调 */
-  onHistorySelect: (history: InputHistory) => void
-  onHistoryDelete: (id: string) => void
-  onClearAll: () => void
-  onClose: () => void
-  onHighlightChange: (index: number) => void
-}

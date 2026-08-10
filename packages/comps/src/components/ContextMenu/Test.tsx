@@ -5,13 +5,14 @@ import { Copy, Star, Trash2 } from 'lucide-react'
 import { memo, useRef, useState } from 'react'
 import { cn } from 'utils'
 import { Button } from '../Button'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { ContextMenu } from './ContextMenu'
 
 /**
  * ContextMenu 测试页面
  */
-export default function Test() {
+function Test() {
   return (
     <div className="min-h-screen bg-background p-8">
       <div className="max-w-4xl mx-auto">
@@ -37,6 +38,8 @@ export default function Test() {
           <ControlledModeTest />
         </div>
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }
@@ -148,30 +151,18 @@ function ControlledModeTest() {
 
       <div className="space-y-4">
         <div className="flex items-center gap-4">
-          <button
-            type="button"
+          <Button
             onClick={ e => handleOpenMenu(e) }
-            className={ cn(
-              'px-4 py-2 rounded-lg',
-              'bg-systemOrange text-white',
-              'hover:bg-systemOrange/90 transition-colors',
-              'font-medium',
-            ) }
+            className="bg-systemOrange text-white hover:bg-systemOrange/90"
           >
             打开菜单
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
             onClick={ handleCloseMenu }
-            className={ cn(
-              'px-4 py-2 rounded-lg',
-              'bg-background border border-border text-text',
-              'hover:bg-background2 transition-colors',
-              'font-medium',
-            ) }
           >
             关闭菜单
-          </button>
+          </Button>
           <div className="text-sm text-text2">
             当前状态：
             <span className={ cn(
@@ -207,9 +198,6 @@ function ControlledModeTest() {
         <MenuItem
           icon={ <Star className="w-4 h-4 text-text2" /> }
           label="受控模式菜单项 1"
-          onClick={ () => {
-            console.log('点击了受控模式菜单项 1')
-          } }
         />
       </ContextMenu>
     </div>
@@ -246,24 +234,9 @@ function UncontrolledModeTest() {
           label="选择 Flowtag"
         >
           <div className="flex items-center justify-around pl-4">
-            <ColorDot
-              color="#ff6b9d"
-              onClick={ () => {
-                console.log('选择了粉色 Flowtag')
-              } }
-            />
-            <ColorDot
-              color="#a8e063"
-              onClick={ () => {
-                console.log('选择了绿色 Flowtag')
-              } }
-            />
-            <ColorDot
-              color="#c77dff"
-              onClick={ () => {
-                console.log('选择了紫色 Flowtag')
-              } }
-            />
+            <ColorDot color="#ff6b9d" />
+            <ColorDot color="#a8e063" />
+            <ColorDot color="#c77dff" />
           </div>
         </MenuItem>
 
@@ -285,3 +258,5 @@ function UncontrolledModeTest() {
     </div>
   )
 }
+
+export default Test

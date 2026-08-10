@@ -19,6 +19,11 @@ export const ImgThumbnails = memo<ImgThumbnailsProps>(({
   style,
   hideBorder = false,
   hideHighlight = false,
+  thumbSize = 60,
+  thumbClassName,
+  activeThumbClassName = 'border border-systemOrange shadow-lg shadow-systemOrange/50 scale-105',
+  inactiveThumbClassName = 'border border-transparent hover:border-border hover:scale-102',
+  renderThumb,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -61,13 +66,16 @@ export const ImgThumbnails = memo<ImgThumbnailsProps>(({
 
   const getButtonClassName = (index: number) => {
     const base = 'relative shrink-0 overflow-hidden rounded-lg transition-all'
-    const highlightClassName = currentIndex === index
-      ? 'border border-systemOrange shadow-lg shadow-systemOrange/50 scale-105'
-      : 'border border-transparent hover:border-border hover:scale-102'
+    const stateClassName = currentIndex === index
+      ? activeThumbClassName
+      : inactiveThumbClassName
 
-    return hideHighlight
-      ? base
-      : `${base} ${highlightClassName}`
+    /** thumbClassName 放最后，圆角等样式可由外部覆盖 */
+    return cn(
+      base,
+      !hideHighlight && stateClassName,
+      thumbClassName,
+    )
   }
 
   /** 当当前索引变化时，滚动到对应位置 */
@@ -117,24 +125,28 @@ export const ImgThumbnails = memo<ImgThumbnailsProps>(({
             onClick={ () => onImageChange(index) }
             className={ cn(getButtonClassName(index)) }
             style={ {
-              width: 60,
-              height: 60,
+              width: thumbSize,
+              height: thumbSize,
             } }
             aria-label={ `切换到第 ${index + 1} 张图片` }
           >
-            <LazyImg
-              src={ src }
-              alt={ `缩略图 ${index + 1}` }
-              previewable={ false }
-              className="w-full h-full"
-              imgClassName={ cn(
-                'w-full h-full object-cover hover:opacity-100',
-                currentIndex === index
-                  ? 'opacity-100'
-                  : 'opacity-80',
-              ) }
-              draggable={ false }
-            />
+            { renderThumb
+              ? renderThumb({ src, index, active: currentIndex === index })
+              : (
+                  <LazyImg
+                    src={ src }
+                    alt={ `缩略图 ${index + 1}` }
+                    previewable={ false }
+                    className="w-full h-full"
+                    imgClassName={ cn(
+                      'w-full h-full object-cover hover:opacity-100',
+                      currentIndex === index
+                        ? 'opacity-100'
+                        : 'opacity-80',
+                    ) }
+                    draggable={ false }
+                  />
+                ) }
           </button>
         )) }
       </div>

@@ -4,12 +4,13 @@ import type { MoveablePosition } from '.'
 import { useState } from 'react'
 import { Moveable } from '.'
 import { Checkbox } from '../Checkbox/Checkbox'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 
 function App() {
   const [position, setPosition] = useState<MoveablePosition>({
-    x: 100,
-    y: 100,
+    x: 360,
+    y: 240,
     width: 0,
     height: 0,
     rotation: 0,
@@ -42,7 +43,6 @@ function App() {
 
   const handleTransformEnd = (finalPosition: MoveablePosition) => {
     setPosition(finalPosition)
-    console.log('Transform ended:', finalPosition)
   }
 
   /** 格式化位置信息 */
@@ -58,10 +58,16 @@ function App() {
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-background2">
-      <ThemeToggle></ThemeToggle>
       {/* 右上角位置信息卡片 */ }
       <div className="absolute right-4 top-4 w-64 border border-border rounded-lg bg-background p-4 shadow-card">
-        <h2 className="mb-2 text-lg text-text font-semibold">位置信息</h2>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <h2 className="text-lg text-text font-semibold">位置信息</h2>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <GithubSourceLink className="static" />
+          </div>
+        </div>
+
         <pre className="text-sm text-text2 font-mono">
           { JSON.stringify(formattedPosition, null, 2) }
         </pre>
@@ -76,7 +82,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, canDrag: checked })) }
             label="允许拖动"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -84,7 +90,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, canRotate: checked })) }
             label="允许旋转"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -92,7 +98,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, canResize: checked })) }
             label="允许调整大小"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -100,7 +106,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, showBorder: checked })) }
             label="显示边框"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -108,7 +114,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, canDragOutside: checked })) }
             label="允许拖出边界"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -116,7 +122,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, lockAspectRatio: checked })) }
             label="锁定宽高比"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
           <Checkbox
@@ -124,7 +130,7 @@ function App() {
             onChange={ checked => setControls(prev => ({ ...prev, disabled: checked })) }
             label="禁用"
             size={ 22 }
-            color="#f00"
+            color="rgb(var(--systemRed) / 1)"
             labelClassName="text-text2 hover:text-text transition-colors"
           />
 
@@ -170,6 +176,7 @@ function App() {
           </div>
         </div>
       </Moveable>
+
     </div>
   )
 }

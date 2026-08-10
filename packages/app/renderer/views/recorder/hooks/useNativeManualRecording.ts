@@ -100,7 +100,7 @@ export function useNativeManualRecording(onSaved?: () => void) {
         titleText: t('storageInsufficient.title'),
         titleAlign: 'left',
         showIcon: false,
-        showCloseBtn: true,
+        fixedCloseBtn: true,
         children: createElement('p', {
           className: 'text-sm leading-6 text-text2',
         }, t('storageInsufficient.body')),

@@ -1,12 +1,13 @@
 'use client'
 
 import type { CursorPosition } from 'utils'
-import type { AutoCompleteSuggestion } from '../types'
-import { useFloatingPosition, useShortCutKey } from 'hooks'
+import type { AutoCompletePanelProps, AutoCompleteSuggestion } from '../types'
+import { useFloatingPosition, useKeyboardLayer, useLatestCallback, useShortCutKey } from 'hooks'
 import { Hash, History, Lightbulb } from 'lucide-react'
 import { motion } from 'motion/react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { cn, trackCursorCoord } from 'utils'
+import { Z } from '../../../constants/z-index'
 import { useT } from '../../../i18n'
 
 export const AutoCompletePanel = memo<AutoCompletePanelProps>((
@@ -88,31 +89,30 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
   }, [selectedIndex])
 
   /** 处理建议选择 */
-  const handleSuggestionSelect = useCallback((suggestion: AutoCompleteSuggestion) => {
+  const handleSuggestionSelect = useLatestCallback((suggestion: AutoCompleteSuggestion) => {
     onSuggestionSelect(suggestion)
     onClose()
-  }, [onSuggestionSelect, onClose])
+  })
 
   /** 处理Tab键选择当前高亮的建议 */
   const handleTabSelect = useCallback(() => {
     if (visible && selectedIndex >= 0 && suggestions[selectedIndex]) {
       handleSuggestionSelect(suggestions[selectedIndex])
     }
-  }, [visible, selectedIndex, suggestions, handleSuggestionSelect])
+  }, [visible, selectedIndex, suggestions])
 
-  /** ESC键关闭面板 */
-  useShortCutKey({
-    key: 'Escape',
-    fn: () => {
-      if (visible) {
-        onClose()
-      }
-    },
+  useKeyboardLayer({
+    active: visible,
+    keys: ['Escape'],
+    priority: Z.dropdown,
+    allowRepeat: false,
+    onKeyDown: onClose,
   })
 
   /** Tab键选择当前高亮的建议 */
   useShortCutKey({
     key: 'Tab',
+    enabled: visible && suggestions.length > 0,
     fn: (e) => {
       if (visible && suggestions.length > 0) {
         e.preventDefault()
@@ -124,6 +124,7 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
   /** 上下箭头键导航 */
   useShortCutKey({
     key: 'ArrowUp',
+    enabled: visible && suggestions.length > 0,
     fn: (e) => {
       if (visible && suggestions.length > 0) {
         e.preventDefault()
@@ -137,6 +138,7 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
 
   useShortCutKey({
     key: 'ArrowDown',
+    enabled: visible && suggestions.length > 0,
     fn: (e) => {
       if (visible && suggestions.length > 0) {
         e.preventDefault()
@@ -319,25 +321,3 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
 })
 
 AutoCompletePanel.displayName = 'AutoCompletePanel'
-
-export interface AutoCompletePanelProps {
-  /** 是否显示 */
-  visible: boolean
-  /** 建议列表 */
-  suggestions: AutoCompleteSuggestion[]
-  /** 选中的索引 */
-  selectedIndex: number
-  /** 是否加载中 */
-  loading?: boolean
-  /** 自定义样式类名 */
-  className?: string
-  /** 关联的输入元素，用于获取光标位置 */
-  inputElement?: HTMLInputElement | HTMLTextAreaElement | null
-  /** 是否启用光标跟随定位 */
-  followCursor?: boolean
-
-  /** 事件回调 */
-  onSuggestionSelect: (suggestion: AutoCompleteSuggestion) => void
-  onClose: () => void
-  onSelectionChange?: (index: number) => void
-}

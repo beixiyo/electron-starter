@@ -1,5 +1,6 @@
+import { useLatestCallback } from 'hooks'
 import { X } from 'lucide-react'
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import { cn } from 'utils'
 
 const PRESET_SIZES = ['sm', 'md', 'lg', 'xl'] as const
@@ -35,11 +36,13 @@ export const CloseBtn = memo<CloseBtnProps>((props) => {
       ? 'sm'
       : 'md',
     iconSize,
+    iconColor,
+    iconClassName,
     mode = 'absolute',
     variant = 'default',
     corner = 'top-right',
     stopPropagation = true,
-    strokeWidth = 2,
+    strokeWidth = 2.5,
     children,
     onClick,
     ...rest
@@ -96,15 +99,15 @@ export const CloseBtn = memo<CloseBtnProps>((props) => {
     return cn(mode, cornerClass)
   }, [mode, corner])
 
-  const handleClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleClick = useLatestCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     if (stopPropagation)
       e.stopPropagation()
     onClick?.(e)
-  }, [onClick, stopPropagation])
+  })
 
   const variantClass = variant === 'filled'
-    ? 'bg-black text-background'
-    : 'text-text'
+    ? 'bg-text text-background hover:bg-text2'
+    : 'text-text3 hover:text-text'
   const filledNumericPadding = variant === 'filled' && isNumericSize
     ? 'p-0.5'
     : ''
@@ -115,7 +118,9 @@ export const CloseBtn = memo<CloseBtnProps>((props) => {
       aria-label="关闭"
       onClick={ handleClick }
       className={ cn(
-        'inline-flex items-center justify-center rounded-full transition-all duration-300 hover:opacity-60 cursor-pointer',
+        'inline-flex items-center justify-center rounded-full transition-colors duration-200 cursor-pointer',
+        /** Electron 顶栏 drag 区内也应命中关闭操作；Web 端忽略该私有属性 */
+        '[-webkit-app-region:no-drag]',
         variantClass,
         containerClass,
         filledNumericPadding,
@@ -129,11 +134,11 @@ export const CloseBtn = memo<CloseBtnProps>((props) => {
     >
       { children ?? (
         <X
+          className={ iconClassName }
           size={ resolvedIconSize }
           strokeWidth={ strokeWidth }
-          stroke={ isFillMode
-            ? '#fff'
-            : 'currentColor' } />
+          stroke={ iconColor ?? 'currentColor' }
+        />
       ) }
     </button>
   )
@@ -144,7 +149,8 @@ CloseBtn.displayName = 'CloseBtn'
 export type CloseBtnProps = {
   /**
    * 按钮尺寸，支持预设或数字（像素），与 Button 一致
-   * @default 'sm'
+   * 默认值随 mode 变化：absolute 模式为 'sm'，其余模式为 'md'
+   * @default 'sm' | 'md'
    */
   size?: 'sm' | 'md' | 'lg' | 'xl' | number
   /**
@@ -152,7 +158,16 @@ export type CloseBtnProps = {
    */
   iconSize?: number
   /**
-   * @default 1.5
+   * 图标颜色（stroke）。不传时为 'currentColor'，跟随容器 text-* 自动适配主题
+   */
+  iconColor?: string
+  /**
+   * 图标自定义类名，便于用 text-* 等覆盖颜色
+   */
+  iconClassName?: string
+  /**
+   * 描边宽度
+   * @default 2.5
    */
   strokeWidth?: number
   /**
@@ -161,7 +176,7 @@ export type CloseBtnProps = {
    */
   mode?: 'absolute' | 'fixed' | 'static'
   /**
-   * 视觉变体：default 无背景，filled 使用 button 背景色
+   * 视觉变体：default 始终无背景，filled 使用 button 背景色并在 hover 时变化
    * @default 'default'
    */
   variant?: 'default' | 'filled'

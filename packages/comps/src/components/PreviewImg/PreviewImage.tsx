@@ -1,6 +1,7 @@
 'use client'
 
 import { debounce } from '@jl-org/tool'
+import { useLatestCallback } from 'hooks'
 import { motion, useMotionValue, useTransform } from 'motion/react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -17,7 +18,8 @@ export const PreviewImage = memo<PreviewImageProps>(({
   onScaleChange,
   onPositionChange,
   onDraggingChange,
-  topOffset = 0,
+  insets,
+  maxWidth,
 }) => {
   const containerRef = useRef<HTMLImageElement>(null)
 
@@ -64,7 +66,7 @@ export const PreviewImage = memo<PreviewImageProps>(({
   }, [position.x, position.y, rotation, scale, x, y, rotate, userScale])
 
   /** 处理滚轮缩放 */
-  const handleWheel = useCallback((e: WheelEvent) => {
+  const handleWheel = useLatestCallback((e: WheelEvent) => {
     e.preventDefault()
     e.stopPropagation()
     isUserInteractingRef.current = true
@@ -79,23 +81,23 @@ export const PreviewImage = memo<PreviewImageProps>(({
 
     /** 使用 debounce 延迟重置交互标志，确保滚轮连续操作时不会恢复动画 */
     resetInteractionFlag()
-  }, [scale, userScale, onScaleChange, resetInteractionFlag])
+  })
 
   /** 处理拖动 */
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useLatestCallback(() => {
     isUserInteractingRef.current = true
     setIsUserInteracting(true)
     onDraggingChange(true)
-  }, [onDraggingChange])
+  })
 
-  const handleDragEnd = useCallback(() => {
+  const handleDragEnd = useLatestCallback(() => {
     onDraggingChange(false)
     /** 拖动结束后立即重置交互标志，因为拖动已经完成 */
     isUserInteractingRef.current = false
     setIsUserInteracting(false)
-  }, [onDraggingChange])
+  })
 
-  const handleDrag = useCallback((e: MouseEvent) => {
+  const handleDrag = useLatestCallback((e: MouseEvent) => {
     if (!isDragging)
       return
 
@@ -106,9 +108,14 @@ export const PreviewImage = memo<PreviewImageProps>(({
     onPositionChange(newPosition)
     x.set(newPosition.x)
     y.set(newPosition.y)
-  }, [isDragging, position, x, y, onPositionChange])
+  })
 
-  /** 添加事件监听 */
+  /**
+   * 添加事件监听
+   *
+   * img 带 key={src}，切图会换成一个全新的节点，所以必须跟着 src 重新绑定：
+   * 否则新节点上没有监听，滚轮不再被拦下、直接冒泡到遮罩变成「切图」，缩放与拖拽一起失效
+   */
   useEffect(() => {
     const container = containerRef.current
     if (!container)
@@ -127,7 +134,7 @@ export const PreviewImage = memo<PreviewImageProps>(({
       container.removeEventListener('mouseup', handleDragEnd)
       container.removeEventListener('mouseleave', handleDragEnd)
     }
-  }, [handleWheel, handleDragStart, handleDrag, handleDragEnd])
+  }, [src, handleWheel, handleDragStart, handleDrag, handleDragEnd])
 
   const stopPropagation = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -136,7 +143,7 @@ export const PreviewImage = memo<PreviewImageProps>(({
 
   /** 图片加载完成处理（如果后续需要基于加载状态做别的事，可以在这里扩展） */
   const handleImageLoad = useCallback(() => {
-    // 当前不再根据加载状态做缩放动画，仅保留接口
+    /** 当前不再根据加载状态做缩放动画，仅保留接口 */
   }, [])
 
   return (
@@ -155,7 +162,18 @@ export const PreviewImage = memo<PreviewImageProps>(({
         y,
         rotate,
         scale: finalScale, // 使用组合后的 scale（初始动画 + 用户操作）
-        marginTop: topOffset,
+        /**
+         * 让出四周被工具栏 / 缩略图占用的空间：
+         * 先从可用尺寸里减掉，再把居中位置往让出的反方向平移一半，图片就落在剩余区间的正中
+         *
+         * 外部配置了 maxWidth 时与可用空间取小值，窄视口下仍以让位结果为准
+         */
+        maxWidth: maxWidth != null
+          ? `min(${maxWidth}px, calc(100vw - ${insets.left + insets.right}px))`
+          : `calc(100vw - ${insets.left + insets.right}px)`,
+        maxHeight: `calc(100vh - ${insets.top + insets.bottom}px)`,
+        marginTop: insets.top - insets.bottom,
+        marginLeft: insets.left - insets.right,
         cursor: isDragging
           ? 'grabbing'
           : 'grab',
@@ -164,7 +182,7 @@ export const PreviewImage = memo<PreviewImageProps>(({
       src={ src }
       draggable={ false }
       alt="Preview"
-      className="relative max-h-[90vh] max-w-[calc(100vw-120px)] object-contain"
+      className="relative object-contain"
     />
   )
 })
@@ -205,7 +223,19 @@ export interface PreviewImageProps {
    */
   onDraggingChange: (isDragging: boolean) => void
   /**
-   * 顶部预留高度（用于多图轮播时避免遮挡）
+   * 四周需要让出的空间（像素），用于避开工具栏、缩略图列表与视口边距
    */
-  topOffset?: number
+  insets: PreviewImageInsets
+  /**
+   * 图片基准显示的最大宽度（px），实际生效值为它与视口可用宽度的较小者
+   * 不传则只受视口可用宽度约束
+   */
+  maxWidth?: number
+}
+
+export interface PreviewImageInsets {
+  top: number
+  bottom: number
+  left: number
+  right: number
 }

@@ -2,11 +2,12 @@
 
 import { useCallback, useState } from 'react'
 import { PhoneFrame } from '.'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { Slider } from '../Slider'
 import { Switch } from '../Switch'
 import { ThemeToggle } from '../ThemeToggle'
 
-export default function Test() {
+function Test() {
   const [settings, setSettings] = useState({
     scale: 0.8,
     showStatusBar: true,
@@ -28,19 +29,23 @@ export default function Test() {
   }, [])
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 p-8 dark:bg-gray-900">
-      {/* 主题切换按钮 */}
-      <div className="fixed right-4 top-4 z-50">
-        <ThemeToggle />
-      </div>
-
+    <div className="min-h-screen flex flex-col bg-background p-8 text-text">
       <div className="mx-auto max-w-6xl w-full">
-        <h1 className="mb-2 text-center text-3xl text-gray-800 font-bold dark:text-gray-100">
-          手机外壳组件
-        </h1>
-        <p className="mb-8 text-center text-gray-600 dark:text-gray-400">
-          用于模拟移动设备界面的可定制组件
-        </p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="flex-1 text-center">
+            <h1 className="mb-2 text-3xl font-bold">
+              手机外壳组件
+            </h1>
+            <p className="text-text2">
+              用于模拟移动设备界面的可定制组件
+            </p>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-3">
+            <ThemeToggle />
+            <GithubSourceLink className="static" />
+          </div>
+        </div>
 
         <div className="flex flex-wrap items-start justify-center gap-12">
           {/* 主要演示 */}
@@ -74,7 +79,7 @@ export default function Test() {
                 </div>
               </div>
             </PhoneFrame>
-            <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+            <p className="mt-4 text-sm text-text2">
               当前比例:
               {' '}
               {settings.scale.toFixed(1)}
@@ -82,14 +87,14 @@ export default function Test() {
           </div>
 
           {/* 控制面板 */}
-          <div className="fixed left-2 top-2 w-72 rounded-xl bg-white p-6 shadow-md dark:bg-gray-800">
-            <h3 className="mb-4 text-lg text-gray-800 font-medium dark:text-gray-200">
+          <div className="fixed left-2 top-2 w-72 rounded-xl bg-background2 p-6 shadow-md">
+            <h3 className="mb-4 text-lg font-medium">
               组件配置
             </h3>
 
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm text-gray-700 font-medium dark:text-gray-300">
+                <label className="mb-1 block text-sm text-text2 font-medium">
                   比例:
                   {' '}
                   {settings.scale.toFixed(1)}
@@ -108,7 +113,7 @@ export default function Test() {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-700 font-medium dark:text-gray-300">
+                <label className="text-sm text-text2 font-medium">
                   显示状态栏
                 </label>
                 <Switch
@@ -119,7 +124,7 @@ export default function Test() {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="text-sm text-gray-700 font-medium dark:text-gray-300">
+                <label className="text-sm text-text2 font-medium">
                   显示Home指示器
                 </label>
                 <Switch
@@ -130,11 +135,11 @@ export default function Test() {
               </div>
             </div>
 
-            <div className="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
-              <h4 className="mb-2 text-sm text-gray-800 font-medium dark:text-gray-200">
+            <div className="mt-6 border-t border-border pt-4">
+              <h4 className="mb-2 text-sm font-medium">
                 组件说明
               </h4>
-              <ul className="list-disc pl-4 text-xs text-gray-600 space-y-1 dark:text-gray-400">
+              <ul className="list-disc pl-4 text-xs text-text2 space-y-1">
                 <li>可自定义缩放比例</li>
                 <li>可控制状态栏显示</li>
                 <li>可控制底部Home指示器显示</li>
@@ -147,7 +152,7 @@ export default function Test() {
 
         {/* 多种配置展示 */}
         <div className="mt-16">
-          <h2 className="mb-8 text-center text-2xl text-gray-800 font-semibold dark:text-gray-200">
+          <h2 className="mb-8 text-center text-2xl font-semibold">
             不同配置效果
           </h2>
 
@@ -159,7 +164,7 @@ export default function Test() {
                   <p className="text-white font-medium">无状态栏</p>
                 </div>
               </PhoneFrame>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">无状态栏</p>
+              <p className="mt-2 text-sm text-text2">无状态栏</p>
             </div>
 
             {/* 无Home指示器 */}
@@ -169,7 +174,7 @@ export default function Test() {
                   <p className="text-white font-medium">无Home指示器</p>
                 </div>
               </PhoneFrame>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">无Home指示器</p>
+              <p className="mt-2 text-sm text-text2">无Home指示器</p>
             </div>
 
             {/* 小尺寸 */}
@@ -179,11 +184,14 @@ export default function Test() {
                   <p className="text-xs text-white font-medium">小尺寸</p>
                 </div>
               </PhoneFrame>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">缩放比例: 0.4</p>
+              <p className="mt-2 text-sm text-text2">缩放比例: 0.4</p>
             </div>
           </div>
         </div>
       </div>
+
     </div>
   )
 }
+
+export default Test

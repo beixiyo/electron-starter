@@ -1,72 +1,36 @@
-import type { PanelConfig, PanelState, PersistedState } from '../types'
+import type { PanelConfig, PanelState, PersistedState, SplitPaneLayoutResolver, SplitPaneToggleResolver } from '../types'
 import { clamp } from '@jl-org/tool'
+import { useLatestCallback } from 'hooks'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { calculateInitialWidths, shouldAutoCollapse } from '../utils'
-
-export type UsePanelSizesOptions = {
-  /**
-   * 面板配置列表
-   */
-  configs: PanelConfig[]
-  /**
-   * 容器宽度
-   */
-  containerWidth: number
-  /**
-   * 分隔条尺寸
-   */
-  dividerSize: number
-  /**
-   * 面板间距
-   */
-  gap?: number
-  /**
-   * 持久化的初始状态
-   */
-  persistedState?: PersistedState | null
-  /**
-   * 布局变化回调
-   */
-  onLayoutChange?: (sizes: number[], collapsedStates: boolean[]) => void
-}
-
-export type UsePanelSizesReturn = {
-  /**
-   * 面板状态列表
-   */
-  states: PanelState[]
-  /**
-   * 开始拖拽
-   */
-  startDrag: (dividerIndex: number) => void
-  /**
-   * 拖拽中
-   */
-  onDrag: (delta: number) => void
-  /**
-   * 结束拖拽
-   */
-  endDrag: () => void
-  /**
-   * 收起/展开面板
-   */
-  toggleCollapse: (panelIndex: number) => void
-  /**
-   * 当前拖拽的分隔条索引
-   */
-  activeDivider: number | null
-}
 
 /**
  * 面板尺寸管理 Hook
  */
 export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesReturn {
-  const { configs, containerWidth, dividerSize, gap = 0, persistedState, onLayoutChange } = options
+  const { configs, containerWidth, dividerSize, dividerSizes, gap = 0, persistedState, onLayoutChange, onResizeEnd, resolveLayout, resolveToggle } = options
+
+  /** 用最新引用包裹，避免把回调放进依赖导致闭包陈旧 */
+  const handleResizeEnd = useLatestCallback((sizes: number[], collapsedStates: boolean[]) => {
+    onResizeEnd?.(sizes, collapsedStates)
+  })
+  const resolvePanelLayout = useLatestCallback((baseStates: PanelState[], reason: 'init' | 'resize') => {
+    return resolveLayout?.({
+      configs,
+      states: baseStates,
+      containerWidth,
+      dividerSize,
+      dividerSizes,
+      gap,
+      reason,
+    }) ?? baseStates
+  })
 
   const [states, setStates] = useState<PanelState[]>([])
   const [activeDivider, setActiveDivider] = useState<number | null>(null)
   const dragStartStatesRef = useRef<PanelState[]>([])
   const isInitializedRef = useRef(false)
+  const previousContainerWidthRef = useRef(0)
 
   /** 初始化状态 */
   useEffect(() => {
@@ -83,21 +47,43 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
         width: persistedState.sizes[i],
         collapsed: persistedState.collapsedStates[i],
         widthBeforeCollapse: persistedState.widthsBeforeCollapse[i],
+        responsiveCollapsed: false,
       }))
     }
     else {
       /** 计算初始宽度 */
-      const initialWidths = calculateInitialWidths(configs, containerWidth, dividerSize, gap)
+      const initialWidths = calculateInitialWidths(configs, containerWidth, dividerSize, gap, dividerSizes)
       initialStates = configs.map((_config, i) => ({
         width: initialWidths[i],
         collapsed: false,
         widthBeforeCollapse: initialWidths[i],
+        responsiveCollapsed: false,
       }))
     }
 
-    setStates(initialStates)
+    const resolvedInitialStates = resolvePanelLayout(initialStates, 'init')
+    setStates(resolvedInitialStates)
     isInitializedRef.current = true
-  }, [configs, containerWidth, dividerSize, persistedState, states.length])
+    previousContainerWidthRef.current = containerWidth
+  }, [configs, containerWidth, dividerSize, dividerSizes, gap, persistedState, resolvePanelLayout, states.length])
+
+  /** 容器宽度变化后按调用方规则重算布局；用户手动展开 / 收起不会触发此处 */
+  useEffect(() => {
+    if (!isInitializedRef.current || containerWidth <= 0)
+      return
+
+    if (previousContainerWidthRef.current === containerWidth)
+      return
+
+    previousContainerWidthRef.current = containerWidth
+
+    setStates((prev) => {
+      if (prev.length !== configs.length)
+        return prev
+
+      return resolvePanelLayout(prev, 'resize')
+    })
+  }, [configs.length, containerWidth, resolvePanelLayout])
 
   /** 布局变化回调 */
   useEffect(() => {
@@ -203,32 +189,25 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
         return
 
       /** 计算新宽度 */
-      let newLeftWidth = leftStartWidth + delta
-      let newRightWidth = rightStartWidth - delta
+      const desiredLeftWidth = leftStartWidth + delta
 
       /** 应用约束 */
       const leftMin = leftConfig.minWidth ?? 100
       const leftMax = leftConfig.maxWidth ?? Infinity
       const rightMin = rightConfig.minWidth ?? 100
       const rightMax = rightConfig.maxWidth ?? Infinity
-
-      newLeftWidth = clamp(newLeftWidth, leftMin, leftMax)
-      newRightWidth = clamp(newRightWidth, rightMin, rightMax)
-
-      /** 确保总宽度不变 */
       const totalWidth = leftStartWidth + rightStartWidth
-      if (newLeftWidth + newRightWidth !== totalWidth) {
-        if (delta > 0) {
-          newRightWidth = totalWidth - newLeftWidth
-        }
-        else {
-          newLeftWidth = totalWidth - newRightWidth
-        }
-      }
-
-      /** 再次应用约束 */
-      newLeftWidth = clamp(newLeftWidth, leftMin, leftMax)
-      newRightWidth = clamp(newRightWidth, rightMin, rightMax)
+      const {
+        leftWidth: newLeftWidth,
+        rightWidth: newRightWidth,
+      } = resolveConstrainedPairWidths({
+        desiredLeftWidth,
+        totalWidth,
+        leftMin,
+        leftMax,
+        rightMin,
+        rightMax,
+      })
 
       setStates((prev) => {
         const newStates = [...prev]
@@ -258,6 +237,8 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
     const leftConfig = configs[leftIndex]
     const rightConfig = configs[rightIndex]
 
+    let finalStates: PanelState[] = []
+
     setStates((prev) => {
       const newStates = [...prev]
 
@@ -285,11 +266,45 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
         }
       }
 
+      finalStates = newStates
       return newStates
     })
 
     setActiveDivider(null)
+
+    /** 拖拽结束后回传一次最终布局（低频，适合持久化 / 重计算） */
+    if (finalStates.length > 0) {
+      handleResizeEnd(
+        finalStates.map(s => s.width),
+        finalStates.map(s => s.collapsed),
+      )
+    }
   }, [activeDivider, configs])
+
+  const resizeToContainerWidth = useLatestCallback((nextContainerWidth: number) => {
+    if (!isInitializedRef.current || nextContainerWidth <= 0)
+      return
+
+    if (previousContainerWidthRef.current === nextContainerWidth)
+      return
+
+    previousContainerWidthRef.current = nextContainerWidth
+
+    setStates((prev) => {
+      if (prev.length !== configs.length)
+        return prev
+
+      return resolveLayout?.({
+        configs,
+        states: prev,
+        containerWidth: nextContainerWidth,
+        dividerSize,
+        dividerSizes,
+        gap,
+        reason: 'resize',
+      }) ?? prev
+    })
+  })
 
   const toggleCollapse = useCallback(
     (panelIndex: number) => {
@@ -298,6 +313,20 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
         return
 
       setStates((prev) => {
+        const resolvedStates = resolveToggle?.({
+          configs,
+          states: prev,
+          containerWidth,
+          dividerSize,
+          dividerSizes,
+          gap,
+          reason: 'toggle',
+          panelIndex,
+          panelId: config.id,
+        })
+        if (resolvedStates)
+          return resolvedStates
+
         const newStates = [...prev]
         const current = newStates[panelIndex]
 
@@ -328,6 +357,7 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
             ...current,
             width: current.widthBeforeCollapse,
             collapsed: false,
+            responsiveCollapsed: false,
           }
           /** 从相邻面板减去宽度 */
           if (adjacentIndex !== -1) {
@@ -346,6 +376,7 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
             widthBeforeCollapse: current.width,
             width: collapsedWidth,
             collapsed: true,
+            responsiveCollapsed: false,
           }
           /** 将释放的宽度分配给相邻面板 */
           if (adjacentIndex !== -1) {
@@ -359,7 +390,7 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
         return newStates
       })
     },
-    [configs],
+    [configs, containerWidth, dividerSize, dividerSizes, gap, resolveToggle],
   )
 
   return {
@@ -368,6 +399,123 @@ export function usePanelSizes(options: UsePanelSizesOptions): UsePanelSizesRetur
     onDrag,
     endDrag,
     toggleCollapse,
+    resizeToContainerWidth,
     activeDivider,
   }
+}
+
+function resolveConstrainedPairWidths(options: ConstrainedPairWidthOptions) {
+  const {
+    desiredLeftWidth,
+    totalWidth,
+    leftMin,
+    leftMax,
+    rightMin,
+    rightMax,
+  } = options
+  const minLeftByRightMax = totalWidth - rightMax
+  const maxLeftByRightMin = totalWidth - rightMin
+  const effectiveLeftMin = Math.max(leftMin, minLeftByRightMax)
+  const effectiveLeftMax = Math.min(leftMax, maxLeftByRightMin)
+
+  if (effectiveLeftMin <= effectiveLeftMax) {
+    const leftWidth = clamp(desiredLeftWidth, effectiveLeftMin, effectiveLeftMax)
+
+    return {
+      leftWidth,
+      rightWidth: totalWidth - leftWidth,
+    }
+  }
+
+  const fallbackLeftMin = Math.max(0, Math.min(leftMin, totalWidth))
+  const fallbackLeftMax = Math.max(fallbackLeftMin, Math.min(leftMax, totalWidth))
+  const leftWidth = clamp(desiredLeftWidth, fallbackLeftMin, fallbackLeftMax)
+
+  return {
+    leftWidth,
+    rightWidth: totalWidth - leftWidth,
+  }
+}
+
+export type UsePanelSizesOptions = {
+  /**
+   * 面板配置列表
+   */
+  configs: PanelConfig[]
+  /**
+   * 容器宽度
+   */
+  containerWidth: number
+  /**
+   * 分隔条尺寸
+   */
+  dividerSize: number
+  /**
+   * 分隔条尺寸列表，按分隔条索引覆盖 dividerSize
+   */
+  dividerSizes?: readonly number[]
+  /**
+   * 面板间距
+   */
+  gap?: number
+  /**
+   * 持久化的初始状态
+   */
+  persistedState?: PersistedState | null
+  /**
+   * 布局变化回调（拖拽过程中高频触发）
+   */
+  onLayoutChange?: (sizes: number[], collapsedStates: boolean[]) => void
+  /**
+   * 拖拽结束（含自动收起结算后）触发一次
+   */
+  onResizeEnd?: (sizes: number[], collapsedStates: boolean[]) => void
+  /**
+   * 自定义响应式布局重算
+   */
+  resolveLayout?: SplitPaneLayoutResolver
+  /**
+   * 自定义显式切换结算
+   */
+  resolveToggle?: SplitPaneToggleResolver
+}
+
+export type UsePanelSizesReturn = {
+  /**
+   * 面板状态列表
+   */
+  states: PanelState[]
+  /**
+   * 开始拖拽
+   */
+  startDrag: (dividerIndex: number) => void
+  /**
+   * 拖拽中
+   */
+  onDrag: (delta: number) => void
+  /**
+   * 结束拖拽
+   */
+  endDrag: () => void
+  /**
+   * 收起/展开面板
+   */
+  toggleCollapse: (panelIndex: number) => void
+  /**
+   * 按外部测量到的容器宽度重算布局
+   */
+  resizeToContainerWidth: (containerWidth: number) => void
+  /**
+   * 当前拖拽的分隔条索引
+   */
+  activeDivider: number | null
+}
+
+type ConstrainedPairWidthOptions = {
+  desiredLeftWidth: number
+  totalWidth: number
+  leftMin: number
+  leftMax: number
+  rightMin: number
+  rightMax: number
 }

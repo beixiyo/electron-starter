@@ -8,9 +8,11 @@ import { cn } from 'utils'
 import { Uploader } from '.'
 import { Button } from '../Button'
 import { Checkbox } from '../Checkbox/Checkbox'
+import { GithubSourceLink } from '../GithubSourceLink'
+import { Message } from '../Message'
 import { ThemeToggle } from '../ThemeToggle'
 
-export default function UploaderDemoPage() {
+function UploaderDemoPage() {
   /** 上传组件引用 */
   const uploaderRef = useRef<UploaderRef>(null)
   /** 外部拖拽区域引用 */
@@ -37,7 +39,6 @@ export default function UploaderDemoPage() {
 
   /** 文件变更处理 */
   const handleChange = (newFiles: FileItem[]) => {
-    console.log('文件变更:', newFiles)
     setFiles(prev => [...prev, ...newFiles])
     setPreviewImgs(prev => [...prev, ...newFiles.map(f => f.base64)])
   }
@@ -259,8 +260,8 @@ export default function UploaderDemoPage() {
                   previewImgs={ previewImgs }
                   onChange={ handleChange }
                   onRemove={ handleRemove }
-                  onExceedSize={ size => alert(`❌ 文件大小超过限制：${(size / 1024 / 1024).toFixed(2)}MB > ${(settings.maxSize / 1024 / 1024).toFixed(2)}MB`) }
-                  onExceedCount={ () => alert(`❌ 文件数量超过限制：最多${settings.maxCount}个文件`) }
+                  onExceedSize={ size => Message.error(`文件大小超过限制：${(size / 1024 / 1024).toFixed(2)}MB > ${(settings.maxSize / 1024 / 1024).toFixed(2)}MB`) }
+                  onExceedCount={ () => Message.error(`文件数量超过限制：最多 ${settings.maxCount} 个文件`) }
                   dragAreaEl={ settings.useDragArea
                     ? dragAreaRef as RefObject<HTMLElement>
                     : undefined }
@@ -457,6 +458,10 @@ export default function UploaderDemoPage() {
           </div>
         </div>
       </div>
+
+      <GithubSourceLink />
     </div>
   )
 }
+
+export default UploaderDemoPage

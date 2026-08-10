@@ -2,11 +2,13 @@
 
 import type { SidebarProps } from '.'
 import { useMemo, useState } from 'react'
+import { generateRandomId } from 'utils'
 import { Sidebar } from '.'
+import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { SidebarTestData } from './test.data'
 
-export default function Home() {
+function Home() {
   const [items, setItems] = useState(SidebarTestData)
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const hasMore = useMemo(
@@ -21,7 +23,7 @@ export default function Home() {
         ...prev,
         {
           ...SidebarTestData[0],
-          id: crypto.randomUUID(),
+          id: generateRandomId(),
         },
       ])
       resolve()
@@ -32,11 +34,9 @@ export default function Home() {
 
   const handleItemClick = (id: string) => {
     setSelectedItem(id)
-    console.log(`Item clicked: ${id}`)
   }
 
   const handleAddClick = () => {
-    console.log('Add button clicked')
     // Add a new item to demonstrate scrolling
     const newItem: SidebarProps['data'][0] = {
       id: `new-${Date.now()}`,
@@ -92,6 +92,10 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <GithubSourceLink />
     </main>
   )
 }
+
+export default Home
