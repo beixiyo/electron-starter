@@ -7,20 +7,23 @@ const harness = vi.hoisted(() => ({
   keyup: null as ((event: UiohookKeyboardEvent) => void) | null,
 }))
 
-vi.mock('uiohook-napi', () => ({
-  uIOhook: {
-    on: vi.fn((name: string, listener: (event: UiohookKeyboardEvent) => void) => {
-      if (name === 'keydown')
-        harness.keydown = listener
-      if (name === 'keyup')
-        harness.keyup = listener
-    }),
-    off: vi.fn(),
-  },
-}))
-
 vi.mock('../hold/resolve-key-group', () => ({ resolveKeyGroup: () => [42] }))
-vi.mock('../uiohook-lifecycle', () => ({ acquireHook: vi.fn(), releaseHook: vi.fn() }))
+vi.mock('../uiohook-lifecycle', () => ({
+  acquireHook: vi.fn(),
+  releaseHook: vi.fn(),
+  addUiohookKeyboardListeners: vi.fn((listeners: {
+    keydown: (event: UiohookKeyboardEvent) => void
+    keyup: (event: UiohookKeyboardEvent) => void
+  }) => {
+    harness.keydown = listeners.keydown
+    harness.keyup = listeners.keyup
+
+    return () => {
+      harness.keydown = null
+      harness.keyup = null
+    }
+  }),
+}))
 vi.mock('../../utils/logger', () => ({ logError: vi.fn() }))
 
 describe('global keyboard gesture lifecycle', () => {

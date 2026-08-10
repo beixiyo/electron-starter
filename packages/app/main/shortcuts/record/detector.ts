@@ -1,8 +1,8 @@
 import type { KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { normalizeKeyboardCode, normalizeKeyboardShortcutChord, releaseActiveKeyboardChord } from '@shared/shortcuts'
-import { uIOhook, UiohookKey } from 'uiohook-napi'
-import { acquireHook, releaseHook } from '../uiohook-lifecycle'
+import { UiohookKey } from 'uiohook-napi'
+import { acquireHook, addUiohookKeyboardListeners, releaseHook } from '../uiohook-lifecycle'
 
 const IGNORED_KEY_CODES: ReadonlySet<number> = new Set([
   UiohookKey.CapsLock,
@@ -19,11 +19,8 @@ const CODE_TO_NAME: Map<number, string> = new Map(
 /** 非 null 表示当前已有一个录制会话，避免重复绑定全局监听 */
 let activeEmit: ((event: ShortcutRecordEvent) => void) | null = null
 
-/** 保存 listener 引用，stop 时必须用同一个函数引用解除绑定 */
-let keyDownListener: ((e: UiohookKeyboardEvent) => void) | null = null
-
-/** 保存 listener 引用，stop 时必须用同一个函数引用解除绑定 */
-let keyUpListener: ((e: UiohookKeyboardEvent) => void) | null = null
+/** 当前录制会话的 Worker 事件订阅清理函数 */
+let removeHookListeners: (() => void) | null = null
 
 /** 当前 detector 是否已经占用 uIOhook lifecycle 引用计数 */
 let hookAcquired = false
@@ -40,11 +37,10 @@ export function startRecordShortcutDetection(emit: (event: ShortcutRecordEvent) 
     return
 
   activeEmit = emit
-  keyDownListener = handleKeyDown
-  keyUpListener = handleKeyUp
-
-  uIOhook.on('keydown', keyDownListener)
-  uIOhook.on('keyup', keyUpListener)
+  removeHookListeners = addUiohookKeyboardListeners({
+    keydown: handleKeyDown,
+    keyup: handleKeyUp,
+  })
 
   try {
     if (!hookAcquired) {
@@ -62,15 +58,8 @@ export function startRecordShortcutDetection(emit: (event: ShortcutRecordEvent) 
  * 录制结束，移除监听器并释放 uIOhook
  */
 export function stopRecordShortcutDetection(): void {
-  if (keyDownListener) {
-    uIOhook.off('keydown', keyDownListener)
-    keyDownListener = null
-  }
-
-  if (keyUpListener) {
-    uIOhook.off('keyup', keyUpListener)
-    keyUpListener = null
-  }
+  removeHookListeners?.()
+  removeHookListeners = null
 
   activeEmit = null
   activeChords.clear()

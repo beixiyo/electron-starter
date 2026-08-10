@@ -8,11 +8,10 @@ import type {
 } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { createShortcutGestureEngine, KEYBOARD_MODIFIER_BY_CODE } from '@shared/shortcuts'
-import { uIOhook } from 'uiohook-napi'
 import { createMainDiagnosticLogger } from '../../logging'
 import { resolveKeyGroup } from '../hold/resolve-key-group'
 import { isShortcutRuntimeSuspended } from '../suspension'
-import { acquireHook, releaseHook } from '../uiohook-lifecycle'
+import { acquireHook, addUiohookKeyboardListeners, releaseHook } from '../uiohook-lifecycle'
 
 /** action id → 已解析的 keyboard gesture 注册项 */
 const registeredShortcuts = new Map<string, RegisteredKeyboardGestureShortcut>()
@@ -21,8 +20,8 @@ const log = createMainDiagnosticLogger('shortcut.runtime')
 /** 当前 backend 是否已经占用 uIOhook lifecycle 引用计数 */
 let hookAcquired = false
 
-/** 当前 backend 是否已经绑定 keydown/keyup listener，避免重复监听 */
-let listenerBound = false
+/** 当前 backend 的 Worker 事件订阅清理函数 */
+let removeHookListeners: (() => void) | null = null
 
 const gestureEngine = createShortcutGestureEngine<KeyboardGestureBinding>({
   entries: [],
@@ -191,10 +190,11 @@ function isKeyWithinGroups(keycode: number, group: number[]): boolean {
 }
 
 function ensureHookRunning(): void {
-  if (!listenerBound) {
-    uIOhook.on('keydown', handleKeyDown)
-    uIOhook.on('keyup', handleKeyUp)
-    listenerBound = true
+  if (!removeHookListeners) {
+    removeHookListeners = addUiohookKeyboardListeners({
+      keydown: handleKeyDown,
+      keyup: handleKeyUp,
+    })
   }
 
   if (!hookAcquired) {
@@ -207,11 +207,8 @@ function maybeStopHook(): void {
   if (registeredShortcuts.size > 0)
     return
 
-  if (listenerBound) {
-    uIOhook.off('keydown', handleKeyDown)
-    uIOhook.off('keyup', handleKeyUp)
-    listenerBound = false
-  }
+  removeHookListeners?.()
+  removeHookListeners = null
 
   if (hookAcquired) {
     releaseHook()

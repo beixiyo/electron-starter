@@ -1,11 +1,20 @@
-import type { EventEmitter } from 'node:events'
-import { uIOhook } from 'uiohook-napi'
+import type { Worker } from 'node:worker_threads'
+import type { UiohookKeyboardEvent } from 'uiohook-napi'
+import { EventEmitter as NodeEventEmitter } from 'node:events'
+import { createMainDiagnosticLogger } from '../logging'
 import { requestShortcutRuntimeSync } from './runtime-sync'
+import createUiohookWorker from './uiohook-worker?nodeWorker'
 
 let refCount = 0
 let running = false
 let health: UiohookBackendHealth = 'unknown'
-let errorListenerBound = false
+let worker: Worker | null = null
+let stopping = false
+let startupTimer: ReturnType<typeof setTimeout> | null = null
+const hookEvents = new NodeEventEmitter()
+const log = createMainDiagnosticLogger('shortcut.runtime')
+
+const UIOHOOK_START_TIMEOUT_MS = 1500
 
 /**
  * uIOhook 的运行状态只反映「最近一次启动是否成功」。
@@ -22,47 +31,23 @@ export function canUseUiohookBackend(): boolean {
 }
 
 /**
- * 重新探测已经失败的 uIOhook 捕获后端。
+ * 返回最近一次 uIOhook Worker 启动结果
  *
- * 权限变化或原生捕获后端恢复后，主进程会再次同步运行时。此处只在
- * 没有活跃引用时做一次轻量 start/stop 探测，避免把失败状态永久缓存；
- * 已经在运行时不做额外 stop/start，防止重注册过程中丢事件。
+ * 权限门禁在 provider 层处理；native addon 一旦在当前进程内启动失败，保持
+ * unavailable 并降级到 renderer DOM，避免自动重试不断遗留卡死的 native 线程
  */
 export function refreshUiohookBackendHealth(): UiohookBackendHealth {
-  ensureErrorListener()
-
-  if (running || health !== 'unavailable')
-    return health
-
-  try {
-    const shouldKeepRunning = refCount > 0
-    uIOhook.start()
-    running = true
-    health = 'healthy'
-    if (!shouldKeepRunning) {
-      uIOhook.stop()
-      running = false
-    }
-  }
-  catch {
-    running = false
-    markUnavailable()
-  }
-
   return health
 }
 
 /** 声明需要 uIOhook，若尚未启动则启动 */
 export function acquireHook(): void {
-  ensureErrorListener()
   refCount++
-  if (running)
+  if (worker)
     return
 
   try {
-    uIOhook.start()
-    running = true
-    health = 'healthy'
+    startWorker()
   }
   catch (error) {
     refCount--
@@ -79,30 +64,104 @@ export function releaseHook(): void {
   if (refCount > 0 || !running)
     return
 
-  try {
-    uIOhook.stop()
-  }
-  catch {
-    markUnavailable()
-  }
-  finally {
-    running = false
+  stopWorker()
+}
+
+/** 订阅 Worker 转发的原始键盘事件 */
+export function addUiohookKeyboardListeners(listeners: UiohookKeyboardListeners): () => void {
+  hookEvents.on('keydown', listeners.keydown)
+  hookEvents.on('keyup', listeners.keyup)
+
+  return () => {
+    hookEvents.off('keydown', listeners.keydown)
+    hookEvents.off('keyup', listeners.keyup)
   }
 }
 
-function ensureErrorListener(): void {
-  if (errorListenerBound)
+function startWorker(): void {
+  const current = createUiohookWorker({ name: 'uiohook' })
+  worker = current
+  running = false
+  current.unref()
+
+  current.on('message', (message: UiohookWorkerMessage) => {
+    if (worker !== current)
+      return
+
+    switch (message.type) {
+      case 'ready':
+        clearStartupTimer()
+        running = true
+        health = 'healthy'
+        log.info('uiohook.worker-ready', 'uiohook worker started')
+        if (refCount === 0)
+          stopWorker()
+        return
+      case 'failed':
+        handleWorkerFailure(current, new Error(message.error))
+        return
+      case 'keydown':
+      case 'keyup':
+        hookEvents.emit(message.type, message.event)
+    }
+  })
+  current.once('error', error => handleWorkerFailure(current, error))
+  current.once('exit', () => {
+    if (worker !== current)
+      return
+
+    const stoppedExpectedly = stopping
+    const shouldRestart = stoppedExpectedly && refCount > 0 && health !== 'unavailable'
+    const exitedUnexpectedly = !stoppedExpectedly && refCount > 0
+    worker = null
+    running = false
+    stopping = false
+    clearStartupTimer()
+    if (stoppedExpectedly)
+      log.info('uiohook.worker-stopped', 'uiohook worker stopped')
+    if (exitedUnexpectedly) {
+      markUnavailable()
+      return
+    }
+    if (shouldRestart)
+      startWorker()
+  })
+
+  startupTimer = setTimeout(() => {
+    handleWorkerFailure(current, new Error(`uiohook worker start timed out after ${UIOHOOK_START_TIMEOUT_MS}ms`))
+  }, UIOHOOK_START_TIMEOUT_MS)
+  startupTimer.unref?.()
+}
+
+function handleWorkerFailure(current: Worker, error: Error): void {
+  if (worker !== current)
     return
 
-  /** uiohook-napi 没有在类型声明中暴露 error 事件，但底层 EventEmitter 会转发它 */
-  const hookEmitter = uIOhook as unknown as EventEmitter
-  hookEmitter.on('error', handleUiohookError)
-  errorListenerBound = true
+  log.error('uiohook.worker-failed', 'uiohook worker failed', error)
+  worker = null
+  running = false
+  stopping = false
+  clearStartupTimer()
+  void current.terminate().catch(() => {})
+  markUnavailable()
 }
 
-function handleUiohookError(): void {
+function stopWorker(): void {
+  if (!worker || stopping)
+    return
+
+  stopping = true
   running = false
-  markUnavailable()
+  clearStartupTimer()
+  worker.postMessage({ type: 'stop' } satisfies UiohookWorkerCommand)
+}
+
+function clearStartupTimer(): void {
+  if (!startupTimer)
+    return
+
+  clearTimeout(startupTimer)
+  startupTimer = null
 }
 
 function markUnavailable(): void {
@@ -118,3 +177,17 @@ function markUnavailable(): void {
    */
   requestShortcutRuntimeSync()
 }
+
+type UiohookKeyboardListeners = {
+  keydown: (event: UiohookKeyboardEvent) => void
+  keyup: (event: UiohookKeyboardEvent) => void
+}
+
+type UiohookWorkerCommand = {
+  type: 'stop'
+}
+
+type UiohookWorkerMessage
+  = | { type: 'ready' }
+    | { type: 'failed', error: string }
+    | { type: 'keydown' | 'keyup', event: UiohookKeyboardEvent }
