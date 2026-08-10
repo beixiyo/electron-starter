@@ -1,9 +1,6 @@
-import AVFoundation
+// 装配 native recorder 常驻进程，并分发权限与恢复类一次性 CLI
+
 import Cocoa
-import CoreAudio
-import CoreGraphics
-import CoreMedia
-import ScreenCaptureKit
 
 // stdin JSON → {"action":"start","outputPath":"/tmp/rec.m4a"}                        // 会议录音:ScreenCaptureKit 全系统音频
 //            → {"action":"start","outputPath":"...","engine":"tap","tapEnabled":false,
@@ -121,35 +118,9 @@ if let recoverMicIndex = CommandLine.arguments.firstIndex(of: "--recover-mic-sid
   CFRunLoopRun()
 }
 
-log("audio-recorder build \(AUDIO_RECORDER_BUILD_ID) forceSyntheticMicTimeline=\(FORCE_SYNTHETIC_MIC_TIMELINE)")
+log("audio-recorder build \(AUDIO_RECORDER_BUILD_ID)")
 
-// SIGTERM → 优雅停止录制再退出（NativeBridge.stop() 发 SIGTERM）
-let sigTermSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-signal(SIGTERM, SIG_IGN)
-sigTermSource.setEventHandler {
-  finalizeAndExit()
-}
-sigTermSource.resume()
-
-// 检测父进程存活
-let parentCheckTimer = DispatchSource.makeTimerSource(queue: .main)
-parentCheckTimer.schedule(deadline: .now() + 3, repeating: 3)
-parentCheckTimer.setEventHandler {
-  if getppid() == 1 {
-    finalizeAndExit()
-  }
-}
-parentCheckTimer.resume()
-
-// 读 stdin（阻塞，放后台线程）
-DispatchQueue.global(qos: .userInitiated).async {
-  while let line = readLine() {
-    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty { continue }
-    enqueueCommand { await handleCommand(trimmed) }
-  }
-  // stdin 关闭 = 父进程退出;等收尾(含 mixTracks)完成再退,避免混音临时件残留
-  finalizeAndExit()
-}
+let processLifecycle = ProcessLifecycle()
+processLifecycle.start()
 
 CFRunLoopRun()

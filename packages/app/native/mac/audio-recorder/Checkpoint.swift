@@ -1,9 +1,8 @@
+// 将系统音实时轮转为可独立恢复的小型 M4A checkpoint
+
 import AVFoundation
-import Cocoa
-import CoreAudio
-import CoreGraphics
 import CoreMedia
-import ScreenCaptureKit
+import Foundation
 
 enum AudioCheckpointTrack {
   case system

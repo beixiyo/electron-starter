@@ -1,15 +1,17 @@
-import AVFoundation
-import Cocoa
-import CoreAudio
-import CoreGraphics
-import CoreMedia
-import ScreenCaptureKit
+// 定义 native recorder 的构建标识、混音和生命周期策略常量
+
+import Foundation
 
 /// native helper 构建标识,启动时打进二进制并输出横幅;发包时用 `strings ... | rg` 核验装进去的是最新 helper 而非旧缓存
-let AUDIO_RECORDER_BUILD_ID = "2026-07-30-mic-device-change-recovery"
+let AUDIO_RECORDER_BUILD_ID = "2026-08-10-audio-modules-level-balance"
 
-/// 是否强制麦克风走合成时间轴(时长由帧数推,不信任源 hostTime/PTS);sidecar 主路径已天然免疫,此开关保留给旧 realtime AAC 路径兜底
-let FORCE_SYNTHETIC_MIC_TIMELINE = true
+/**
+ * 麦克风与系统音共同收尾时的系统轨增益
+ *
+ * 正常收尾时仅在确认 sidecar 含有效麦克风信号后应用，
+ * 为人声保留混音空间；纯系统音、纯麦克风和无信号 sidecar 均保持主轨原响度
+ */
+let SYSTEM_AUDIO_VOLUME_WITH_MIC: Float = 0.5
 
 /// raw AVAudioEngine 启动瞬时失败(如 `!dev` 设备忙:上一条录音/VPIO 拆除未完成即抢设备)的最大重试次数
 let RAW_AUDIO_ENGINE_START_ATTEMPTS = 3
@@ -21,6 +23,9 @@ let RAW_AUDIO_ENGINE_RETRY_DELAY_SEC: TimeInterval = 0.35
 let MIC_FIRST_SAMPLE_PROBE_TIMEOUT_SEC: TimeInterval = 0.30
 /** stop 等待采样队列完成所有已入队写操作的上限；超时转崩溃恢复，绝不继续碰 writer */
 let SAMPLE_QUEUE_DRAIN_TIMEOUT_SEC: TimeInterval = 2
+
+/** stop 等待正在进行的设备重挂退出的上限；覆盖 VPIO、raw engine 重试与 AVCapture 首帧探测 */
+let CAPTURE_LIFECYCLE_DRAIN_TIMEOUT_SEC: TimeInterval = 5
 
 /// 首帧探测的轮询间隔(秒):每隔这么久检查一次麦克风回调计数是否推进
 let MIC_FIRST_SAMPLE_PROBE_INTERVAL_SEC: TimeInterval = 0.03

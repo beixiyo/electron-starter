@@ -38,6 +38,10 @@ func checkFocusedTextInput() -> FocusResult {
     return FocusResult(focused: false, role: nil, app: appName, bundleId: bundleId, pid: pid)
   }
 
+  guard let focusedElementRef,
+        CFGetTypeID(focusedElementRef) == AXUIElementGetTypeID() else {
+    return FocusResult(focused: false, role: nil, app: appName, bundleId: bundleId, pid: pid)
+  }
   let focusedElement = focusedElementRef as! AXUIElement
 
   var roleRef: AnyObject?

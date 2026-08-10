@@ -1,9 +1,7 @@
+// 集中生成两套录音引擎共用的 AAC 输出参数
+
 import AVFoundation
-import Cocoa
 import CoreAudio
-import CoreGraphics
-import CoreMedia
-import ScreenCaptureKit
 
 // MARK: - AAC 编码参数（系统音轨 / mic 轨 / 混音成品三处写入器共用）
 

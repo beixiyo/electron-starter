@@ -1,3 +1,5 @@
+// 用 ScreenCaptureKit 录制全系统音频，并管理 writer、checkpoint 与断流看门狗
+
 import AVFoundation
 import Cocoa
 import CoreAudio
@@ -123,9 +125,6 @@ class Recorder: NSObject, SCStreamOutput {
       output(terminalError: "not_recording", path: outputPath, handoffId: handoffId)
       return
     }
-    guard !isFinalizingRecording else { return }
-    isFinalizingRecording = true
-    defer { isFinalizingRecording = false }
     firstSampleWatchdogToken = UUID()
     sampleGapWatchdogToken = UUID()
 

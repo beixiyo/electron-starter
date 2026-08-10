@@ -1,9 +1,9 @@
-import AVFoundation
-import Cocoa
-import CoreAudio
+// 检查和请求屏幕录制与系统音频采集权限
+
+import CoreFoundation
 import CoreGraphics
-import CoreMedia
-import ScreenCaptureKit
+import Darwin
+import Foundation
 
 // MARK: - CLI 权限探测入口（--check/--prompt-*，探测完即 exit）
 

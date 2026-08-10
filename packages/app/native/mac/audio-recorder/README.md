@@ -17,7 +17,7 @@ Electron 主进程 (Node / TS)
     │   stdout → JSON 事件 (recording / paused / mixing / stopped / error)
     ▼
 audio-recorder (Swift 子进程)
-    ├─ tap 引擎（手动录音，macOS 14.2+）  麦克风 + 系统音混音，可热挂/卸
+    ├─ tap 引擎（手动录音，macOS 14.2+）  process tap 系统音 + PCM 麦克风 sidecar，可热挂/卸
     └─ SCK 引擎（会议录音）              ScreenCaptureKit 全系统音频
         底层：Core Audio (Process Tap / 聚合设备 / IOProc) + AVFoundation
 ```
@@ -101,9 +101,9 @@ helper 发出的 `error` 码：
 | 音源 | 麦克风 + 系统音（可只选其一） | 全系统音频 |
 | 权限 | 系统音频（audio-capture）+ 麦克风 | 屏幕录制（screen） |
 | 录音中热挂/卸 | ✅ 支持（`update`） | ❌ 无此语义 |
-| 代码 | `TapRecorder.swift` | `SCKRecorder.swift` |
+| 代码 | `TapRecorder.swift` 及 `Tap*` 组合对象 | `SCKRecorder.swift` |
 
-同一子进程同一时刻只允许一路录音，由 `Commands.swift` 的 `activeEngine`（`.none` / `.sck` / `.tap`）路由 `stop` / `pause` / `resume`
+同一子进程同一时刻只允许一路录音，由 `RecorderCoordinator` 持有 `activeEngine`（`.none` / `.sck` / `.tap`）并路由 `stop` / `pause` / `resume`
 
 ---
 
@@ -111,16 +111,27 @@ helper 发出的 `error` 码：
 
 | 文件 | 职责 |
 | --- | --- |
-| `main.swift` | 入口：CLI 模式分发 + stdin/stdout 主循环 + 进程生命周期（SIGTERM / 父进程死亡 / 看门狗） |
-| `Commands.swift` | 命令派发（串行链，杜绝交错）+ `activeEngine` 路由 + 优雅退出 `finalizeAndExit` |
-| `TapRecorder.swift` | tap 引擎：麦克风三级降级采集、设备掉线自愈、系统音 process tap + 离线混音（最大的一块，~1700 行） |
+| `main.swift` | 入口装配与一次性 CLI 模式分发 |
+| `Commands.swift` | stdin JSON 命令模型与解码 |
+| `RecorderCoordinator.swift` | 两套录音引擎的唯一路由状态所有者 |
+| `ProcessLifecycle.swift` | 命令串行链、SIGTERM / 父进程 / stdin EOF 收尾与进程级 watchdog |
+| `TapRecorder.swift` | tap 会话编排：start/update/pause/resume/stop、mic 自愈、writer 与最终混音策略 |
+| `TapProcessCapture.swift` | Process Tap、聚合设备、IOProc 与系统音样本归一 |
+| `TapMicCapture.swift` | VPIO → raw AVAudioEngine → AVCaptureSession 三级麦克风物理采集 |
+| `TapMicSidecarWriter.swift` | 麦克风 PCM 格式冻结、逻辑时间补静音、受限自动增益和 `.mic.caf` 写盘 |
+| `TapRecordingTimeline.swift` | tap 会话 host time、暂停偏移、样本 cutoff 与系统音连续片段 |
+| `MicrophoneSignalProcessor.swift` | Float32 PCM 人声电平跟踪、峰值限制与首个 2s 电平诊断 |
 | `SCKRecorder.swift` | SCK 引擎：ScreenCaptureKit 全系统音频 |
 | `Checkpoint.swift` | 分片 WAL：每 ~5s finalize 一个小 m4a，仅作崩溃兜底 |
-| `RecoveryMixing.swift` | 离线 `mixTracks` + `--merge-checkpoints` + `--recover-mic-sidecar` |
+| `AudioTrackMixer.swift` | 将主录音与可选 sidecar 解码、混合并原子替换为单轨 M4A |
+| `CheckpointRecovery.swift` | `--merge-checkpoints` 分片恢复 |
+| `MicSidecarRecovery.swift` | `--recover-mic-sidecar` 麦克风 sidecar 恢复 |
+| `AudioAssetInspector.swift` | 恢复与收尾共用的媒体可读性和时长检查 |
 | `Permissions.swift` | 屏幕录制 TCC + 系统音频私有 SPI（`kTCCServiceAudioCapture`） |
-| `Constants.swift` | build-id + 各超时/重试常量 + `FORCE_SYNTHETIC_MIC_TIMELINE` |
+| `Constants.swift` | build-id + 混音、超时、重试和 checkpoint 策略常量 |
 | `AudioSettings.swift` | AAC 编码参数 |
-| `Logging.swift` | 诊断日志（stderr → `NativeBridge`）+ 开录设备拓扑快照 + `describeError` 展开 `NSError` |
+| `Logging.swift` / `RecorderOutput.swift` | stderr 诊断工具 / stdout NDJSON 协议 |
+| `AudioDeviceDiagnostics.swift` / `ErrorDiagnostics.swift` | 音频设备拓扑 / NSError 与磁盘空间诊断 |
 
 ### Starter 集成边界
 
@@ -133,7 +144,7 @@ helper 发出的 `error` 码：
 
 ## 5. 进程生命周期与优雅退出
 
-三条退出路径都**必须等收尾（排空采样队列 + `finishWriting` + 混音）完成再 `exit`**，否则混音写到一半被杀，会在恢复目录留下 `_mix_` 临时件（无 `moov` 不可播）与未混音双轨原件：
+三条退出路径都**必须等收尾（停止接收新样本 + 排空设备生命周期队列与采样队列 + `finishWriting` + 混音）完成再 `exit`**，否则混音写到一半被杀，会在恢复目录留下 `_mix_` 临时件（无 `moov` 不可播）与未混音原件：
 
 - **SIGTERM**（TS 侧 `NativeBridge.stop()` 发）→ `finalizeAndExit()`
 - **父进程死亡**（每 3s 检测 `getppid() == 1`）→ `finalizeAndExit()`
@@ -159,11 +170,15 @@ helper 发出的 `error` 码：
 
 - **单路录音**：正在录时再发 `start` → `already_recording`，不会打断当前录音
 - **引擎能力差异**：`update`（热挂/卸、改进程集合）只对 tap 引擎有效；SCK 忽略
-- **`micAec`**：`true` 走 VPIO（有回声消除但会引入多声道/时间轴问题，见 pitfalls）；`false` 走裸采集
+- **`micAec`**：`true` 优先走 VPIO；遇到无法解释的多声道布局或启动失败时降级裸采集，`false` 直接走裸采集
 - **`pids` 语义**：非空 = 白名单只混这些进程；空 = 全系统混音，用 `excludePids` 排除自身进程族防自录
 - **系统版本门**：tap 引擎 `< macOS 14.2` 直接 `tap_requires_macos_14_2`；audio-capture 权限探测 `< 14.2` 退出码 4
 - **`audio_sample_timeout` 非致命**：它不是"录音失败"，而是"中断了、但已录部分完好"，上层据此走保留式收尾
 - **麦克风单轨掉线**：系统音仍有样本时不会误判整场中断；helper 会监听默认输入设备并重建 mic 引擎，连续失败才发一次 `mic_degraded`
+- **两轨时间轴**：系统样本与 mic sidecar 都归一到同一录音逻辑时间；AAC 主文件会压紧 PTS 空洞，因此正常收尾时由 `AudioTrackMixer` 按系统有效片段恢复热挂/卸期间的逻辑位置；mic 热挂/掉线缺口超过 100ms 且大于一个回调 buffer 时分块补静音，暂停时长从两轨统一扣除
+- **混音响度**：正常收尾时，只有系统音与确认含有效信号的麦克风 sidecar 同时存在，才对系统轨保留 0.5 线性增益（约 -6 dB）；纯系统音、纯麦克风以及空麦克风均不降低主轨。崩溃恢复时因无法可信重建该信号快照，优先保留系统主轨原增益
+- **麦克风处理**：Voice Processing 明确开启 AEC / NS / AGC，仅接受声道语义可明确处理的 mono/stereo；遇到 Apple 未公开布局的多声道输出时回退 raw 采集，不猜测声道
+- **电平补偿**：所有麦克风路径在 sidecar 写盘前经过受限自动增益；目标 RMS -20 dBFS、最大增益 +12 dB、峰值上限 -1 dBFS，弱于语音阈值的环境声不放大。该处理不冒充降噪；Voice Processing 不可用的 raw 路径只保证电平与峰值边界
 
 ---
 
@@ -171,4 +186,4 @@ helper 发出的 `error` 码：
 
 - helper 二进制**不入 git**，产物在 `resources/native/mac/audio-recorder`
 - `build:mac` 前须先 `build:native:mac`（`build-mac.sh` 支持目录源码编译整个 `audio-recorder/`）
-- 启动时会打 build-id banner：`audio-recorder build <BUILD_ID> forceSyntheticMicTimeline=<bool>`。同一版本号可能对应 dev / unpack / signed / 自动更新 / 手替多种 helper，用 `strings <helper> | rg <BUILD_ID>` 核验实际跑的是哪一版
+- 启动时会打 build-id banner：`audio-recorder build <BUILD_ID>`。同一应用版本可能对应 dev / unpack / signed / 自动更新 / 手替多种 helper，用 `strings <helper> | rg <BUILD_ID>` 核验实际跑的是哪一版
