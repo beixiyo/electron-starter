@@ -61,7 +61,6 @@ class SelectionManager {
     const started = this.selectionHook.start()
     if (started) {
       this.isStarted = true
-      console.log('selection-hook 已启动')
     }
     else {
       console.error('selection-hook 启动失败')
@@ -200,7 +199,6 @@ class SelectionManager {
     if (this.selectionHook && this.isStarted) {
       this.selectionHook.stop()
       this.isStarted = false
-      console.log('selection-hook 已停止')
     }
   }
 
@@ -212,7 +210,6 @@ class SelectionManager {
       this.stop()
       this.selectionHook.cleanup()
       this.selectionHook = null
-      console.log('selection-hook 已清理')
     }
   }
 

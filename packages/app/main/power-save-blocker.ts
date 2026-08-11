@@ -22,7 +22,7 @@ export function setRecordingPowerSaveBlocker(active: boolean): void {
       return
 
     recordingBlockerId = powerSaveBlocker.start('prevent-app-suspension')
-    diag.info('recording-blocker.started', 'recording power save blocker started', {
+    diag.debug('recording-blocker.started', 'recording power save blocker started', {
       blockerId: recordingBlockerId,
       type: 'prevent-app-suspension',
     })
@@ -39,7 +39,7 @@ function stopRecordingPowerSaveBlocker(): void {
   const blockerId = recordingBlockerId
   recordingBlockerId = null
   const stopped = powerSaveBlocker.stop(blockerId)
-  diag.info('recording-blocker.stopped', 'recording power save blocker stopped', {
+  diag.debug('recording-blocker.stopped', 'recording power save blocker stopped', {
     blockerId,
     stopped,
   })

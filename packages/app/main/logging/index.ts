@@ -27,7 +27,7 @@ export function initAppLogging(ipcMain: IpcMain): void {
     void closeAppLogger()
   })
 
-  createMainDiagnosticLogger('app.lifecycle').info(
+  createMainDiagnosticLogger('app.lifecycle').debug(
     'logging.ready',
     'diagnostic log initialized',
     {

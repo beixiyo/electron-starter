@@ -23,7 +23,6 @@ export async function createWindowsSequentially(
 ): Promise<void> {
   for (const task of tasks) {
     if (!shouldPreloadLogicalWindow(task.type)) {
-      console.log(`[window-loader] skip preload type=${task.type}: not a dedicated logical window`)
       continue
     }
 
@@ -33,11 +32,9 @@ export async function createWindowsSequentially(
      * 继续往下走只会白等 timeoutMs 并重复执行 onLoaded
      */
     if (windowManager.exists(task.type)) {
-      console.log(`[window-loader] skip preload type=${task.type}: already exists`)
       continue
     }
 
-    const startedAt = Date.now()
     const win = windowManager.create(task.type)
     if (!win)
       continue
@@ -47,7 +44,7 @@ export async function createWindowsSequentially(
     await new Promise<void>((resolve) => {
       let settled = false
 
-      const done = (message: string): void => {
+      const done = (message?: string): void => {
         if (settled)
           return
 
@@ -57,12 +54,13 @@ export async function createWindowsSequentially(
         if (!webContents.isDestroyed())
           webContents.removeListener('did-finish-load', onLoad)
 
-        console.log(message)
+        if (message)
+          console.log(message)
         resolve()
       }
 
       const onLoad = (): void => {
-        done(`[window-loader] loaded type=${task.type} duration=${Date.now() - startedAt}ms`)
+        done()
       }
       const onClosed = (): void => {
         done(`[window-loader] stop waiting type=${task.type}: window closed`)

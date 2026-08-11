@@ -71,11 +71,6 @@ export function initMeetingDetection(): void {
   initNativeRecordingPipeline()
 
   onMeetingEvent((event) => {
-    const label = event.type === 'meeting-confirmed'
-      ? 'confirmed'
-      : 'ended'
-    console.log(`[meeting-detection] ${label}: ${event.session.displayName} pid=${event.session.pid}`)
-
     /** 手动 native 录音进行中不响应会议结束的自动停止，避免误停手动录音（共用同一子进程） */
     if (event.type === 'meeting-ended' && recordingState.nativeSource === 'meeting') {
       recordingState.stop()
@@ -133,5 +128,4 @@ export function initMeetingDetection(): void {
   })
 
   startMeetingDetector()
-  console.log('[meeting-detection] started')
 }

@@ -8,7 +8,6 @@ export function checkFocusedTextInput(): Promise<FocusCheckResult> {
   return new Promise((resolve) => {
     execFile(getNativeBinaryPath('focus-check'), [], { timeout: 500 }, (error, stdout) => {
       if (error) {
-        console.warn('[focus-check] failed:', error.message)
         resolve({ focused: false, role: null, app: null, bundleId: null, pid: -1 })
         return
       }
@@ -24,7 +23,6 @@ export function checkFocusedTextInput(): Promise<FocusCheckResult> {
         })
       }
       catch {
-        console.warn('[focus-check] parse error:', stdout)
         resolve({ focused: false, role: null, app: null, bundleId: null, pid: -1 })
       }
     })

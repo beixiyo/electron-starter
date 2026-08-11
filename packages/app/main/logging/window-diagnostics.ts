@@ -66,12 +66,14 @@ export function attachWindowDiagnostics(window: BrowserWindow, type?: WindowType
     })
   })
 
-  window.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    if (level < 2)
+  window.webContents.on('console-message', (details) => {
+    const { level, message, lineNumber, sourceId } = details
+
+    if (level === 'info' || level === 'debug')
       return
 
     /** 去重 key 只取 message 长度 + 前 200 字符,避免超长堆栈把 Map 的 key 撑到数百 KB */
-    const key = `${windowLabel}:${level}:${sourceId}:${line}:${message.length}:${message.slice(0, 200)}`
+    const key = `${windowLabel}:${level}:${sourceId}:${lineNumber}:${message.length}:${message.slice(0, 200)}`
     const now = Date.now()
     const lastAt = recentConsoleMessages.get(key)
     if (lastAt && now - lastAt < CONSOLE_MESSAGE_DEDUPE_MS)
@@ -83,12 +85,12 @@ export function attachWindowDiagnostics(window: BrowserWindow, type?: WindowType
     const meta = {
       ...getWindowMeta(window, windowLabel),
       consoleLevel: level,
-      line,
+      line: lineNumber,
       sourceId: sanitizeUrlForLog(sourceId),
       messageLength: message.length,
     }
 
-    if (level >= 3) {
+    if (level === 'error') {
       log.error('renderer.console-error', 'renderer console error emitted', undefined, meta)
       return
     }

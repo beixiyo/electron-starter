@@ -93,7 +93,7 @@ function startWorker(): void {
         clearStartupTimer()
         running = true
         health = 'healthy'
-        log.info('uiohook.worker-ready', 'uiohook worker started')
+        log.debug('uiohook.worker-ready', 'uiohook worker started')
         if (refCount === 0)
           stopWorker()
         return
@@ -118,7 +118,7 @@ function startWorker(): void {
     stopping = false
     clearStartupTimer()
     if (stoppedExpectedly)
-      log.info('uiohook.worker-stopped', 'uiohook worker stopped')
+      log.debug('uiohook.worker-stopped', 'uiohook worker stopped')
     if (exitedUnexpectedly) {
       markUnavailable()
       return

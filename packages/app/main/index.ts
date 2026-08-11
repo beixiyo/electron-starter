@@ -573,13 +573,6 @@ function startFocusCheckPolling(): void {
 
     layoutFocusNativeDemoWindow(result.focused)
     emitFocusUpdate(payload)
-
-    if (isSelf) {
-      console.log(`[focus-check] 🏠 self  focused=${result.focused}  role=${result.role}`)
-    }
-    else if (result.focused) {
-      console.log(`[focus-check] ✅ focused  role=${result.role}  app=${result.app}  bundleId=${result.bundleId}`)
-    }
   }, 1500)
 }
 
