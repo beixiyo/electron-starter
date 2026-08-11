@@ -40,6 +40,13 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
 
   private var captureSession: AVCaptureSession?
   private var audioEngine: AVAudioEngine?
+  /**
+   * `AVAudioEngine.start()` 抛错后，AVAudioIOUnit 仍可能有异步 property-listener 回调
+   *
+   * 立即析构失败的 engine 会在 Apple 私有回调中触发 use-after-free。失败实例停止后保留到
+   * helper 被录音 terminal 回收；每次 attach 最多产生 RAW_AUDIO_ENGINE_START_ATTEMPTS 个
+   */
+  private var quarantinedAudioEngines: [AVAudioEngine] = []
 
   init(sampleQueue: DispatchQueue, onSample: @escaping SampleHandler) {
     self.sampleQueue = sampleQueue
@@ -291,10 +298,12 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     let input = engine.inputNode
     let format = input.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false)
       log("tap: raw audio engine mic format invalid, fallback to AVCaptureSession")
       return .finalFailure
     }
     guard format.channelCount <= 2 else {
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false)
       log("tap: raw audio engine mic format \(format.channelCount)ch is not writer-compatible, fallback to AVCaptureSession")
       return .finalFailure
     }
@@ -313,14 +322,13 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       try engine.start()
     }
     catch {
-      input.removeTap(onBus: 0)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true)
       log("tap: raw audio engine start failed: \(describeError(error))")
       return .retryableFailure
     }
 
     guard isCurrent(generation) else {
-      input.removeTap(onBus: 0)
-      engine.stop()
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true)
       return .finalFailure
     }
 
@@ -329,21 +337,37 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       label: "raw audio engine",
       generation: generation
     ) else {
-      input.removeTap(onBus: 0)
-      engine.stop()
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true)
       log("tap: raw audio engine started but no samples in \(Int(MIC_FIRST_SAMPLE_PROBE_TIMEOUT_SEC * 1000))ms, treating as transient failure")
       return .retryableFailure
     }
 
     guard isCurrent(generation) else {
-      input.removeTap(onBus: 0)
-      engine.stop()
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true)
       return .finalFailure
     }
 
     audioEngine = engine
     log("tap: mic via raw AVAudioEngine (\(Int(format.sampleRate))Hz/\(format.channelCount)ch, no AEC)")
     return .ready
+  }
+
+  /**
+   * 停止失败的 raw engine，但延迟其析构到 helper 进程回收
+   *
+   * macOS 26 的 AVAudioIOUnit 可能在 start 抛 `!dev` 后继续异步访问 engine；这里只保留
+   * 物理对象生命周期，不改变 raw → AVCaptureSession 的降级策略
+   */
+  private func quarantineFailedAudioEngine(
+    _ engine: AVAudioEngine,
+    input: AVAudioInputNode,
+    tapInstalled: Bool
+  ) {
+    if tapInstalled {
+      input.removeTap(onBus: 0)
+    }
+    engine.stop()
+    quarantinedAudioEngines.append(engine)
   }
 
   private func prepareCaptureSessionMic(generation: UUID) -> Bool {

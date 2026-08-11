@@ -58,7 +58,8 @@
 
 ### 2.1 背靠背录音撞 `!dev`（`560227702`）
 - **现象**：上一条录音刚释放设备，`engine.start()` 撞设备忙、瞬时失败
-- **怎么避**：raw 引擎 start 失败**重试 3 次、间隔 0.35s**，只重试瞬时失败（`Constants.swift` 约 `:14-18`）
+- **额外风险**：macOS 26 上 start 抛错后，`AVAudioIOUnit` 的 property-listener 仍可能异步回调；立即析构局部 engine 会触发 `EXC_BAD_ACCESS / SIGSEGV`
+- **怎么避**：raw 引擎 start 失败**重试 3 次、间隔 0.35s**；失败实例先 stop，但保留到本代 helper 被 terminal 回收，不在 Apple 回调退场前析构（`TapMicCapture`）
 
 ### 2.2 `engine.start()` 成功却零回调（僵尸引擎）—— 苹果无「首帧确认」API
 - **现象**：`start()` 返回成功、`isRunning == true`，但 `installTap` 一个回调都没进，5s 后首帧看门狗才发现，整段丢失

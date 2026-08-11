@@ -1,14 +1,21 @@
 import type { NativeRecordingSource } from '@shared'
-import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
-import { getNativeBinaryPath } from '@main/native-bridge'
-import { getAppStorageAreaPath } from '@main/storage'
+import {
+  assertTaskId,
+  collectTaskIds,
+  getRecoveryCheckpointDir,
+  getRecoveryManifestPath,
+  getRecoveryMicBackupPath,
+  getRecoveryMicPendingPath,
+  getRecoveryMicSidecarPath,
+  getRecoveryOutputPath,
+  RECORDING_RECOVERY_DIR,
+} from './paths'
+import { recoverRecordingTask, waitForRecoveryTask } from './recovery-engine'
 
-export const RECORDING_RECOVERY_DIR = getAppStorageAreaPath('recording-recovery-files')
-const TASK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+export { RECORDING_RECOVERY_DIR } from './paths'
 
 /**
  * 创建一条可跨崩溃恢复的 native 录音会话
@@ -47,11 +54,11 @@ export async function listRecoverableRecordings(activeOutputPath?: string): Prom
 
   for (const taskId of taskIds) {
     const outputPath = getRecoveryOutputPath(taskId)
-    if (activeOutputPath === outputPath || await isCheckpointActive(taskId))
+    if (activeOutputPath === outputPath)
       continue
 
-    await recoverCheckpointIfNeeded(taskId)
-    await recoverMicSidecarIfNeeded(taskId)
+    if (!await recoverRecordingTask(taskId))
+      continue
 
     const file = await stat(outputPath).catch(() => null)
     if (!file?.isFile() || file.size <= 0)
@@ -79,10 +86,14 @@ export async function listRecoverableRecordings(activeOutputPath?: string): Prom
  */
 export async function deleteRecoveryRecording(taskId: string): Promise<void> {
   const safeTaskId = assertTaskId(taskId)
+  await waitForRecoveryTask(safeTaskId)
+
   await Promise.all([
     rm(getRecoveryOutputPath(safeTaskId), { force: true }),
     rm(getRecoveryManifestPath(safeTaskId), { force: true }),
     rm(getRecoveryMicSidecarPath(safeTaskId), { force: true }),
+    rm(getRecoveryMicBackupPath(safeTaskId), { force: true }),
+    rm(getRecoveryMicPendingPath(safeTaskId), { force: true }),
     rm(getRecoveryCheckpointDir(safeTaskId), { recursive: true, force: true }),
   ])
 }
@@ -95,97 +106,8 @@ export async function readRecoveryRecording(taskId: string): Promise<ArrayBuffer
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
 }
 
-function getRecoveryOutputPath(taskId: string): string {
-  return join(RECORDING_RECOVERY_DIR, `${taskId}.m4a`)
-}
-
-function getRecoveryManifestPath(taskId: string): string {
-  return join(RECORDING_RECOVERY_DIR, `${taskId}.json`)
-}
-
-function getRecoveryMicSidecarPath(taskId: string): string {
-  return join(RECORDING_RECOVERY_DIR, `${taskId}.mic.caf`)
-}
-
-function getRecoveryCheckpointDir(taskId: string): string {
-  return join(RECORDING_RECOVERY_DIR, `${taskId}.m4a.segments`)
-}
-
 async function mkdirRecoveryDir(): Promise<void> {
   await mkdir(RECORDING_RECOVERY_DIR, { recursive: true })
-}
-
-function collectTaskIds(names: string[]): string[] {
-  const ids = new Set<string>()
-
-  for (const name of names) {
-    const taskId = parseTaskId(name)
-    if (taskId)
-      ids.add(taskId)
-  }
-
-  return [...ids]
-}
-
-function parseTaskId(name: string): string | null {
-  const suffix = ['.m4a.segments', '.mic.caf', '.m4a', '.json'].find(item => name.endsWith(item))
-  if (!suffix)
-    return null
-
-  const taskId = name.slice(0, -suffix.length)
-  return TASK_ID_PATTERN.test(taskId) && basename(taskId) === taskId
-    ? taskId
-    : null
-}
-
-function assertTaskId(taskId: string): string {
-  if (!TASK_ID_PATTERN.test(taskId) || basename(taskId) !== taskId)
-    throw new Error(`Invalid recording task id: ${taskId}`)
-
-  return taskId
-}
-
-async function isCheckpointActive(taskId: string): Promise<boolean> {
-  const lockPath = join(getRecoveryCheckpointDir(taskId), 'active.json')
-  try {
-    const lock = JSON.parse(await readFile(lockPath, 'utf-8')) as { pid?: number }
-    if (!Number.isInteger(lock.pid) || !lock.pid)
-      return false
-
-    process.kill(lock.pid, 0)
-    return true
-  }
-  catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM'
-  }
-}
-
-async function recoverCheckpointIfNeeded(taskId: string): Promise<void> {
-  const segmentDir = getRecoveryCheckpointDir(taskId)
-  const exists = await stat(segmentDir).then(item => item.isDirectory()).catch(() => false)
-  if (!exists)
-    return
-
-  await runRecoveryCommand(['--merge-checkpoints', segmentDir, getRecoveryOutputPath(taskId)])
-}
-
-async function recoverMicSidecarIfNeeded(taskId: string): Promise<void> {
-  const sidecarPath = getRecoveryMicSidecarPath(taskId)
-  const exists = await stat(sidecarPath).then(item => item.isFile()).catch(() => false)
-  if (!exists)
-    return
-
-  await runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId)])
-}
-
-async function runRecoveryCommand(args: string[]): Promise<void> {
-  await new Promise<void>((resolve) => {
-    execFile(getNativeBinaryPath('audio-recorder'), args, { timeout: 5 * 60 * 1000 }, (error) => {
-      if (error)
-        console.warn(`[recording-recovery] helper failed: ${args[0]}`, error.message)
-      resolve()
-    })
-  })
 }
 
 async function readRecoveryManifest(taskId: string): Promise<RecordingRecoveryManifest | null> {

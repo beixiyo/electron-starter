@@ -51,7 +51,6 @@ final class AudioCheckpointWriter {
 
     do {
       try FileManager.default.createDirectory(at: segmentDir, withIntermediateDirectories: true)
-      try writeActiveLock()
     }
     catch {
       disabled = true
@@ -106,7 +105,6 @@ final class AudioCheckpointWriter {
         finishDetachedSegment(currentWriter)
       }
     }
-    removeActiveLock()
   }
 
   func deleteAll() {
@@ -123,19 +121,25 @@ final class AudioCheckpointWriter {
     try? FileManager.default.removeItem(at: segmentURL)
 
     let nextWriter = try AVAssetWriter(outputURL: segmentURL, fileType: .m4a)
-    let nextSystemInput = AVAssetWriterInput(mediaType: .audio, outputSettings: systemSettings, sourceFormatHint: systemSourceFormatHint)
-    nextSystemInput.expectsMediaDataInRealTime = true
-    nextWriter.add(nextSystemInput)
+    let nextSystemInput = try addAudioWriterInput(
+      to: nextWriter,
+      outputSettings: systemSettings,
+      sourceFormatHint: systemSourceFormatHint,
+      expectsMediaDataInRealTime: true
+    )
 
     var nextMicInput: AVAssetWriterInput?
     if let micSettings {
-      let input = AVAssetWriterInput(mediaType: .audio, outputSettings: micSettings, sourceFormatHint: micSourceFormatHint)
-      input.expectsMediaDataInRealTime = true
-      nextWriter.add(input)
+      let input = try addAudioWriterInput(
+        to: nextWriter,
+        outputSettings: micSettings,
+        sourceFormatHint: micSourceFormatHint,
+        expectsMediaDataInRealTime: true
+      )
       nextMicInput = input
     }
 
-    nextWriter.startWriting()
+    try startAudioWriter(nextWriter)
     writer = nextWriter
     systemInput = nextSystemInput
     micInput = nextMicInput
@@ -202,18 +206,6 @@ final class AudioCheckpointWriter {
     finishStateLock.unlock()
   }
 
-  private func writeActiveLock() throws {
-    let json = "{\"pid\":\(getpid()),\"createdAt\":\(Int(Date().timeIntervalSince1970 * 1000))}"
-    try json.write(to: activeLockURL(), atomically: true, encoding: .utf8)
-  }
-
-  private func removeActiveLock() {
-    try? FileManager.default.removeItem(at: activeLockURL())
-  }
-
-  private func activeLockURL() -> URL {
-    segmentDir.appendingPathComponent("active.json")
-  }
 }
 
 func checkpointSegmentDirPath(for outputPath: String) -> String {

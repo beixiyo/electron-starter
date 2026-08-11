@@ -118,6 +118,20 @@ if let recoverMicIndex = CommandLine.arguments.firstIndex(of: "--recover-mic-sid
   CFRunLoopRun()
 }
 
+if let validateAudioIndex = CommandLine.arguments.firstIndex(of: "--validate-audio") {
+  let args = CommandLine.arguments
+  guard args.count > validateAudioIndex + 1 else {
+    fputs("AUDIO_VALIDATION_USAGE\n", stderr)
+    exit(2)
+  }
+
+  Task {
+    let ok = await hasDecodableAudioSamples(URL(fileURLWithPath: args[validateAudioIndex + 1]))
+    exit(ok ? 0 : 1)
+  }
+  CFRunLoopRun()
+}
+
 log("audio-recorder build \(AUDIO_RECORDER_BUILD_ID)")
 
 let processLifecycle = ProcessLifecycle()

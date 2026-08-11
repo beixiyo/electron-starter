@@ -24,6 +24,7 @@ class Recorder: NSObject, SCStreamOutput {
   private var sessionStarted = false
   /** 真实落盘样本数(append 成功才计):sessionStarted 只代表首帧到达,零 append 的空文件必须靠它拦截 */
   private var appendedSampleCount = 0
+  private var micAppendedSampleCount = 0
   private var firstSampleWatchdogToken = UUID()
   private var firstSampleErrorEmitted = false
   private var sampleGapWatchdogToken = UUID()
@@ -141,8 +142,6 @@ class Recorder: NSObject, SCStreamOutput {
     systemInput?.markAsFinished()
     micInput?.markAsFinished()
 
-    let hadMic = hasMic
-
     if let writer = writer, writer.status == .writing {
       await writer.finishWriting()
     }
@@ -152,7 +151,9 @@ class Recorder: NSObject, SCStreamOutput {
     let writerError = describeError(writer?.error)
     let hasStorageWriteError = isStorageInsufficientError(writer?.error)
     let didWriteSamples = sessionStarted && appendedSampleCount > 0
-    let stats = "sessionStarted=\(sessionStarted) appended=\(appendedSampleCount) devices: \(describeDefaultAudioDevices())"
+    let hadMicSamples = micAppendedSampleCount > 0
+    let stats = "sessionStarted=\(sessionStarted) appended=\(appendedSampleCount) "
+      + "micAppended=\(micAppendedSampleCount) devices: \(describeDefaultAudioDevices())"
     log("SCK stats: \(stats)")
 
     let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -182,11 +183,23 @@ class Recorder: NSObject, SCStreamOutput {
       return
     }
 
-    if hadMic {
+    if hadMicSamples || SYSTEM_AUDIO_VOLUME_WITHOUT_MIC != 1 {
       output(status: "mixing", path: savedPath)
-      let mixed = await mixTracks(inputPath: savedPath)
-      if !mixed {
-        log("mixTracks failed, keeping original 2-track file")
+      /** writer 契约固定 system=2ch、mic=1ch，只衰减系统轨，不误伤人声 */
+      let mixed = await mixTracks(
+        inputPath: savedPath,
+        primaryInputVolume: hadMicSamples
+          ? 1
+          : SYSTEM_AUDIO_VOLUME_WITHOUT_MIC,
+        primaryInputVolumesByChannelCount: hadMicSamples
+          ? [2: SYSTEM_AUDIO_VOLUME_WITH_MIC]
+          : [:]
+      )
+      guard mixed else {
+        let detail = "final audio render failed; recovery assets preserved"
+        log("SCK: \(detail)")
+        output(terminalError: "writer_failed", path: savedPath, detail: detail, handoffId: handoffId)
+        return
       }
     }
 
@@ -259,24 +272,29 @@ class Recorder: NSObject, SCStreamOutput {
 
     let w = try AVAssetWriter(outputURL: url, fileType: .m4a)
 
-    let sysInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aacSystemAudioSettings())
-    sysInput.expectsMediaDataInRealTime = true
-    w.add(sysInput)
+    let systemSettings = aacSystemAudioSettings()
+    let sysInput = try addAudioWriterInput(
+      to: w,
+      outputSettings: systemSettings,
+      expectsMediaDataInRealTime: true
+    )
 
     if hasMic {
-      let mInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aacMicSettings())
-      mInput.expectsMediaDataInRealTime = true
-      w.add(mInput)
+      let mInput = try addAudioWriterInput(
+        to: w,
+        outputSettings: aacMicSettings(),
+        expectsMediaDataInRealTime: true
+      )
       self.micInput = mInput
     }
 
-    w.startWriting()
+    try startAudioWriter(w)
 
     self.writer = w
     self.systemInput = sysInput
     self.checkpointWriter = AudioCheckpointWriter(
       outputPath: outputPath,
-      systemSettings: aacSystemAudioSettings(),
+      systemSettings: systemSettings,
       micSettings: hasMic
         ? aacMicSettings()
         : nil
@@ -308,6 +326,7 @@ class Recorder: NSObject, SCStreamOutput {
       if let input = micInput, input.isReadyForMoreMediaData {
         if input.append(sampleBuffer) {
           appendedSampleCount += 1
+          micAppendedSampleCount += 1
           lastSampleAt = Date()
           checkpointWriter?.append(sampleBuffer, track: .mic)
         }
@@ -330,6 +349,7 @@ class Recorder: NSObject, SCStreamOutput {
     pausedAt = nil
     sessionStarted = false
     appendedSampleCount = 0
+    micAppendedSampleCount = 0
     firstSampleWatchdogToken = UUID()
     firstSampleErrorEmitted = false
     sampleGapWatchdogToken = UUID()

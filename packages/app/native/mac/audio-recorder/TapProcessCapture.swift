@@ -287,7 +287,11 @@ final class TapProcessCapture {
       kAudioAggregateDeviceTapListKey: [
         [
           kAudioSubTapUIDKey: tapUUID.uuidString,
-          kAudioSubTapDriftCompensationKey: true,
+          /** Core Audio 明确要求 CFNumber；Bool 会桥接为 CFBoolean，不能依赖隐式容忍 */
+          kAudioSubTapDriftCompensationKey: NSNumber(value: 1),
+          kAudioSubTapDriftCompensationQualityKey: NSNumber(
+            value: TAP_DRIFT_COMPENSATION_QUALITY
+          ),
         ],
       ],
     ]

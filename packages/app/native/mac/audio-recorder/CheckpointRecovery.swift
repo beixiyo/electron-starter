@@ -84,19 +84,22 @@ func mergeCheckpointSegments(segmentDir: String, outputPath: String) async -> Bo
     }
 
     /**
-     * outputPath 已存在且可读、时长不短于合并结果时保留主产物（如崩溃发生在主 writer
-     * finishWriting 之后、锁清理之前）；崩溃残留的无 moov 半截主文件在此读不出时长（→ .zero），
-     * 合并结果胜出并覆盖。绝不用 size>0 判定「已就绪」——那正是 checkpoint 要超越的弱防线。
+     * outputPath 已存在、时长不短于合并结果，且头尾 PCM 都能解码时才保留主产物
+     *（如崩溃发生在主 writer finishWriting 之后、锁清理之前）。只剩容器时长的截断文件
+     * 也会被 checkpoint 结果覆盖；绝不用 size>0 判定「已就绪」。
      */
     let existingDuration = await readableAudioDuration(outputURL)
-    if existingDuration >= cursor {
-      log("checkpoint merge: existing output \(existingDuration.seconds)s >= merged \(cursor.seconds)s, keep existing")
+    if existingDuration >= cursor,
+       await hasDecodableAudioSamples(outputURL) {
+      log(
+        "checkpoint merge: existing output \(existingDuration.seconds)s "
+          + ">= merged \(cursor.seconds)s and decodes at both ends, keep existing"
+      )
       try? fm.removeItem(at: tmpURL)
       return true
     }
 
-    try? fm.removeItem(at: outputURL)
-    try fm.moveItem(at: tmpURL, to: outputURL)
+    try replaceOutputAtomically(at: outputURL, with: tmpURL)
     log("checkpoint merge: success (\(usableSegments.count) segment(s), \(cursor.seconds)s)")
     return true
   }

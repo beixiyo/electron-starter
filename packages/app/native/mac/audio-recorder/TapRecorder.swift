@@ -523,24 +523,45 @@ class TapRecorder: NSObject {
       log("tap: writer finish failed but mic sidecar exists (\(formatCMTimeSeconds(micSidecarDuration))s), trying sidecar mix: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
     }
 
-    /** mixTracks 过滤零时长输入，纯系统音、纯 mic 和混音统一产出单轨 M4A */
+    /**
+     * 整场没检测到有效 mic 且系统主轨健康时，不能因为 sidecar 里有静音/底噪时长就强制
+     * 二次 AAC 编码和多轨 limiter。纯 mic 或主 writer 失败时仍保留 sidecar 作为唯一音源。
+     */
+    let shouldMixMicSidecar = hasMicSidecarSamples
+      && (hasDetectedMicSignal || writerStatus != .completed)
     emitStatus("mixing", path: savedPath)
-    let extraInputs = hasMicSidecarSamples
-      ? micSidecarPath.map { [$0] } ?? []
-      : []
-    let mixed = await mixTracks(
-      inputPath: savedPath,
-      extraInputPaths: extraInputs,
-      primaryInputVolume: extraInputs.isEmpty || !hasDetectedMicSignal
-        ? 1
-        : SYSTEM_AUDIO_VOLUME_WITH_MIC,
-      primaryTimelineSegments: finalizedSystemTimeline
-    )
-    if !mixed {
-      log("mixTracks failed, keeping original file")
+    let mixed: Bool
+    if let micSidecarPath, shouldMixMicSidecar {
+      mixed = await mergeMicSidecar(
+        sidecarPath: micSidecarPath,
+        outputPath: savedPath,
+        primaryInputVolume: hasDetectedMicSignal
+          ? SYSTEM_AUDIO_VOLUME_WITH_MIC
+          : 1,
+        primaryTimelineSegments: finalizedSystemTimeline
+      )
     }
-    if mixed, let micSidecarPath {
-      consumeMicSidecarFile(URL(fileURLWithPath: micSidecarPath), context: "tap stop")
+    else {
+      /** 没有有效 mic sidecar 时，纯系统音仍直接走 mixTracks 的单轨路径 */
+      mixed = await mixTracks(
+        inputPath: savedPath,
+        primaryInputVolume: SYSTEM_AUDIO_VOLUME_WITHOUT_MIC,
+        primaryTimelineSegments: finalizedSystemTimeline
+      )
+    }
+    guard mixed else {
+      /**
+       * 不能把未完成的最终产物当作 stopped 交付：上层收到 stopped 后会读取主文件并删除
+       * sidecar/checkpoint。terminal error 会结束当前会话但保留恢复资产，供下次扫描重建
+       */
+      let detail = "final audio render failed; recovery assets preserved"
+      log("tap: \(detail)")
+      emitRecycleRequired(handoffId: handoffId)
+      emitTerminalError("writer_failed", path: savedPath, detail: detail, handoffId: handoffId)
+      return
+    }
+    if let micSidecarPath, !shouldMixMicSidecar {
+      removeMicSidecarFile(URL(fileURLWithPath: micSidecarPath), context: "tap stop")
     }
 
     emitRecycleRequired(handoffId: handoffId)
@@ -1045,27 +1066,25 @@ class TapRecorder: NSObject {
 
     let w = try AVAssetWriter(outputURL: url, fileType: .m4a)
 
-    let aacSampleRates: Set<Double> = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000]
     let tapSampleRate = tapCapture.format?.mSampleRate ?? 48000
-    let sampleRate = aacSampleRates.contains(tapSampleRate)
+    let sampleRate = SUPPORTED_AAC_SAMPLE_RATES.contains(tapSampleRate)
       ? tapSampleRate
       : 48000
 
-    let sysInput = AVAssetWriterInput(
-      mediaType: .audio,
-      outputSettings: aacSystemAudioSettings(sampleRate: sampleRate),
-      sourceFormatHint: tapCapture.formatDescription
+    let systemSettings = aacSystemAudioSettings(sampleRate: sampleRate)
+    let sysInput = try addAudioWriterInput(
+      to: w,
+      outputSettings: systemSettings,
+      sourceFormatHint: tapCapture.formatDescription,
+      expectsMediaDataInRealTime: true
     )
-    sysInput.expectsMediaDataInRealTime = true
-    w.add(sysInput)
-
-    w.startWriting()
+    try startAudioWriter(w)
 
     writer = w
     systemInput = sysInput
     checkpointWriter = AudioCheckpointWriter(
       outputPath: outputPath,
-      systemSettings: aacSystemAudioSettings(sampleRate: sampleRate),
+      systemSettings: systemSettings,
       systemSourceFormatHint: tapCapture.formatDescription
     )
     sessionStarted = false

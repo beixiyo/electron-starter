@@ -1,14 +1,16 @@
-// 将一个或多个音频资产解码、混合并原子替换为单轨 M4A
+// 编排音频 passthrough / render，并安全写入最终单轨文件
 
 import AVFoundation
 import CoreAudio
 import CoreMedia
+import Darwin
 import Foundation
 
 func mixTracks(
   inputPath: String,
   extraInputPaths: [String] = [],
   primaryInputVolume: Float = 1,
+  primaryInputVolumesByChannelCount: [UInt32: Float] = [:],
   primaryTimelineSegments: [AudioTimelineSegment] = []
 ) async -> Bool {
   let inputURL = URL(fileURLWithPath: inputPath)
@@ -16,147 +18,168 @@ func mixTracks(
     .appendingPathComponent("_mix_\(ProcessInfo.processInfo.globallyUniqueString).m4a")
 
   do {
-    let composition = AVMutableComposition()
-    var mixTracks: [AVAssetTrack] = []
-    var primaryMixTracks: [AVAssetTrack] = []
-    let inputPaths = [inputPath] + extraInputPaths
-    let maximumTimelineAdjustmentSeconds = 0.05
-
-    for (inputIndex, path) in inputPaths.enumerated() {
-      let url = URL(fileURLWithPath: path)
-      guard FileManager.default.fileExists(atPath: url.path) else { continue }
-      let asset = AVURLAsset(url: url)
-
-      do {
-        let allTracks = try await asset.loadTracks(withMediaType: .audio)
-        for track in allTracks {
-          let timeRange = try await track.load(.timeRange)
-          log("mixTracks: \(url.lastPathComponent) track range=\(timeRange.start.seconds)s +\(timeRange.duration.seconds)s")
-          if timeRange.duration > .zero {
-            var timelineError: String?
-            var timelineDuration = CMTime.zero
-            var previousEnd: CMTime?
-            for segment in primaryTimelineSegments {
-              guard segment.start.isNumeric,
-                    segment.start >= .zero,
-                    segment.duration.isNumeric,
-                    segment.duration > .zero else {
-                timelineError = "contains invalid start or duration"
-                break
-              }
-              if let previousEnd, segment.start < previousEnd {
-                timelineError = "contains out-of-order or overlapping segments"
-                break
-              }
-              previousEnd = CMTimeAdd(segment.start, segment.duration)
-              timelineDuration = CMTimeAdd(timelineDuration, segment.duration)
-            }
-
-            if timelineError == nil, !primaryTimelineSegments.isEmpty {
-              let durationDifference = abs(timeRange.duration.seconds - timelineDuration.seconds)
-              if !durationDifference.isFinite || durationDifference > maximumTimelineAdjustmentSeconds {
-                timelineError = "source/segment duration mismatch \(String(format: "%.3f", durationDifference))s"
-              }
-            }
-
-            guard let compositionTrack = composition.addMutableTrack(
-               withMediaType: .audio,
-               preferredTrackID: kCMPersistentTrackID_Invalid
-             ) else { continue }
-
-            if inputIndex == 0,
-               allTracks.count == 1,
-               !primaryTimelineSegments.isEmpty,
-               timelineError == nil {
-              var sourceCursor = timeRange.start
-              var remainingDuration = timeRange.duration
-
-              for (segmentIndex, segment) in primaryTimelineSegments.enumerated()
-                where remainingDuration > .zero {
-                /** AAC 会把输入 PTS 空洞压紧，最后一段吸收编码 priming/padding 的微小差值 */
-                let duration = segmentIndex == primaryTimelineSegments.count - 1
-                  ? remainingDuration
-                  : CMTimeMinimum(segment.duration, remainingDuration)
-                try compositionTrack.insertTimeRange(
-                  CMTimeRange(start: sourceCursor, duration: duration),
-                  of: track,
-                  at: segment.start
-                )
-                sourceCursor = CMTimeAdd(sourceCursor, duration)
-                remainingDuration = CMTimeSubtract(remainingDuration, duration)
-              }
-            }
-            else {
-              if inputIndex == 0,
-                 allTracks.count == 1,
-                 !primaryTimelineSegments.isEmpty,
-                 let timelineError {
-                log("mixTracks: primary timeline ignored: \(timelineError)")
-              }
-              try compositionTrack.insertTimeRange(timeRange, of: track, at: .zero)
-            }
-            mixTracks.append(compositionTrack)
-            if inputIndex == 0 {
-              primaryMixTracks.append(compositionTrack)
-            }
-          }
-        }
-      }
-      catch {
-        log("mixTracks: skipped \(url.lastPathComponent): \(describeError(error))")
-      }
+    let primaryInspection = await inspectMixInput(at: inputPath)
+    var extraInspections: [MixInputInspection] = []
+    for path in extraInputPaths {
+      extraInspections.append(await inspectMixInput(at: path))
     }
 
-    /**
-     * 音源可录音中任意增减,收尾时非空轨可能是 1 条(纯系统 / 纯 mic)或 2 条(混音):
-     * 都经 AVAssetReaderAudioMixOutput 转出单轨(1 条为直通,2 条为混合),产物永远干净单轨。
-     * 0 条(全空,理论不达)才跳过
-     */
-    guard !mixTracks.isEmpty else {
-      log("mixTracks: no non-empty track, skipping")
+    /** 主文件存在却无法解析时必须保留原件，不能用 sidecar-only 结果覆盖潜在可恢复的系统音 */
+    guard primaryInspection.succeeded else {
+      log("mixTracks: render aborted: primary input inspection failed")
+      return false
+    }
+
+    /** 无法确认 extra 是否含音频时不能当成空输入，否则调用方可能误删尚未混入的 sidecar */
+    guard extraInspections.allSatisfy(\.succeeded) else {
+      log("mixTracks: render aborted: extra input inspection failed")
+      return false
+    }
+
+    let primaryInput = primaryInspection.input
+    let extraInputs = extraInspections.compactMap(\.input)
+    /** 混音总线使用所有有效输入的最高采样率，避免低采样率系统轨拖低 48 kHz mic */
+    let sampleRate = ([primaryInput].compactMap { $0 } + extraInputs)
+      .flatMap(\.nonEmptyTracks)
+      .compactMap(\.sampleRate)
+      .max()
+      ?? AUDIO_FALLBACK_SAMPLE_RATE
+
+    if canPassthrough(
+      primaryInput: primaryInput,
+      extraInputs: extraInputs,
+      primaryInputVolume: primaryInputVolume,
+      primaryInputVolumesByChannelCount: primaryInputVolumesByChannelCount,
+      primaryTimelineSegments: primaryTimelineSegments
+    ) {
+      log("mixTracks: passthrough \(inputURL.lastPathComponent) (single identity primary track)")
       return true
     }
 
-    let reader = try AVAssetReader(asset: composition)
+    let renderPlan = try makeRenderPlan(
+      primaryInput: primaryInput,
+      extraInputs: extraInputs,
+      primaryTimelineSegments: primaryTimelineSegments
+    )
+    guard !renderPlan.mixTracks.isEmpty else {
+      log("mixTracks: render aborted: no non-empty track")
+      return false
+    }
 
+    log(
+      "mixTracks: render \(inputURL.lastPathComponent) "
+        + "tracks=\(renderPlan.mixTracks.count) sampleRate=\(Int(sampleRate))Hz"
+    )
+    guard await render(
+      plan: renderPlan,
+      sampleRate: sampleRate,
+      primaryInputVolume: primaryInputVolume,
+      primaryInputVolumesByChannelCount: primaryInputVolumesByChannelCount,
+      outputURL: tmpURL
+    ) else {
+      try? FileManager.default.removeItem(at: tmpURL)
+      return false
+    }
+
+    try replaceOutputAtomically(at: inputURL, with: tmpURL)
+    log("mixTracks: render success")
+    return true
+  }
+  catch {
+    log("mixTracks error: \(describeError(error))")
+    try? FileManager.default.removeItem(at: tmpURL)
+    return false
+  }
+}
+
+private func render(
+  plan: MixRenderPlan,
+  sampleRate: Double,
+  primaryInputVolume: Float,
+  primaryInputVolumesByChannelCount: [UInt32: Float],
+  outputURL: URL
+) async -> Bool {
+  do {
+    guard primaryInputVolume.isFinite, primaryInputVolume >= .zero else {
+      throw mixerError("invalid primary input volume: \(primaryInputVolume)")
+    }
+    guard primaryInputVolumesByChannelCount.values.allSatisfy({ $0.isFinite && $0 >= .zero }) else {
+      throw mixerError("invalid channel-specific primary input volume")
+    }
+
+    let primaryTrackVolumes = plan.primaryMixTracks.map { source in
+      source.sourceChannelCount.flatMap { primaryInputVolumesByChannelCount[$0] }
+        ?? primaryInputVolume
+    }
+
+    let reader = try AVAssetReader(asset: plan.composition)
     let mixOutput = AVAssetReaderAudioMixOutput(
-      audioTracks: mixTracks,
+      audioTracks: plan.mixTracks,
       audioSettings: [
         AVFormatIDKey: Int(kAudioFormatLinearPCM),
         AVLinearPCMIsFloatKey: true,
         AVLinearPCMBitDepthKey: 32,
-        AVSampleRateKey: 48000,
+        AVLinearPCMIsNonInterleaved: false,
+        AVSampleRateKey: sampleRate,
         AVNumberOfChannelsKey: 2,
       ]
     )
-    if primaryInputVolume < 1, !primaryMixTracks.isEmpty, mixTracks.count > primaryMixTracks.count {
+    if primaryTrackVolumes.contains(where: { $0 != 1 }) {
       let audioMix = AVMutableAudioMix()
-      audioMix.inputParameters = primaryMixTracks.map { track in
-        let parameters = AVMutableAudioMixInputParameters(track: track)
-        parameters.setVolume(primaryInputVolume, at: .zero)
+      audioMix.inputParameters = zip(plan.primaryMixTracks, primaryTrackVolumes).map { source, volume in
+        let parameters = AVMutableAudioMixInputParameters(track: source.track)
+        parameters.setVolume(volume, at: .zero)
         return parameters
       }
       mixOutput.audioMix = audioMix
-      log("mixTracks: primary input volume=\(primaryInputVolume)")
+      log("mixTracks: render primary input volumes=\(primaryTrackVolumes)")
+    }
+    guard reader.canAdd(mixOutput) else {
+      throw mixerError("cannot add reader output")
     }
     reader.add(mixOutput)
 
-    let writer = try AVAssetWriter(outputURL: tmpURL, fileType: .m4a)
-    let writerInput = AVAssetWriterInput(mediaType: .audio, outputSettings: aacSystemAudioSettings())
-    writer.add(writerInput)
+    /** 多轨相加或单轨主动放大时才限幅；未增益的单轨时间线 render 保持原始样本 */
+    let limiter = plan.mixTracks.count > 1 || primaryTrackVolumes.contains(where: { $0 > 1 })
+      ? try AudioPeakLimiter(sampleRate: sampleRate, channelCount: 2)
+      : nil
 
-    reader.startReading()
-    writer.startWriting()
+    let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
+    let outputSettings = aacSystemAudioSettings(sampleRate: sampleRate)
+    let writerInput = try addAudioWriterInput(
+      to: writer,
+      outputSettings: outputSettings,
+      expectsMediaDataInRealTime: false
+    )
+    try startAudioWriter(writer)
     writer.startSession(atSourceTime: .zero)
+    guard reader.startReading() else {
+      log("mixTracks: render reader start failed: \(describeError(reader.error))")
+      writer.cancelWriting()
+      return false
+    }
 
     /** AVFoundation 未为这两个类标注 Sendable，它们在此后只由 mix-writer 串行队列使用 */
     nonisolated(unsafe) let queueWriterInput = writerInput
     nonisolated(unsafe) let queueMixOutput = mixOutput
+    nonisolated(unsafe) let queueLimiter = limiter
+    var limiterError: Error?
     await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
       queueWriterInput.requestMediaDataWhenReady(on: DispatchQueue(label: "mix-writer")) {
         while queueWriterInput.isReadyForMoreMediaData {
-          if let buf = queueMixOutput.copyNextSampleBuffer() {
-            if !queueWriterInput.append(buf) {
+          if let buffer = queueMixOutput.copyNextSampleBuffer() {
+            let bufferToAppend: CMSampleBuffer
+            do {
+              bufferToAppend = try queueLimiter?.process(buffer) ?? buffer
+            }
+            catch {
+              limiterError = error
+              log("mixTracks: limiter failed: \(describeError(error))")
+              queueWriterInput.markAsFinished()
+              cont.resume()
+              return
+            }
+            if !queueWriterInput.append(bufferToAppend) {
               queueWriterInput.markAsFinished()
               cont.resume()
               return
@@ -171,27 +194,49 @@ func mixTracks(
       }
     }
 
-    await writer.finishWriting()
-
-    /**
-     * copyNextSampleBuffer() 在 reader 正常 EOF 与中途 .failed 时都返回 nil，无法区分。
-     * 只查 writer.status 会把「解码中断→已写半截」误判为成功，进而用截断混音覆盖完整原件。
-     * 必须同时核对 reader.status：任一非 completed 即中止，保留原件、删临时件。
-     */
-    guard reader.status == .completed, writer.status == .completed else {
-      log("mixTracks aborted: reader=\(reader.status.rawValue)/\(describeError(reader.error)) writer=\(writer.status.rawValue)/\(describeError(writer.error))")
-      try? FileManager.default.removeItem(at: tmpURL)
+    if let limiterError {
+      reader.cancelReading()
+      writer.cancelWriting()
+      log("mixTracks: render aborted after limiter failure: \(describeError(limiterError))")
       return false
     }
 
-    try? FileManager.default.removeItem(at: inputURL)
-    try FileManager.default.moveItem(at: tmpURL, to: inputURL)
-    log("mixTracks: success")
+    await writer.finishWriting()
+
+    /** reader 正常 EOF 与失败均返回 nil；两端都 completed 才能覆盖原文件 */
+    guard reader.status == .completed, writer.status == .completed else {
+      log(
+        "mixTracks: render aborted: "
+          + "reader=\(reader.status.rawValue)/\(describeError(reader.error)) "
+          + "writer=\(writer.status.rawValue)/\(describeError(writer.error))"
+      )
+      return false
+    }
+    guard await readableAudioDuration(outputURL) > .zero else {
+      log("mixTracks: render aborted: output has no readable audio")
+      return false
+    }
     return true
   }
   catch {
-    log("mixTracks error: \(error.localizedDescription)")
-    try? FileManager.default.removeItem(at: tmpURL)
+    log("mixTracks: render error: \(describeError(error))")
     return false
+  }
+}
+
+/** 临时件与目标在同一目录，POSIX rename 覆盖是单次原子命名操作，失败时原件仍在 */
+func replaceOutputAtomically(at outputURL: URL, with temporaryURL: URL) throws {
+  let result = temporaryURL.path.withCString { sourcePath in
+    outputURL.path.withCString { destinationPath in
+      Darwin.rename(sourcePath, destinationPath)
+    }
+  }
+  guard result == 0 else {
+    let errorCode = errno
+    throw NSError(
+      domain: NSPOSIXErrorDomain,
+      code: Int(errorCode),
+      userInfo: [NSFilePathErrorKey: outputURL.path]
+    )
   }
 }

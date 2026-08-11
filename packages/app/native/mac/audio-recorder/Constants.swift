@@ -3,15 +3,7 @@
 import Foundation
 
 /// native helper 构建标识,启动时打进二进制并输出横幅;发包时用 `strings ... | rg` 核验装进去的是最新 helper 而非旧缓存
-let AUDIO_RECORDER_BUILD_ID = "2026-08-10-audio-modules-level-balance"
-
-/**
- * 麦克风与系统音共同收尾时的系统轨增益
- *
- * 正常收尾时仅在确认 sidecar 含有效麦克风信号后应用，
- * 为人声保留混音空间；纯系统音、纯麦克风和无信号 sidecar 均保持主轨原响度
- */
-let SYSTEM_AUDIO_VOLUME_WITH_MIC: Float = 0.5
+let AUDIO_RECORDER_BUILD_ID = "2026-08-11-system-audio-quality"
 
 /// raw AVAudioEngine 启动瞬时失败(如 `!dev` 设备忙:上一条录音/VPIO 拆除未完成即抢设备)的最大重试次数
 let RAW_AUDIO_ENGINE_START_ATTEMPTS = 3

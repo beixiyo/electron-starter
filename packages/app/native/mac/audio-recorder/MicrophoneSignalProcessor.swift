@@ -1,4 +1,4 @@
-// 对 Float32 麦克风 PCM 应用有上限的人声自动增益和峰值保护
+// 对 Float32 麦克风 PCM 应用人声自动增益、动态压缩和峰值保护
 
 import AVFoundation
 
@@ -6,26 +6,33 @@ import AVFoundation
  * 对已归一为 Float32 PCM 的麦克风样本做受限自动增益
  *
  * 输入是 AVAudioEngine / AVCapture 的原始麦克风 PCM，输出仍是同样格式的 PCM；
- * 只在检测到语音级信号时追踪目标 RMS，并用峰值上限防止增益后削波。
- * 它不是降噪器：Voice Processing 不可用时不会伪造 AEC/NS 能力。
+ * 只在检测到语音级信号时追踪目标 RMS，并压缩瞬时峰值以抬高人声主体；
+ * 最后逐采样帧限制峰值，避免一个爆破音压低整块 buffer 或造成削波
+ * 它不是降噪器：Voice Processing 不可用时不会伪造 AEC/NS 能力
  *
  * 该对象由 sampleQueue 独占，不提供跨线程同步
  */
 final class MicrophoneSignalProcessor {
   private enum Policy {
-    /** 语音段目标电平，为瞬时峰值保留约 19 dB 空间 */
-    static let targetRMSDbFS = -20.0
+    /** raw capture 没有系统 AGC，先把语音主体推向该 RMS，再由压缩器控制瞬时峰值 */
+    static let targetRMSDbFS = -18.0
     /** 不对弱输入无限拉升，避免同比放大底噪 */
-    static let maximumGainDb = 12.0
+    static let maximumGainDb = 18.0
     /** 峰值留 1 dB 编码余量 */
     static let peakCeilingDbFS = -1.0
+    /** 只压缩高于人声主体的瞬时峰值，让 RMS 可以达到目标而不削波 */
+    static let compressorThresholdDbFS = -12.0
+    static let compressorRatio = 4.0
+    static let compressorKneeDb = 6.0
+    static let compressorAttackSeconds = 0.005
+    static let compressorReleaseSeconds = 0.08
     /** RMS 与峰值都达到门槛才视为人声，避免单个噪声尖峰触发增益和系统音衰减 */
     static let signalRMSFloorDbFS = -50.0
     static let signalPeakFloorDbFS = -35.0
     /** 连续达到门槛一小段时间后才确认整场存在人声 */
     static let minimumSignalDurationSeconds = 0.1
-    /** 电平变小时平滑抬升，防止首帧跳变和 buffer 间的呼吸感 */
-    static let gainRiseTimeSeconds = 0.35
+    /** 电平变小时平滑抬升，兼顾短录音起音与 buffer 间稳定性 */
+    static let gainRiseTimeSeconds = 0.18
     /** 短暂低于门槛时保留语音增益，之后平滑回到 1 倍 */
     static let signalHoldSeconds = 0.15
     static let gainReleaseTimeSeconds = 0.4
@@ -39,6 +46,7 @@ final class MicrophoneSignalProcessor {
   private let signalPeakFloor = amplitude(fromDbFS: Policy.signalPeakFloorDbFS)
 
   private var currentGain: Float = 1
+  private var compressorGain: Float = 1
   private var signalRunSeconds = 0.0
   private var signalHoldRemainingSeconds = 0.0
   private var signalInactiveSeconds = 0.0
@@ -124,20 +132,57 @@ final class MicrophoneSignalProcessor {
       }
     }
 
-    /** 人声确认前不放大候选噪声；确认后短暂保持并平滑回落，所有路径仍受峰值上限保护 */
-    let peakSafeGain = peak > 0 ? peakCeiling / peak : currentGain
+    /** 人声确认前不放大候选噪声；确认后短暂保持并平滑回落 */
     let desiredAppliedGain: Float = signalConfirmed ? currentGain : 1
-    let appliedGain = max(0, min(desiredAppliedGain, peakSafeGain))
 
     var processedSquareSum = 0.0
     var processedPeak: Float = 0
-    for pointerIndex in 0..<pointerCount {
-      let samples = channels[pointerIndex]
-      for sampleIndex in 0..<samplesPerPointer {
-        let processed = max(-peakCeiling, min(peakCeiling, samples[sampleIndex] * appliedGain))
-        samples[sampleIndex] = processed
-        processedSquareSum += Double(processed * processed)
-        processedPeak = max(processedPeak, abs(processed))
+    var appliedGainFrameSum = 0.0
+    for frameIndex in 0..<frameCount {
+      var framePeak: Float = 0
+      if isInterleaved {
+        let samples = channels[0]
+        let frameOffset = frameIndex * channelCount
+        for channelIndex in 0..<channelCount {
+          framePeak = max(framePeak, abs(samples[frameOffset + channelIndex]))
+        }
+      }
+      else {
+        for channelIndex in 0..<channelCount {
+          framePeak = max(framePeak, abs(channels[channelIndex][frameIndex]))
+        }
+      }
+
+      updateCompressorGain(
+        targetGain: compressionGain(for: framePeak * desiredAppliedGain),
+        sampleRate: buffer.format.sampleRate
+      )
+
+      let compressedGain = desiredAppliedGain * compressorGain
+      /** 峰值保护只作用于当前采样帧，不再因单个瞬时峰值压低整个 buffer */
+      let peakSafeGain = framePeak > 0 ? peakCeiling / framePeak : compressedGain
+      let appliedGain = max(0, min(compressedGain, peakSafeGain))
+      appliedGainFrameSum += Double(appliedGain)
+
+      if isInterleaved {
+        let samples = channels[0]
+        let frameOffset = frameIndex * channelCount
+        for channelIndex in 0..<channelCount {
+          let sampleIndex = frameOffset + channelIndex
+          let processed = max(-peakCeiling, min(peakCeiling, samples[sampleIndex] * appliedGain))
+          samples[sampleIndex] = processed
+          processedSquareSum += Double(processed * processed)
+          processedPeak = max(processedPeak, abs(processed))
+        }
+      }
+      else {
+        for channelIndex in 0..<channelCount {
+          let samples = channels[channelIndex]
+          let processed = max(-peakCeiling, min(peakCeiling, samples[frameIndex] * appliedGain))
+          samples[frameIndex] = processed
+          processedSquareSum += Double(processed * processed)
+          processedPeak = max(processedPeak, abs(processed))
+        }
       }
     }
 
@@ -148,7 +193,7 @@ final class MicrophoneSignalProcessor {
       inputPeak: peak,
       outputSquareSum: processedSquareSum,
       outputPeak: processedPeak,
-      appliedGain: appliedGain
+      appliedGainFrameSum: appliedGainFrameSum
     )
   }
 
@@ -157,6 +202,41 @@ final class MicrophoneSignalProcessor {
     let rmsDbFS = dbFS(rms)
     let gainDb = min(Policy.maximumGainDb, max(0, Policy.targetRMSDbFS - rmsDbFS))
     return Float(pow(10.0, gainDb / 20))
+  }
+
+  /** 返回软膝压缩器对当前峰值应施加的线性增益 */
+  private func compressionGain(for amplifiedPeak: Float) -> Float {
+    guard amplifiedPeak > 0 else { return 1 }
+
+    let inputDb = dbFS(amplifiedPeak)
+    let threshold = Policy.compressorThresholdDbFS
+    let knee = Policy.compressorKneeDb
+    let lowerKnee = threshold - knee / 2
+    let upperKnee = threshold + knee / 2
+    let outputDb: Double
+
+    if inputDb <= lowerKnee {
+      return 1
+    }
+    else if inputDb >= upperKnee {
+      outputDb = threshold + (inputDb - threshold) / Policy.compressorRatio
+    }
+    else {
+      let distanceIntoKnee = inputDb - lowerKnee
+      outputDb = inputDb
+        + (1 / Policy.compressorRatio - 1)
+          * distanceIntoKnee * distanceIntoKnee / (2 * knee)
+    }
+
+    return amplitude(fromDbFS: min(0, outputDb - inputDb))
+  }
+
+  private func updateCompressorGain(targetGain: Float, sampleRate: Double) {
+    let duration = targetGain < compressorGain
+      ? Policy.compressorAttackSeconds
+      : Policy.compressorReleaseSeconds
+    let coefficient = Float(exp(-1 / (max(1, sampleRate) * duration)))
+    compressorGain = targetGain + (compressorGain - targetGain) * coefficient
   }
 
   private func updateSmoothedGain(
@@ -188,7 +268,7 @@ final class MicrophoneSignalProcessor {
     inputPeak: Float,
     outputSquareSum: Double,
     outputPeak: Float,
-    appliedGain: Float
+    appliedGainFrameSum: Double
   ) {
     guard !meterLogged else { return }
 
@@ -197,7 +277,7 @@ final class MicrophoneSignalProcessor {
     self.inputPeak = max(self.inputPeak, inputPeak)
     self.outputSquareSum += outputSquareSum
     self.outputPeak = max(self.outputPeak, outputPeak)
-    appliedGainSum += Double(appliedGain) * Double(buffer.frameLength)
+    appliedGainSum += appliedGainFrameSum
     appliedGainFrameCount += Int64(buffer.frameLength)
 
     let targetSampleCount = Int64(
