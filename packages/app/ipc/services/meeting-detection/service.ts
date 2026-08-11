@@ -2,7 +2,7 @@ import type { MeetingDetectionContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { startRecording as startNativeRecorder } from '@main/audio-recorder'
 import { dismissSession, suppressSession } from '@main/meeting-detection/meeting-detector'
-import { registerNativeRecordingHandlers } from '@main/native-recording'
+import { failNativeRecordingStart, registerNativeRecordingHandlers } from '@main/native-recording'
 import { hasNativeRecordingSession, setNativeRecordingSession } from '@main/native-recording/session'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
@@ -32,8 +32,20 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
       })
       setNativeRecordingSession(session)
       recordingState.startMeetingNative()
-      startNativeRecorder(session.outputPath)
-      console.log(`[meeting-detection] recording started for: ${appId} pid=${pid}`)
+      let sent = false
+      try {
+        sent = startNativeRecorder(session.outputPath)
+      }
+      catch (error) {
+        failNativeRecordingStart(session, 'helper_unavailable', error instanceof Error
+          ? error.message
+          : String(error))
+        return
+      }
+      if (!sent) {
+        failNativeRecordingStart(session, 'helper_unavailable')
+        return
+      }
     },
 
     async pauseRecording() {

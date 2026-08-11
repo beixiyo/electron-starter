@@ -88,7 +88,6 @@ export class RecordingStateManager {
       return this.snapshot
     }
 
-    console.log('[rec-state] recording → paused')
     this.updateElapsed()
     this.phase = 'paused'
     this.clock.pause()
@@ -104,7 +103,6 @@ export class RecordingStateManager {
       return this.snapshot
     }
 
-    console.log('[rec-state] paused → recording')
     this.clock.resume()
     this.phase = 'recording'
     this.startTimer()
@@ -120,7 +118,6 @@ export class RecordingStateManager {
 
     const prev = this.phase
     this.updateElapsed()
-    console.log(`[rec-state] ${prev} → stopped (elapsed=${this.elapsed}s)`)
     this.phase = 'stopped'
     this.stopTimer()
     this.stopMaxDurationTimer()
@@ -136,7 +133,6 @@ export class RecordingStateManager {
     this._nativeSource = source
     this.elapsed = 0
     this.clock.reset()
-    console.log(`[rec-state] idle → starting (native: ${source})`)
     this.phase = 'starting'
     this.broadcast()
     this.notifyPhase('idle', 'starting')
@@ -144,9 +140,6 @@ export class RecordingStateManager {
   }
 
   private enterRecording(prev: 'idle' | 'starting'): void {
-    console.log(`[rec-state] ${prev} → recording${this._nativeSource
-      ? ` (native: ${this._nativeSource})`
-      : ''}`)
     this.phase = 'recording'
     this.elapsed = 0
     this.clock.start()
@@ -166,7 +159,6 @@ export class RecordingStateManager {
 
   private resetState(notifyNative: boolean): RecordingSnapshot {
     const prev = this.phase
-    console.log('[rec-state] → idle (reset)')
     this.phase = 'idle'
     this.elapsed = 0
     this.clock.reset()
@@ -270,7 +262,6 @@ export class RecordingStateManager {
 
     const prev = this.phase
     this.updateElapsed()
-    console.log(`[rec-state] recording reached max duration (${this.elapsed}s), pause and ask user`)
     this.phase = 'paused'
     this.clock.pause()
     this.stopTimer()

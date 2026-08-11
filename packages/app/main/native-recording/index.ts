@@ -6,6 +6,7 @@ import { deleteRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { app } from 'electron'
 import { clearNativeRecordingSession, consumeNativeRecordingSession, peekNativeRecordingSession } from './session'
+import { createNativeStartRecovery } from './start-recovery'
 
 /**
  * Native 录音通用管线：状态机相位 → 子进程命令的转发，以及 recorder 事件的统一收尾
@@ -26,6 +27,7 @@ let pendingDiscard: 'none' | 'starting' | 'active' = 'none'
 let initialized = false
 
 const handlersBySource: Partial<Record<NativeRecordingSource, NativeRecordingHandlers>> = {}
+const nativeStartRecovery = createNativeStartRecovery(source => handlersBySource[source]?.onError)
 
 /** Helper 已无法再产生 stopped 时，清理待丢弃会话及其恢复资产 */
 function clearPendingDiscard(): void {
@@ -47,7 +49,21 @@ export function registerNativeRecordingHandlers(source: NativeRecordingSource, h
   handlersBySource[source] = handlers
 }
 
+/** start 命令未写入 helper 时，释放已经占用的 starting 会话 */
+export function failNativeRecordingStart(
+  session: NativeRecordingSession,
+  code: string,
+  detail?: string,
+): void {
+  nativeStartRecovery.fail(session, code, detail)
+}
+
 function syncToRecorder(from: RecordingPhase, to: RecordingPhase): void {
+  if (to === 'starting')
+    nativeStartRecovery.arm()
+  else if (from === 'starting')
+    nativeStartRecovery.clear()
+
   if (syncing || !recordingState.nativeSource)
     return
 
@@ -59,15 +75,19 @@ function syncToRecorder(from: RecordingPhase, to: RecordingPhase): void {
   else if (to === 'recording' && from === 'paused') {
     resumeRecording()
   }
-  else if (to === 'stopped') {
-    stopRecording()
-  }
-  else if (to === 'idle') {
-    /** Discard：先打标再 stop，原生 stopped 回来时按 discard 处理（删文件、不上报） */
-    pendingDiscard = from === 'starting'
-      ? 'starting'
-      : 'active'
-    stopRecording()
+  else if (to === 'stopped' || to === 'idle') {
+    if (to === 'idle') {
+      /** Discard：先打标再 stop，原生 stopped 回来时按 discard 处理（删文件、不上报） */
+      pendingDiscard = from === 'starting'
+        ? 'starting'
+        : 'active'
+    }
+
+    const session = peekNativeRecordingSession()
+    if (session)
+      stopRecording(session.outputPath)
+    else
+      console.warn('[native-recording] stop requested without an active session')
   }
 
   syncing = false
@@ -118,8 +138,20 @@ export function initNativeRecordingPipeline(): void {
 
   onRecorderEvent('exited', ({ code, signal }) => {
     const source = recordingState.nativeSource
-    if (!source) {
+    const discarding = pendingDiscard !== 'none'
+    if (discarding) {
       clearPendingDiscard()
+      if (source)
+        recordingState.finishNative()
+      return
+    }
+
+    if (!source) {
+      return
+    }
+
+    if (!peekNativeRecordingSession() && recordingState.snapshot.phase === 'stopped') {
+      console.warn('[native-recording] late helper exit ignored after terminal session settlement')
       return
     }
 
@@ -137,13 +169,21 @@ export function initNativeRecordingPipeline(): void {
      */
     const source = recordingState.nativeSource
     if (!source) {
-      /** 已开始采集的取消要等 stopped 或 terminal error，避免 writer 未收尾就删文件 */
-      if (pendingDiscard === 'starting' || terminal)
+      /** 取消始终等 stopped / terminal / helper exit；非终态错误之后 writer 仍可能继续写入 */
+      if (terminal)
         clearPendingDiscard()
       return
     }
 
     const activeSession = peekNativeRecordingSession()
+    if (!activeSession && recordingState.snapshot.phase === 'stopped') {
+      console.warn('[native-recording] late recorder error ignored after terminal session settlement', {
+        code,
+        path: errorPath,
+      })
+      return
+    }
+
     if (
       errorPath
       && activeSession
@@ -155,6 +195,12 @@ export function initNativeRecordingPipeline(): void {
         path: errorPath,
         activePath: activeSession.outputPath,
       })
+      return
+    }
+
+    if (pendingDiscard !== 'none' && terminal) {
+      clearPendingDiscard()
+      recordingState.finishNative()
       return
     }
 
@@ -170,6 +216,11 @@ export function initNativeRecordingPipeline(): void {
     /** 非录音态收到 stop 的回执噪声（重复 stop / error 收尾后的补发），不是致命错误 */
     if (code === 'not_recording') {
       console.warn('[native-recording] not_recording ack ignored')
+      return
+    }
+
+    if (recordingState.snapshot.phase === 'starting' && activeSession) {
+      failNativeRecordingStart(activeSession, code, detail)
       return
     }
 
@@ -196,8 +247,6 @@ export function initNativeRecordingPipeline(): void {
   })
 
   onRecorderEvent('stopped', async ({ path: filePath, duration }) => {
-    console.log(`[native-recording] audio-recorder → stopped: ${filePath} (${duration}s)`)
-
     const stoppedSession = peekNativeRecordingSession()
     if (stoppedSession && stoppedSession.outputPath !== filePath) {
       console.warn('[native-recording] stale stopped event ignored, file left for recovery', {
@@ -215,7 +264,7 @@ export function initNativeRecordingPipeline(): void {
       if (discardedSession)
         await deleteRecoveryRecording(discardedSession.taskId)
       else
-        await unlink(filePath).catch(() => { /* ignore */ })
+        await unlink(filePath).catch(() => { /* 忽略 */ })
       return
     }
 
@@ -234,7 +283,7 @@ export function initNativeRecordingPipeline(): void {
     }
     catch (err) {
       console.warn('[native-recording] invalid recording file, skip completion', err)
-      unlink(filePath).catch(() => { /* ignore */ })
+      unlink(filePath).catch(() => { /* 忽略 */ })
       handlersBySource[session.source]?.onError('empty_recording')
       recordingState.finishNative()
       return
@@ -257,7 +306,6 @@ export function initNativeRecordingPipeline(): void {
   })
 
   startRecorder()
-  console.log('[native-recording] pipeline started')
 }
 
 export type NativeRecordingHandlers = {
@@ -267,7 +315,8 @@ export type NativeRecordingHandlers = {
    * 录音中子进程报错。除 audio_sample_timeout 外状态机已 reset、session 已清空，处理器只负责通知用户；
    * audio_sample_timeout 为挽救链路：主进程随后走正常 stop 收尾，中断前音频照常经 onComplete 交付
    *
-   * @param code 错误码（no_audio_samples / writer_failed / audio_sample_timeout / no_audio_content / empty_recording 等）
+   * @param code 错误码（no_audio_samples / writer_failed / audio_sample_timeout / no_audio_content /
+   * empty_recording / handoff_timeout / handoff_interrupted 等）
    * @param message 诊断详情（Swift 侧采集统计 / writer 错误码 / 设备快照），仅用于展示与日志
    */
   onError: (code: string, message?: string) => void

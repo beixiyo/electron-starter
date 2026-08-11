@@ -7,7 +7,7 @@ import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable } from '@main/recording-storage'
 import { isMacOSAtLeast } from '@main/utils/macos-version'
 import { getSelfProcessPids } from '@main/utils/self-pids'
-import { initNativeRecordingPipeline } from '.'
+import { failNativeRecordingStart, initNativeRecordingPipeline } from '.'
 import { hasNativeRecordingSession, setNativeRecordingSession } from './session'
 
 /**
@@ -94,14 +94,26 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
     setNativeRecordingSession(session)
     const snapshot = recordingState.startManualNative()
 
-    startRecording(session.outputPath, {
-      engine: 'tap',
-      tapEnabled: mixSystemAudio,
-      pids: selectedPids,
-      excludePids: getSelfProcessPids(),
-      mic: micEnabled,
-    })
-    console.log(`[recording] manual native startup requested (mic=${micEnabled}, mix=${mixSystemAudio}, pids=[${selectedPids.join(',')}])`)
+    let sent = false
+    try {
+      sent = startRecording(session.outputPath, {
+        engine: 'tap',
+        tapEnabled: mixSystemAudio,
+        pids: selectedPids,
+        excludePids: getSelfProcessPids(),
+        mic: micEnabled,
+      })
+    }
+    catch (error) {
+      failNativeRecordingStart(session, 'helper_unavailable', error instanceof Error
+        ? error.message
+        : String(error))
+      return recordingState.snapshot
+    }
+    if (!sent) {
+      failNativeRecordingStart(session, 'helper_unavailable')
+      return recordingState.snapshot
+    }
     return snapshot
   }
   finally {

@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { createMainDiagnosticLogger } from './logging'
 
 const log = createMainDiagnosticLogger('native.bridge')
+const FORCE_RESTART_EXIT_TIMEOUT_MS = 1_000
 
 export function getNativeBinaryPath(name: string): string {
   const resourcePath = path.join('native', getNativePlatformDir(), name)
@@ -83,7 +84,7 @@ export class NativeBridge<T extends Record<string, any>> {
     this.child = child
 
     child.stdout?.setEncoding('utf8')
-    log.info('process.started', 'native helper process started', {
+    log.debug('process.started', 'native helper process started', {
       helper: this.config.name,
       pid: child.pid,
     })
@@ -109,8 +110,10 @@ export class NativeBridge<T extends Record<string, any>> {
         for (const line of data.split('\n')) {
           const trimmed = line.trim()
           if (trimmed) {
-            console.log(`[${this.config.name}] ${trimmed}`)
-            this.config.onStderrLine?.(trimmed)
+            if (this.config.onStderrLine)
+              this.config.onStderrLine(trimmed)
+            else
+              console.log(`[${this.config.name}] ${trimmed}`)
           }
         }
       })
@@ -146,18 +149,28 @@ export class NativeBridge<T extends Record<string, any>> {
       log.error('process.start.failed', 'native helper failed to start', error, { helper: this.config.name })
       if (this.child === child)
         this.child = null
+      if (this.restarting) {
+        void this.forceRestart(this.activeHandoffGeneration ?? undefined)
+        return
+      }
       this.config.onUnexpectedExit?.(null, null)
     })
   }
 
-  send(data: string): void {
+  /**
+   * 向当前 helper 写入一条命令
+   *
+   * @returns 命令已写入或已在重启屏障中排队时返回 true；helper 不可用时返回 false
+   */
+  send(data: string): boolean {
     if (this.restarting) {
       this.pendingWrites.push({ kind: 'command', data })
-      return
+      return true
     }
-    if (!this.child?.stdin)
-      return
+    if (!this.child?.stdin?.writable)
+      return false
     this.child.stdin.write(`${data}\n`)
+    return true
   }
 
   /**
@@ -201,7 +214,7 @@ export class NativeBridge<T extends Record<string, any>> {
     this.settledChildren.add(this.child)
 
     this.child.kill()
-    log.info('process.stopped', 'native helper process stopped', { helper: this.config.name })
+    log.debug('process.stopped', 'native helper process stopped', { helper: this.config.name })
     this.child = null
   }
 
@@ -245,22 +258,42 @@ export class NativeBridge<T extends Record<string, any>> {
     this.settledChildren.add(child)
     this.child = null
     await new Promise<void>((resolve) => {
-      const restartAfterExit = () => {
+      let restarted = false
+      let watchdog: ReturnType<typeof setTimeout> | null = null
+
+      const restartAfterExit = (reason: 'exit' | 'watchdog' | 'kill-failed') => {
+        if (restarted)
+          return
+        restarted = true
+        child.off('exit', onExit)
+        if (watchdog !== null) {
+          clearTimeout(watchdog)
+          watchdog = null
+        }
+        if (reason !== 'exit') {
+          log.warn('process.force-restart-watchdog', 'native helper exit event was not observed; starting a new generation', {
+            helper: this.config.name,
+            pid: child.pid,
+            reason,
+          })
+        }
         this.start()
         this.finishRestart(completedGeneration)
         resolve()
       }
-      child.once('exit', restartAfterExit)
+      const onExit = () => restartAfterExit('exit')
+      child.once('exit', onExit)
+      watchdog = setTimeout(() => restartAfterExit('watchdog'), FORCE_RESTART_EXIT_TIMEOUT_MS)
+      watchdog.unref?.()
 
       const signaled = child.kill('SIGKILL')
-      log.warn('process.force-restarted', 'native helper process force restarted after completed handoff', {
+      log.debug('process.force-restarted', 'native helper process force restarted after completed handoff', {
         helper: this.config.name,
         pid: child.pid,
         signaled,
       })
       if (!signaled) {
-        child.off('exit', restartAfterExit)
-        restartAfterExit()
+        restartAfterExit('kill-failed')
       }
     })
   }
