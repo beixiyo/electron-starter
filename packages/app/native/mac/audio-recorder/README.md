@@ -182,9 +182,9 @@ helper 发出的 `error` 码：
 - **`audio_sample_timeout` 非致命**：它不是"录音失败"，而是"中断了、但已录部分完好"，上层据此走保留式收尾
 - **麦克风单轨掉线**：系统音仍有样本时不会误判整场中断；helper 会监听默认输入设备并重建 mic 引擎，连续失败才发一次 `mic_degraded`
 - **两轨时间轴**：系统样本与 mic sidecar 都归一到同一录音逻辑时间；AAC 主文件会压紧 PTS 空洞，因此正常收尾时由 `AudioTrackMixer` 按系统有效片段恢复热挂/卸期间的逻辑位置；mic 热挂/掉线缺口超过 100ms 且大于一个回调 buffer 时分块补静音，暂停时长从两轨统一扣除
-- **混音响度**：正常收尾时，只有系统音与确认含有效信号的麦克风 sidecar 同时存在，才使用 `AudioQualityTuning.swift` 的系统轨增益；默认 0.75（约 -2.50 dB）。整场未检测到有效 mic 时丢弃静音/底噪 sidecar，纯系统音继续直通，不二次编码也不进 limiter；纯 mic 作为唯一音源时仍保留。崩溃恢复时因无法可信重建该信号快照，优先保留系统主轨原增益
+- **混音响度**：正常收尾时，只有系统音与确认含有效信号的麦克风 sidecar 同时存在，才使用 `AudioQualityTuning.swift` 的系统轨增益；当前默认 1.0，多轨叠加峰值由 limiter 保护。整场未检测到有效 mic 时丢弃静音/底噪 sidecar，纯系统音继续直通，不二次编码也不进 limiter；纯 mic 作为唯一音源时仍保留。崩溃恢复时因无法可信重建该信号快照，优先保留系统主轨原增益
 - **Tap 麦克风处理**：Voice Processing 明确开启 AEC / NS / AGC，仅接受声道语义可明确处理的 mono/stereo；遇到 Apple 未公开布局的多声道输出时回退 raw 采集，不猜测声道。SCK mic 由 ScreenCaptureKit 直接交付，不冒充具备同一套 Voice Processing 语义
-- **Tap 电平补偿**：麦克风 PCM 在 sidecar 写盘前经过受限自动增益；AGC 将语音主体推向 RMS -18 dBFS、最大增益 +18 dB，再用软膝动态压缩和逐采样帧 -1 dBFS 峰值保护控制瞬时峰值，弱于语音阈值的环境声不放大。该处理不冒充降噪；Voice Processing 不可用的 raw 路径只保证电平与峰值边界
+- **Tap 麦克风后处理**：采集路径会随每个 PCM buffer 传递真实处理模式。Voice Processing 已包含 AEC / NS / AGC，因此自研层最多只补偿 +6 dB；raw AVAudioEngine / AVCaptureSession 最多补偿 +12 dB。两种模式都用平滑 downward expander 将停顿期低电平底噪最多衰减 18 dB，再用软膝压缩和逐采样帧 -1 dBFS 峰值保护控制瞬时峰值。扩展器不是频谱降噪，无法从说话声中分离同频持续噪声；raw 路径也不冒充具备 AEC / NS
 
 ---
 
@@ -204,7 +204,7 @@ helper 发出的 `error` 码：
 - `MIC_AUDIO_AAC_BIT_RATE`：SCK 单声道 mic 默认 128 kbps，可 A/B 96 kbps 节省体积；tap mic 是无损 PCM sidecar，不受它影响
 - `SYSTEM_AUDIO_VOLUME_WITHOUT_MIC`：纯系统音默认 1.0，可测试 1.05 / 1.1；非 1.0 会失去单轨直通并增加一次 AAC 编码，超过 1.0 时会进入限幅器
 - `SYSTEM_AUDIO_AAC_ENCODER_QUALITY`：默认 `.max`；固定码率下的实际收益以成品 A/B 为准
-- `SYSTEM_AUDIO_VOLUME_WITH_MIC`：系统音与有效 mic 同时存在时的系统轨增益；0.5 约 -6.02 dB，0.75 约 -2.50 dB，1.0 不衰减但更容易削波。Tap 依据 sidecar 信号检测，SCK 依据 writer 的 system=2ch / mic=1ch 格式契约，两者都不会把 mic 一起衰减
+- `SYSTEM_AUDIO_VOLUME_WITH_MIC`：系统音与有效 mic 同时存在时的系统轨增益；默认 1.0，不再固定衰减系统音，叠加峰值由 limiter 处理。若产品更强调人声突出，可 A/B 0.85 或 0.75。Tap 依据 sidecar 信号检测，SCK 依据 writer 的 system=2ch / mic=1ch 格式契约，两者都不会把 mic 一起衰减
 - `AUDIO_LIMITER_CEILING` / `AUDIO_LIMITER_RELEASE_SECONDS`：只影响多轨离线混音；默认 0.95 / 80 ms，分别控制峰值余量与衰减恢复速度
 - `TAP_DRIFT_COMPENSATION_QUALITY`：默认最高质量；降低可减少部分重采样 CPU，但可能增加长录音漂移伪影
 

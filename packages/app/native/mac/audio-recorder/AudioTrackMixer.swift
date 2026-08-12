@@ -224,8 +224,13 @@ private func render(
   }
 }
 
-/** 临时件与目标在同一目录，POSIX rename 覆盖是单次原子命名操作，失败时原件仍在 */
+/**
+ * 临时件与目标在同一目录，先同步临时件内容，再用 POSIX rename 单次原子替换
+ * rename 后目录同步失败不会回滚已提交的新 inode，只记录诊断并保留事务证据；回滚
+ * 不能安全地把已经变化的 output 覆盖回去
+ */
 func replaceOutputAtomically(at outputURL: URL, with temporaryURL: URL) throws {
+  try syncFileContents(at: temporaryURL)
   let result = temporaryURL.path.withCString { sourcePath in
     outputURL.path.withCString { destinationPath in
       Darwin.rename(sourcePath, destinationPath)
@@ -238,5 +243,12 @@ func replaceOutputAtomically(at outputURL: URL, with temporaryURL: URL) throws {
       code: Int(errorCode),
       userInfo: [NSFilePathErrorKey: outputURL.path]
     )
+  }
+
+  do {
+    try syncContainingDirectory(of: outputURL)
+  }
+  catch {
+    log("atomic output rename committed but directory fsync failed: \(describeError(error))")
   }
 }

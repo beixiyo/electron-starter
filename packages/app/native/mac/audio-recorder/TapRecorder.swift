@@ -64,8 +64,12 @@ class TapRecorder: NSObject {
   /** 物理麦克风采集与降级顺序由独立对象持有，TapRecorder 只接收已拷贝的 PCM */
   private lazy var micCapture = TapMicCapture(
     sampleQueue: sampleQueue,
-    onSample: { [weak self] buffer, captureHostTime in
-      self?.appendMicSample(buffer, captureHostTime: captureHostTime)
+    onSample: { [weak self] buffer, captureHostTime, processingMode in
+      self?.appendMicSample(
+        buffer,
+        captureHostTime: captureHostTime,
+        processingMode: processingMode
+      )
     }
   )
   /** 开录完成后，mic / tap 管线变更的唯一物理生命周期执行队列 */
@@ -1133,10 +1137,14 @@ class TapRecorder: NSObject {
     }
   }
 
-  private func appendMicSample(_ buffer: AVAudioPCMBuffer, captureHostTime: CMTime) {
+  private func appendMicSample(
+    _ buffer: AVAudioPCMBuffer,
+    captureHostTime: CMTime,
+    processingMode: MicCaptureProcessingMode
+  ) {
     guard shouldAcceptMicSamples(),
           let logicalTime = recordingTimeline.logicalMicTime(at: captureHostTime) else { return }
-    if micSidecarWriter?.append(buffer, at: logicalTime) == true {
+    if micSidecarWriter?.append(buffer, at: logicalTime, processingMode: processingMode) == true {
       micLastSampleAt = Date()
     }
   }

@@ -41,7 +41,11 @@ final class TapMicSidecarWriter {
   }
 
   @discardableResult
-  func append(_ buffer: AVAudioPCMBuffer, at logicalTime: CMTime) -> Bool {
+  func append(
+    _ buffer: AVAudioPCMBuffer,
+    at logicalTime: CMTime,
+    processingMode: MicCaptureProcessingMode
+  ) -> Bool {
     do {
       if audioFile == nil {
         guard let sidecarFormat = AVAudioFormat(
@@ -77,7 +81,7 @@ final class TapMicSidecarWriter {
         logicalTime: logicalTime,
         audioFile: audioFile
       )
-      signalProcessor.process(writableBuffer)
+      signalProcessor.process(writableBuffer, mode: processingMode)
       try audioFile.write(from: writableBuffer)
       appendCount += 1
       return true

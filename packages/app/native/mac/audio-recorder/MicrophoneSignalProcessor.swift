@@ -3,10 +3,11 @@
 import AVFoundation
 
 /**
- * 对已归一为 Float32 PCM 的麦克风样本做受限自动增益
+ * 对已归一为 Float32 PCM 的麦克风样本做模式化电平处理
  *
  * 输入是 AVAudioEngine / AVCapture 的原始麦克风 PCM，输出仍是同样格式的 PCM；
- * 只在检测到语音级信号时追踪目标 RMS，并压缩瞬时峰值以抬高人声主体；
+ * Voice Processing 已包含 NS / AGC，只允许少量补偿；raw 采集使用更高但受限的增益；
+ * 两种模式都用平滑 downward expander 衰减停顿期底噪，并压缩瞬时峰值；
  * 最后逐采样帧限制峰值，避免一个爆破音压低整块 buffer 或造成削波
  * 它不是降噪器：Voice Processing 不可用时不会伪造 AEC/NS 能力
  *
@@ -16,8 +17,10 @@ final class MicrophoneSignalProcessor {
   private enum Policy {
     /** raw capture 没有系统 AGC，先把语音主体推向该 RMS，再由压缩器控制瞬时峰值 */
     static let targetRMSDbFS = -18.0
-    /** 不对弱输入无限拉升，避免同比放大底噪 */
-    static let maximumGainDb = 18.0
+    /** VPIO 已经执行系统 AGC，额外增益只补偿轻微电平差，避免再次抬高残余底噪 */
+    static let voiceProcessedMaximumGainDb = 6.0
+    /** raw capture 没有系统 AGC，但也不对弱输入无限拉升 */
+    static let rawMaximumGainDb = 12.0
     /** 峰值留 1 dB 编码余量 */
     static let peakCeilingDbFS = -1.0
     /** 只压缩高于人声主体的瞬时峰值，让 RMS 可以达到目标而不削波 */
@@ -38,6 +41,13 @@ final class MicrophoneSignalProcessor {
     static let gainReleaseTimeSeconds = 0.4
     /** 长静音后重新要求 100ms 确认，避免旧会话 latch 让新噪声立即触发 AGC */
     static let signalResetSeconds = signalHoldSeconds + gainReleaseTimeSeconds * 3
+    /** 低电平区使用软扩展器，而不是硬 gate，避免吞掉句首、尾音和轻声 */
+    static let voiceProcessedExpanderThresholdDbFS = -48.0
+    static let rawExpanderThresholdDbFS = -45.0
+    static let expanderRangeDb = 18.0
+    static let expanderKneeDb = 12.0
+    static let expanderOpenSeconds = 0.01
+    static let expanderCloseSeconds = 0.18
     static let meterDurationSeconds = 2.0
   }
 
@@ -47,12 +57,15 @@ final class MicrophoneSignalProcessor {
 
   private var currentGain: Float = 1
   private var compressorGain: Float = 1
+  private var expanderGain: Float = 1
+  private var activeMode: MicCaptureProcessingMode?
   private var signalRunSeconds = 0.0
   private var signalHoldRemainingSeconds = 0.0
   private var signalInactiveSeconds = 0.0
   private var signalConfirmed = false
   private(set) var hasObservedSignal = false
   private var unsupportedFormatLogged = false
+  private var nonFiniteSampleLogged = false
 
   private var meteredSampleCount: Int64 = 0
   private var inputSquareSum = 0.0
@@ -64,7 +77,7 @@ final class MicrophoneSignalProcessor {
   private var meterLogged = false
 
   /** 原地处理一个 PCM buffer，非 Float32 格式保持原样本 */
-  func process(_ buffer: AVAudioPCMBuffer) {
+  func process(_ buffer: AVAudioPCMBuffer, mode: MicCaptureProcessingMode) {
     guard buffer.format.commonFormat == .pcmFormatFloat32,
           let channels = buffer.floatChannelData,
           buffer.frameLength > 0,
@@ -85,21 +98,34 @@ final class MicrophoneSignalProcessor {
       ? frameCount * channelCount
       : frameCount
 
+    /** 音频设备异常时可能交付 NaN/Inf；先原地归零，绝不把非有限值写入 CAF */
+    var sanitizedNonFiniteSample = false
     var squareSum = 0.0
     var peak: Float = 0
     for pointerIndex in 0..<pointerCount {
       let samples = channels[pointerIndex]
       for sampleIndex in 0..<samplesPerPointer {
-        let sample = samples[sampleIndex]
-        squareSum += Double(sample * sample)
+        var sample = samples[sampleIndex]
+        if !sample.isFinite {
+          samples[sampleIndex] = 0
+          sample = 0
+          sanitizedNonFiniteSample = true
+        }
+        squareSum += Double(sample) * Double(sample)
         peak = max(peak, abs(sample))
       }
+    }
+
+    if sanitizedNonFiniteSample, !nonFiniteSampleLogged {
+      log("mic signal processing: non-finite PCM sample zeroed")
+      nonFiniteSampleLogged = true
     }
 
     let sampleCount = max(1, frameCount * channelCount)
     let rms = Float(sqrt(squareSum / Double(sampleCount)))
     let containsSignal = rms >= signalRMSFloor && peak >= signalPeakFloor
     let bufferDuration = Double(frameCount) / max(1, buffer.format.sampleRate)
+    switchModeIfNeeded(mode)
     if containsSignal {
       signalInactiveSeconds = 0
       signalRunSeconds += bufferDuration
@@ -110,7 +136,7 @@ final class MicrophoneSignalProcessor {
       if signalConfirmed {
         signalHoldRemainingSeconds = Policy.signalHoldSeconds
         updateSmoothedGain(
-          desiredGain: desiredGainForSignal(rms: rms),
+          desiredGain: desiredGainForSignal(rms: rms, mode: mode),
           duration: bufferDuration
         )
       }
@@ -131,6 +157,11 @@ final class MicrophoneSignalProcessor {
         }
       }
     }
+
+    updateExpanderGain(
+      targetGain: expanderTargetGain(rms: rms, containsSignal: containsSignal, mode: mode),
+      duration: bufferDuration
+    )
 
     /** 人声确认前不放大候选噪声；确认后短暂保持并平滑回落 */
     let desiredAppliedGain: Float = signalConfirmed ? currentGain : 1
@@ -158,7 +189,7 @@ final class MicrophoneSignalProcessor {
         sampleRate: buffer.format.sampleRate
       )
 
-      let compressedGain = desiredAppliedGain * compressorGain
+      let compressedGain = desiredAppliedGain * compressorGain * expanderGain
       /** 峰值保护只作用于当前采样帧，不再因单个瞬时峰值压低整个 buffer */
       let peakSafeGain = framePeak > 0 ? peakCeiling / framePeak : compressedGain
       let appliedGain = max(0, min(compressedGain, peakSafeGain))
@@ -197,11 +228,61 @@ final class MicrophoneSignalProcessor {
     )
   }
 
-  private func desiredGainForSignal(rms: Float) -> Float {
+  private func desiredGainForSignal(rms: Float, mode: MicCaptureProcessingMode) -> Float {
     guard rms > 0 else { return 1 }
     let rmsDbFS = dbFS(rms)
-    let gainDb = min(Policy.maximumGainDb, max(0, Policy.targetRMSDbFS - rmsDbFS))
+    let maximumGainDb = mode == .voiceProcessed
+      ? Policy.voiceProcessedMaximumGainDb
+      : Policy.rawMaximumGainDb
+    let gainDb = min(maximumGainDb, max(0, Policy.targetRMSDbFS - rmsDbFS))
     return Float(pow(10.0, gainDb / 20))
+  }
+
+  /**
+   * 信号达到人声双门槛时立即完全打开，避免等待确认窗口吞掉句首；低于噪声门槛时
+   * 在软膝范围内逐渐衰减，最深只降固定 range，不制造绝对静音的开关感
+   */
+  private func expanderTargetGain(
+    rms: Float,
+    containsSignal: Bool,
+    mode: MicCaptureProcessingMode
+  ) -> Float {
+    if containsSignal {
+      return 1
+    }
+
+    let threshold = mode == .voiceProcessed
+      ? Policy.voiceProcessedExpanderThresholdDbFS
+      : Policy.rawExpanderThresholdDbFS
+    let rmsDbFS = dbFS(rms)
+    let distanceBelowThreshold = max(0, threshold - rmsDbFS)
+    let attenuationDb = min(
+      Policy.expanderRangeDb,
+      Policy.expanderRangeDb * distanceBelowThreshold / Policy.expanderKneeDb
+    )
+    return amplitude(fromDbFS: -attenuationDb)
+  }
+
+  private func updateExpanderGain(targetGain: Float, duration: Double) {
+    let timeConstant = targetGain > expanderGain
+      ? Policy.expanderOpenSeconds
+      : Policy.expanderCloseSeconds
+    let alpha = Float(1 - exp(-duration / timeConstant))
+    expanderGain += (targetGain - expanderGain) * alpha
+  }
+
+  /** 设备恢复可能在 VPIO 与 raw 间切换，模式变化时不继承上一条处理链的动态状态 */
+  private func switchModeIfNeeded(_ mode: MicCaptureProcessingMode) {
+    guard activeMode != mode else { return }
+    activeMode = mode
+    currentGain = 1
+    compressorGain = 1
+    expanderGain = 1
+    signalRunSeconds = 0
+    signalHoldRemainingSeconds = 0
+    signalInactiveSeconds = 0
+    signalConfirmed = false
+    log("mic signal processing mode=\(mode.rawValue)")
   }
 
   /** 返回软膝压缩器对当前峰值应施加的线性增益 */

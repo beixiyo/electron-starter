@@ -45,10 +45,10 @@ let SYSTEM_AUDIO_VOLUME_WITHOUT_MIC: Float = 1
 
 /// tap 引擎的系统音与有效麦克风 sidecar 共同收尾时，系统轨的线性增益
 ///
-/// 默认 `0.75`（约 -2.50 dB）；可 A/B `0.5`（约 -6.02 dB，给人声留更多空间）与 `1.0`
-/// 增益计算的 CPU 成本可忽略；`1.0` 不衰减系统音，但两轨叠加时更容易削波
+/// 默认 `1.0`，避免系统音在与麦克风混合时固定损失约 2.50 dB，导致音乐和媒体细节主观变弱
+/// 多轨叠加的峰值仍由 `AudioPeakLimiter` 控制；若产品更强调人声突出，可 A/B `0.85` 或 `0.75`
 /// SCK 依据 writer 的 system=2ch / mic=1ch 格式契约只将该增益施加到系统轨
-let SYSTEM_AUDIO_VOLUME_WITH_MIC: Float = 0.75
+let SYSTEM_AUDIO_VOLUME_WITH_MIC: Float = 1
 
 /// 多轨离线混音的 sample-peak 限幅上限
 ///

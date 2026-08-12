@@ -5,13 +5,12 @@ import Foundation
 
 /**
  * 同目录 advisory flock：文件名负责让 Node 发现遗留任务，内核锁负责阻止两个 helper
- * 同时读取/替换同一份 output。进程崩溃时 flock 自动释放，遗留 lock 文件可被下一次
- * recovery 重新取得，不依赖 PID 猜测，也不复制或删除别的进程的锁
+ * 同时读取/替换同一份 output。lock 文件 inode 永久保留，进程崩溃时 flock 自动释放，
+ * 下一次 recovery 重新打开同一个 inode；不在 release 时 unlink，避免旧 fd 解锁前被
+ * 新 helper 创建同名文件并取得另一把 flock
  */
 final class MicSidecarTransactionLock {
   private let descriptor: Int32
-  private let lockURL: URL
-  private let identity: String
   private var released = false
 
   init?(transaction: MicSidecarTransaction) {
@@ -33,29 +32,19 @@ final class MicSidecarTransactionLock {
     guard ftruncate(descriptor, 0) == 0,
           writeAll(data, to: descriptor)
     else {
-      _ = unlink(lockURL.path)
       flock(descriptor, LOCK_UN)
       close(descriptor)
       return nil
     }
 
     self.descriptor = descriptor
-    self.lockURL = lockURL
-    self.identity = identity
   }
 
   func release() {
     guard !released else { return }
     released = true
 
-    /** 仍持有 flock 时才允许清除同身份的路径，避免误删后来者的 lock 文件 */
-    if let contents = try? String(contentsOf: lockURL, encoding: .utf8),
-       contents.contains("\n\(identity)\n") {
-      _ = unlink(lockURL.path)
-    }
-    else {
-      log("mic sidecar transaction: lock identity changed, preserving lock file")
-    }
+    /** lock inode 永久保留；只释放内核锁，不删除路径，避免 unlink/recreate 竞态 */
     flock(descriptor, LOCK_UN)
     close(descriptor)
   }
@@ -106,12 +95,50 @@ func writePendingMarker(_ markerURL: URL, marker: PendingMicSidecarMarker) -> Bo
   do {
     let data = try JSONEncoder().encode(marker)
     try data.write(to: markerURL, options: .atomic)
+    try syncFileContents(at: markerURL)
+    try syncContainingDirectory(of: markerURL)
     return true
   }
   catch {
     log("mic sidecar transaction: cannot write pending marker: \(describeError(error))")
     return false
   }
+}
+
+/** 将已关闭的文件内容推进到文件系统，避免 marker/临时音频只停留在缓存中 */
+func syncFileContents(at url: URL) throws {
+  let descriptor = open(url.path, O_RDONLY)
+  guard descriptor >= 0 else {
+    throw fileSystemSyncError("cannot open file for sync", url: url)
+  }
+  defer { close(descriptor) }
+  try syncDescriptor(descriptor, url: url)
+}
+
+/** 将同目录 rename 的目录项推进到文件系统；只接受目录 fd，不跟随目标文件 */
+func syncContainingDirectory(of url: URL) throws {
+  let directoryURL = url.deletingLastPathComponent()
+  let descriptor = open(directoryURL.path, O_RDONLY)
+  guard descriptor >= 0 else {
+    throw fileSystemSyncError("cannot open directory for sync", url: directoryURL)
+  }
+  defer { close(descriptor) }
+  try syncDescriptor(descriptor, url: directoryURL)
+}
+
+private func syncDescriptor(_ descriptor: Int32, url: URL) throws {
+  while Darwin.fsync(descriptor) != 0 {
+    if errno == EINTR { continue }
+    throw fileSystemSyncError("fsync failed", url: url)
+  }
+}
+
+private func fileSystemSyncError(_ message: String, url: URL) -> NSError {
+  NSError(
+    domain: NSPOSIXErrorDomain,
+    code: Int(errno),
+    userInfo: [NSLocalizedDescriptionKey: "\(message): \(url.path)"]
+  )
 }
 
 func readPendingMarker(_ transaction: MicSidecarTransaction) -> PendingMicSidecarMarker? {

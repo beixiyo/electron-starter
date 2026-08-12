@@ -3,6 +3,12 @@
 import AVFoundation
 import CoreMedia
 
+/** 麦克风 PCM 已经经过的系统级处理，用于下游避免重复执行激进 AGC */
+enum MicCaptureProcessingMode: String {
+  case voiceProcessed = "voice-processed"
+  case raw
+}
+
 /**
  * tap 引擎的物理麦克风采集器
  *
@@ -18,7 +24,7 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     case finalFailure
   }
 
-  typealias SampleHandler = (AVAudioPCMBuffer, CMTime) -> Void
+  typealias SampleHandler = (AVAudioPCMBuffer, CMTime, MicCaptureProcessingMode) -> Void
 
   private let sampleQueue: DispatchQueue
   private let captureCallbackQueue = DispatchQueue(
@@ -41,10 +47,10 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
   private var captureSession: AVCaptureSession?
   private var audioEngine: AVAudioEngine?
   /**
-   * `AVAudioEngine.start()` 抛错后，AVAudioIOUnit 仍可能有异步 property-listener 回调
+   * `AVAudioEngine.start()` 抛错或首帧探测失败后，AVAudioIOUnit 仍可能有异步 property-listener 回调
    *
-   * 立即析构失败的 engine 会在 Apple 私有回调中触发 use-after-free。失败实例停止后保留到
-   * helper 被录音 terminal 回收；每次 attach 最多产生 RAW_AUDIO_ENGINE_START_ATTEMPTS 个
+   * 立即析构失败的 raw / VPIO engine 会在 Apple 私有回调中触发 use-after-free。失败实例停止后保留到
+   * helper 被录音 terminal 回收；正常成功的 engine 仍由 stopPhysicalResources 成对拆除
    */
   private var quarantinedAudioEngines: [AVAudioEngine] = []
 
@@ -218,7 +224,7 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     }
     catch {
       log("tap: voice processing unavailable: \(error.localizedDescription)")
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false, disableVoiceProcessing: true)
       return false
     }
 
@@ -229,18 +235,18 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     let format = input.outputFormat(forBus: 0)
     guard format.sampleRate > 0, format.channelCount > 0 else {
       log("tap: voice processing mic format invalid, fallback to raw capture")
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false, disableVoiceProcessing: true)
       return false
     }
     /** Apple 没有公开 VPIO 多声道布局语义，未知布局不能猜测声道 */
     guard format.channelCount <= 2 else {
       log("tap: voice processing mic format \(format.channelCount)ch has no stable channel semantics, fallback to raw capture")
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false, disableVoiceProcessing: true)
       return false
     }
 
     guard isCurrent(generation) else {
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: false, disableVoiceProcessing: true)
       return false
     }
 
@@ -249,7 +255,8 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       self?.handleMicBuffer(
         buffer,
         generation: generation,
-        sampleProbeToken: sampleProbeToken
+        sampleProbeToken: sampleProbeToken,
+        processingMode: .voiceProcessed
       )
     }
 
@@ -258,15 +265,13 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       try engine.start()
     }
     catch {
-      input.removeTap(onBus: 0)
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true, disableVoiceProcessing: true)
       log("tap: audio engine start failed: \(error.localizedDescription), fallback to raw capture")
       return false
     }
 
     guard isCurrent(generation) else {
-      input.removeTap(onBus: 0)
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true, disableVoiceProcessing: true)
       return false
     }
 
@@ -275,15 +280,13 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       label: "voice-processed audio engine",
       generation: generation
     ) else {
-      input.removeTap(onBus: 0)
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true, disableVoiceProcessing: true)
       log("tap: voice-processed audio engine started but no samples in \(Int(MIC_FIRST_SAMPLE_PROBE_TIMEOUT_SEC * 1000))ms, fallback to raw capture")
       return false
     }
 
     guard isCurrent(generation) else {
-      input.removeTap(onBus: 0)
-      releaseVoiceProcessingMic(input: input, engine: engine)
+      quarantineFailedAudioEngine(engine, input: input, tapInstalled: true, disableVoiceProcessing: true)
       return false
     }
 
@@ -313,7 +316,8 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
       self?.handleMicBuffer(
         buffer,
         generation: generation,
-        sampleProbeToken: sampleProbeToken
+        sampleProbeToken: sampleProbeToken,
+        processingMode: .raw
       )
     }
 
@@ -353,7 +357,7 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
   }
 
   /**
-   * 停止失败的 raw engine，但延迟其析构到 helper 进程回收
+   * 停止失败的 raw / VPIO engine，但延迟其析构到 helper 进程回收
    *
    * macOS 26 的 AVAudioIOUnit 可能在 start 抛 `!dev` 后继续异步访问 engine；这里只保留
    * 物理对象生命周期，不改变 raw → AVCaptureSession 的降级策略
@@ -361,10 +365,14 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
   private func quarantineFailedAudioEngine(
     _ engine: AVAudioEngine,
     input: AVAudioInputNode,
-    tapInstalled: Bool
+    tapInstalled: Bool,
+    disableVoiceProcessing: Bool = false
   ) {
     if tapInstalled {
       input.removeTap(onBus: 0)
+    }
+    if disableVoiceProcessing {
+      try? input.setVoiceProcessingEnabled(false)
     }
     engine.stop()
     quarantinedAudioEngines.append(engine)
@@ -436,11 +444,6 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     }
   }
 
-  private func releaseVoiceProcessingMic(input: AVAudioInputNode, engine: AVAudioEngine) {
-    try? input.setVoiceProcessingEnabled(false)
-    engine.stop()
-  }
-
   private func waitForFirstMicSample(
     sampleProbeToken: UUID,
     label: String,
@@ -466,7 +469,8 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
   private func handleMicBuffer(
     _ buffer: AVAudioPCMBuffer,
     generation: UUID,
-    sampleProbeToken: UUID
+    sampleProbeToken: UUID,
+    processingMode: MicCaptureProcessingMode
   ) {
     guard isCurrent(generation), buffer.frameLength > 0 else { return }
     /** 先取 helper host clock，避免高负载下拷贝 PCM 的耗时污染样本时间轴 */
@@ -480,7 +484,7 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
 
     sampleQueue.async { [weak self] in
       guard let self, self.isCurrent(generation) else { return }
-      self.sampleHandler(copied, captureHostTime)
+      self.sampleHandler(copied, captureHostTime, processingMode)
     }
   }
 
@@ -497,7 +501,7 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
 
     sampleQueue.async { [weak self] in
       guard let self, self.isCurrent(context.generation) else { return }
-      self.sampleHandler(pcmBuffer, captureHostTime)
+      self.sampleHandler(pcmBuffer, captureHostTime, .raw)
     }
     _ = connection
   }
