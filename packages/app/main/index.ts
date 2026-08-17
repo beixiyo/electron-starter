@@ -1,6 +1,6 @@
 import type { FocusPayload } from '@ipc/services/focus/contract'
 import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
-import type { ShortcutRuntimeEvent } from '@shared/shortcuts'
+import type { ShortcutActionDefinition, ShortcutRuntimeEvent } from '@shared/shortcuts'
 import type { ShortcutRuntimeHandlers } from './shortcuts'
 
 import { join } from 'node:path'
@@ -16,6 +16,7 @@ import {
   FOCUS_NATIVE_WINDOW_SIZE,
   HOLD_MIN_DURATION_MS,
   HOLD_SHORT_ERROR_MESSAGE,
+  SHORTCUT_ACTIONS,
   WindowType,
 } from '@shared'
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
@@ -42,6 +43,7 @@ import {
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
+import { createVoiceImeShortcutController } from './voice-ime-shortcut'
 import { createWindowsSequentially, getShortcutTestWindowBounds, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
@@ -486,31 +488,19 @@ function getShortcutTestTriggerType(event: ShortcutRuntimeEvent): 'combo' | 'dou
 }
 
 function handleVoiceDictationShortcut(event: ShortcutRuntimeEvent): void {
-  if (event.gesture !== 'hold') {
-    showShortcutActionTestWindow('Voice Dictation', event)
-    return
-  }
-
-  if (event.phase === 'trigger') {
-    keyboardVoiceImeHoldActive = true
-    void startVoiceImeKeyboardHold()
-    return
-  }
-
-  keyboardVoiceImeHoldActive = false
-  finishVoiceImeKeyboardHold()
+  const action: ShortcutActionDefinition | undefined = SHORTCUT_ACTIONS.find(item => item.id === 'voiceDictation')
+  if (action?.activation === 'hold' || action?.activation === 'toggle')
+    voiceImeShortcutController.handle(event, action.activation)
 }
 
-async function startVoiceImeKeyboardHold(): Promise<void> {
+async function startVoiceImeFromShortcut(shouldContinue: () => boolean): Promise<void> {
   if (holdStateManager.isHolding(WindowType.VOICE_IME))
     return
 
-  if (!(ensureMicrophonePermissionOrExplain('voice-ime'))) {
-    keyboardVoiceImeHoldActive = false
+  if (!ensureMicrophonePermissionOrExplain('voice-ime'))
     return
-  }
 
-  if (!keyboardVoiceImeHoldActive)
+  if (!shouldContinue() || holdStateManager.isHolding(WindowType.VOICE_IME))
     return
 
   holdStateManager.startHold({
@@ -532,24 +522,29 @@ async function startVoiceImeKeyboardHold(): Promise<void> {
   sendHoldStartEvent(WindowType.VOICE_IME)
 }
 
-function finishVoiceImeKeyboardHold(): void {
+function stopVoiceImeFromShortcut(activation: 'hold' | 'toggle'): void {
   const holdState = holdStateManager.getHoldState(WindowType.VOICE_IME)
   if (!holdState || !holdState.isHolding)
     return
 
-  const holdDuration = Date.now() - holdState.startTime
-  if (holdDuration < HOLD_MIN_DURATION_MS) {
-    holdStateManager.completeHold(WindowType.VOICE_IME, {
-      error: HOLD_SHORT_ERROR_MESSAGE,
-      duration: Math.max(holdDuration, 0),
-    })
+  if (activation === 'hold') {
+    const holdDuration = Date.now() - holdState.startTime
+    if (holdDuration < HOLD_MIN_DURATION_MS) {
+      holdStateManager.completeHold(WindowType.VOICE_IME, {
+        error: HOLD_SHORT_ERROR_MESSAGE,
+        duration: Math.max(holdDuration, 0),
+      })
+    }
   }
 
   sendHoldEndEvent(WindowType.VOICE_IME)
 }
 
-/** keyboard hold 的本地按下态；防止权限检查 await 期间用户已松开但之后又启动录音 */
-let keyboardVoiceImeHoldActive = false
+const voiceImeShortcutController = createVoiceImeShortcutController({
+  start: startVoiceImeFromShortcut,
+  stop: stopVoiceImeFromShortcut,
+  isRecording: () => holdStateManager.isHolding(WindowType.VOICE_IME),
+})
 
 function startFocusCheckPolling(): void {
   let prevKey = ''

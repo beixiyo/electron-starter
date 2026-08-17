@@ -7,6 +7,7 @@ import type {
   ShortcutModifier,
 } from '@shared/shortcuts'
 import {
+  getShortcutActionSupportedGestures,
   normalizeShortcutModifier,
   SHORTCUT_ACTIONS,
   shortcutBindingsConflict,
@@ -27,10 +28,14 @@ export type ShortcutAction = {
   label: string
   /** action 声明的生效范围，录制时不可由 UI 覆盖 */
   scope: ShortcutBinding['scope']
+  /** action 的触发语义 */
+  activation: 'trigger' | 'hold' | 'toggle'
   /** 当前绑定，null 表示禁用 */
   binding: ShortcutBinding | null
   /** 该 action 允许录制的手势类型 */
   supportedGestures: GestureType[]
+  /** 该 action 允许录制的按键形态 */
+  recordingChord: Readonly<Record<'fn' | 'keyboard', 'single' | 'combination'>>
 }
 
 const FN_KEY_DISPLAY: Record<string, string> = {
@@ -147,6 +152,8 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = SHORTCUT_ACTIONS.map(action => 
   id: action.id,
   label: action.label,
   scope: action.scope,
+  activation: action.activation,
   binding: toShortcutActionBinding(action, action.binding),
-  supportedGestures: [...action.supportedGestures],
+  supportedGestures: [...getShortcutActionSupportedGestures(action)],
+  recordingChord: action.recordingChord,
 }))

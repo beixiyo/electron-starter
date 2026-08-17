@@ -1,3 +1,4 @@
+import { isShortcutGestureBindingSupportedByAction } from '@shared/shortcuts'
 import { ShortcutRow } from './ShortcutRow'
 import { useRecordBinding } from './useRecordBinding'
 import { useShortcutRecordingSession } from './useShortcutRecordingSession'
@@ -7,6 +8,10 @@ export default function ShortcutsPage() {
   const { actions, replaceBinding, resetToDefault } = useShortcutsList()
   const recorder = useRecordBinding()
   const session = useShortcutRecordingSession(actions, recorder, replaceBinding)
+  const recordingAction = actions.find(action => action.id === session.recordingId) ?? null
+  const captureAllowed = !!recordingAction
+    && !!recorder.detected
+    && isShortcutGestureBindingSupportedByAction(recordingAction, recorder.detected)
 
   return (
     <div className="px-6 py-7 md:px-8 md:py-8">
@@ -21,8 +26,8 @@ export default function ShortcutsPage() {
             <ShortcutRow
               action={ action }
               isRecording={ session.recordingId === action.id && recorder.isRecording }
-              isDetected={ session.recordingId === action.id && recorder.isDetected }
-              isUnsupported={ session.recordingId === action.id && recorder.isUnsupported }
+              isDetected={ session.recordingId === action.id && recorder.isDetected && captureAllowed }
+              isUnsupported={ session.recordingId === action.id && (recorder.isUnsupported || (recorder.isDetected && !captureAllowed)) }
               detected={ session.recordingId === action.id
                 ? recorder.detected
                 : null }

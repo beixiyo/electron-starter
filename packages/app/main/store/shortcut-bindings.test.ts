@@ -37,4 +37,16 @@ describe('快捷键绑定持久化边界', () => {
       },
     })).toThrow('未知快捷键动作标识：injectedAction')
   })
+
+  it('恢复不符合 action 激活方式的历史手势', () => {
+    const bindings = normalizeShortcutBindingsForWrite({
+      voiceDictation: {
+        scope: 'global',
+        gesture: 'hold',
+        chord: { source: 'fn', key: 'Fn' },
+      },
+    })
+
+    expect(bindings.voiceDictation?.gesture).toBe('press')
+  })
 })

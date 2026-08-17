@@ -1,6 +1,7 @@
 import type { ShortcutBindings } from '@shared/shortcuts'
 import {
   DEFAULT_BINDINGS,
+  isShortcutGestureBindingSupportedByAction,
   normalizeShortcutBindings,
   normalizeShortcutBindingsOrThrow,
   resolveShortcutBindingConflicts,
@@ -34,7 +35,9 @@ function finalizeShortcutBindings(normalized: ShortcutBindings): ShortcutBinding
 
     const binding = normalized[action.id]
     next[action.id] = binding
-      ? { ...binding, scope: action.scope }
+      ? isShortcutGestureBindingSupportedByAction(action, binding)
+        ? { ...binding, scope: action.scope }
+        : DEFAULT_BINDINGS[action.id]
       : null
   }
 

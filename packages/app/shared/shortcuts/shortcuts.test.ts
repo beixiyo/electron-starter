@@ -1,6 +1,6 @@
 import type { ShortcutBinding } from './types'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_KEYBOARD_BINDINGS, MAC_DEFAULT_BINDINGS } from './actions'
+import { DEFAULT_KEYBOARD_BINDINGS, getShortcutActionSupportedGestures, MAC_DEFAULT_BINDINGS, SHORTCUT_ACTIONS } from './actions'
 import { normalizeBrowserShortcutKey, toBrowserShortcutChord, toBrowserShortcutRecordEvent } from './browser-key'
 import { createElectronShortcutCapabilities, resolveEffectiveShortcutScope, toEffectiveShortcutBindings } from './capabilities'
 import { normalizeKeyboardCode, normalizeShortcutBinding, normalizeShortcutBindingsOrThrow } from './utils'
@@ -106,6 +106,15 @@ describe('跨平台快捷键默认值', () => {
       chord: { source: 'keyboard', key: 'R', modifiers: ['Primary', 'Shift'] },
     })
     expect(DEFAULT_KEYBOARD_BINDINGS.screenshot?.chord.source).toBe('keyboard')
+  })
+
+  it('由 action activation 声明语音听写的 toggle 手势', () => {
+    const action = SHORTCUT_ACTIONS.find(item => item.id === 'voiceDictation')!
+
+    expect(action.activation).toBe('toggle')
+    expect(MAC_DEFAULT_BINDINGS.voiceDictation?.gesture).toBe('press')
+    expect(DEFAULT_KEYBOARD_BINDINGS.voiceDictation?.gesture).toBe('press')
+    expect(getShortcutActionSupportedGestures(action)).toEqual(['press'])
   })
 })
 

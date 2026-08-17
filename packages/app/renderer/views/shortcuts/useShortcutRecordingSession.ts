@@ -1,8 +1,9 @@
-import type { ShortcutAction, ShortcutBinding } from './types'
-import type { useRecordBinding } from './useRecordBinding'
+import { isShortcutGestureBindingSupportedByAction, toShortcutActionBinding } from '@shared/shortcuts'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useRef, useState } from 'react'
 import { pauseShortcutRecord, resumeShortcutRecord } from '@/shortcuts/shortcutConfigAdapter'
+import type { ShortcutAction, ShortcutBinding } from './types'
+import type { useRecordBinding } from './useRecordBinding'
 
 type ShortcutRecorder = ReturnType<typeof useRecordBinding>
 
@@ -54,10 +55,14 @@ export function useShortcutRecordingSession(
 
     const action = actions.find(item => item.id === recordingId)
     const detected = recorder.detected
-    if (!action || !detected)
+    if (!action || !detected || !isShortcutGestureBindingSupportedByAction(action, detected))
       return
 
-    replaceBinding(action.id, { ...detected, scope: action.scope })
+    const binding = toShortcutActionBinding(action, detected)
+    if (!binding)
+      return
+
+    replaceBinding(action.id, binding)
     cancel()
   })
 
