@@ -13,6 +13,8 @@ export type PrimaryAction = {
    * 点击回调
    */
   onClick: () => void | Promise<void>
+  /** 鼠标按下时提前启动准备；click 仍作为键盘和无 pointer 交互兜底 */
+  onPointerDown?: () => void | Promise<void>
   /**
    * 按钮样式
    */

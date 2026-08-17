@@ -4,7 +4,7 @@ import type { PrimaryAction } from './types'
 import { Input, LiveWaveAudio, Message, Modal } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { Pause, Play } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
 import { useRecordingSourceState } from '@/store/recordingStore'
@@ -32,6 +32,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const [viewingRecordId, setViewingRecordId] = useState<string | null>(null)
   const [listRefreshKey, setListRefreshKey] = useState(0)
   const [showSourceSelectModal, setShowSourceSelectModal] = useState(false)
+  const pendingNativeStartRef = useRef<Promise<void> | null>(null)
 
   useMeetingRecordingSaver(() => {
     setListRefreshKey(prev => prev + 1)
@@ -122,23 +123,36 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
   /** 原生录音开录：只申请用户实际选择的音源权限 */
   const handleStartNative = useLatestCallback(async () => {
-    if (micEnabled) {
-      const micOk = await permissions.ensure(['microphone'], {
-        title: t('permission.recordingTitle', '允许应用录制你的会议'),
-        subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
-      })
-      if (!micOk)
-        return
-    }
+    if (pendingNativeStartRef.current)
+      return pendingNativeStartRef.current
 
-    if (systemAudioMixEnabled) {
-      const status = await $ipc.permission.request('system-audio')
-      if (status !== 'granted' && status !== 'unknown') {
-        Message.warning(t('audioSource.permissionDenied'))
-        return
+    const pending = (async () => {
+      if (micEnabled) {
+        const micOk = await permissions.ensure(['microphone'], {
+          title: t('permission.recordingTitle', '允许应用录制你的会议'),
+          subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
+        })
+        if (!micOk)
+          return
       }
+
+      if (systemAudioMixEnabled) {
+        const status = await $ipc.permission.request('system-audio')
+        if (status !== 'granted' && status !== 'unknown') {
+          Message.warning(t('audioSource.permissionDenied'))
+          return
+        }
+      }
+      await native.start()
+    })()
+    pendingNativeStartRef.current = pending
+    try {
+      await pending
     }
-    native.start()
+    finally {
+      if (pendingNativeStartRef.current === pending)
+        pendingNativeStartRef.current = null
+    }
   })
 
   const layoutStyle = useMemo(() => ({
@@ -322,6 +336,9 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     }
     return {
       label: t('primaryActions.start'),
+      onPointerDown: nativeMode
+        ? handleStartNative
+        : undefined,
       onClick: nativeMode
         ? handleStartNative
         : handleStartRecording,

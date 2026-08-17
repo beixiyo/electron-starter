@@ -146,8 +146,37 @@ class TapRecorder: NSObject {
   private var acceptTapSamples = false
   private var micRecoveryRequested = false
 
+  /** 已授权后的启动预检：只验证麦克风路线，不创建 Writer、系统 Tap、恢复任务或录音产物 */
+  func probeMic(aec: Bool) async {
+    guard writer == nil else {
+      emitError("already_recording")
+      return
+    }
+
+    guard micCapture.attach(aec: aec) != nil,
+          let strategy = micCapture.activeStrategy,
+          let deviceKey = micCapture.activeDeviceKey
+    else {
+      micCapture.detach()
+      emitDiagnostic("mic_probe_failed", detail: "no_capture_source")
+      return
+    }
+
+    micCapture.detach()
+    emitMicProbeComplete(strategy: strategy, deviceKey: deviceKey)
+  }
+
   @discardableResult
-  func start(outputPath: String, pids: [pid_t], excludePids: [pid_t], withMic: Bool, tapEnabled: Bool, micAec: Bool) async -> Bool {
+  func start(
+    outputPath: String,
+    pids: [pid_t],
+    excludePids: [pid_t],
+    withMic: Bool,
+    tapEnabled: Bool,
+    micAec: Bool,
+    preferredMicStrategy: MicCaptureStrategy?,
+    preferredMicDeviceKey: String?
+  ) async -> Bool {
     guard writer == nil else {
       emitError("already_recording")
       return false
@@ -170,7 +199,12 @@ class TapRecorder: NSObject {
        */
       let recordingGeneration = currentRecordingGeneration()
       let micReady = withMic
-        ? attachMic(aec: micAec, generation: recordingGeneration) != nil
+        ? attachMic(
+          aec: micAec,
+          generation: recordingGeneration,
+          preferredStrategy: preferredMicStrategy,
+          preferredDeviceKey: preferredMicDeviceKey
+        ) != nil
         : false
       guard tapEnabled || micReady else {
         throw TapRecorderError("no_capture_source")
@@ -201,7 +235,12 @@ class TapRecorder: NSObject {
       /** HAL 设备监听登记一次即覆盖整场(含日后 update 热挂 mic),独立于 mic 引擎存活 */
       registerDefaultInputDeviceListener()
       log("tap start: mic=\(micReady) tap=\(tapEnabled) devices: \(describeDefaultAudioDevices())")
-      emitStatus("recording", path: outputPath)
+      emitStatus(
+        "recording",
+        path: outputPath,
+        micStrategy: micCapture.activeStrategy,
+        micDeviceKey: micCapture.activeDeviceKey
+      )
       return true
     }
     catch {
@@ -1101,11 +1140,20 @@ class TapRecorder: NSObject {
    * 需改为「tap 正跑时挂 mic 强制走裸采集」或「重挂 tap」策略。返回是否成功挂上
    */
   @discardableResult
-  private func attachMic(aec: Bool, generation: UUID) -> UUID? {
+  private func attachMic(
+    aec: Bool,
+    generation: UUID,
+    preferredStrategy: MicCaptureStrategy? = nil,
+    preferredDeviceKey: String? = nil
+  ) -> UUID? {
     guard isRecordingGenerationCurrent(generation), !isMicActive() else {
       return isRecordingGenerationCurrent(generation) ? micCapture.activeGenerationToken : nil
     }
-    guard let physicalGeneration = micCapture.attach(aec: aec) else { return nil }
+    guard let physicalGeneration = micCapture.attach(
+      aec: aec,
+      preferredStrategy: preferredStrategy,
+      preferredDeviceKey: preferredDeviceKey
+    ) else { return nil }
     guard isRecordingGenerationCurrent(generation) else {
       micCapture.detach(ifCurrentGeneration: physicalGeneration)
       return nil

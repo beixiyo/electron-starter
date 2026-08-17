@@ -37,6 +37,7 @@ TS 侧的封装在 `packages/app/main/audio-recorder/`（`startRecording` / `onR
 | 命令 | 字段 | 说明 |
 | --- | --- | --- |
 | `start` | `outputPath` `engine` `tapEnabled` `pids` `excludePids` `mic` `micAec` | `engine` 省略 = SCK 会议引擎；`engine:"tap"` = 手动 tap 引擎 |
+| `probeMic` | `micAec` | 只验证麦克风采集路线和首帧，不创建 Writer、系统 Tap 或录音产物 |
 | `update` | `tapEnabled` `micEnabled` `pids` `excludePids` | **仅 tap 引擎**：录音中热挂/卸麦克风与系统音轨、变更混入进程集合 |
 | `pause` / `resume` | —— | 暂停 / 继续 |
 | `stop` | —— | 停止并收尾（finishWriting + 离线混音），随后 emit `stopped` |
@@ -47,6 +48,7 @@ TS 侧的封装在 `packages/app/main/audio-recorder/`（`startRecording` / `onR
 - `mic`（默认 `true`）：是否采集麦克风
 - `micAec`（默认 `true`）：麦克风是否走 VPIO（带回声消除）；`false` 则跳过 voice processing
 - `pids` / `excludePids`：`pids` 非空 = 只混这些进程的音频；`pids` 为空 = 全系统混音、`excludePids` 排除（通常传自身进程族防自录）
+- `preferredMicStrategy` / `preferredMicDeviceKey`：主进程内存中的快速路线提示；设备指纹不匹配或首帧失败时自动恢复完整三级降级链
 
 **事件（stdout，一行一条 JSON）**
 
@@ -57,6 +59,8 @@ TS 侧的封装在 `packages/app/main/audio-recorder/`（`startRecording` / `onR
 | `{"status":"mixing","path"}` | | 停止后进入离线混音 |
 | `{"status":"stopped","path","duration","handoffId"}` | 路径 + 墙钟时长（秒）+ stop 代际 | 收尾完成，产物已落盘 |
 | `{"status":"mic_degraded","detail"}` | 麦克风掉线诊断 | 麦克风重挂多次失败，系统音轨仍继续录制；这是非致命状态 |
+| `{"status":"mic_probe_complete","micStrategy","micDeviceKey"}` | 已验证路线 + 设备指纹 | 一次性麦克风预检成功 |
+| `{"status":"mic_probe_failed","detail"}` | 失败原因 | 一次性麦克风预检失败，正式录音仍会走完整降级链 |
 | `{"status":"recycle_required","handoffId","detail"}` | stop 代际 | Tap terminal 的相邻前导消息：父进程只回收匹配该代际的 helper。若 terminal 丢失，2 秒 watchdog 或 child exit 会独立触发重建；若为 `finalize_queue_timeout`，writer 不再收尾，只保留 checkpoint / sidecar 交给崩溃恢复 |
 | `{"error","path?","detail"}` | 错误码 + 可选录音路径 + 诊断详情 | 录音中/命令错误，不结算 stop handoff；watchdog error 带 path 供上层拒绝迟到事件 |
 | `{"error","terminal":true,"path","handoffId","detail"}` | 错误码 + 录音路径 + stop 代际 + 诊断详情 | Tap/SCK 收尾失败 terminal；上层必须同时按 handoffId 与 path 代际消费 |
@@ -105,6 +109,8 @@ helper 发出的 `error` 码：
 | 代码 | `TapRecorder.swift` 及 `Tap*` 组合对象 | `SCKRecorder.swift` |
 
 同一子进程同一时刻只允许一路录音，由 `RecorderCoordinator` 持有 `activeEngine`（`.none` / `.sck` / `.tap`）并路由 `stop` / `pause` / `resume`
+
+Electron 启动预检使用独立的一次性 helper，与正式录音 helper 的串行命令链隔离；预检失败或超时只回收预检进程，不会阻塞或杀死正式录音
 
 ---
 

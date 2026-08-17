@@ -69,7 +69,7 @@ export class NativeBridge<T extends Record<string, any>> {
       return
 
     /** 局部捕获本次 spawn 的实例：exit/error 异步回调只清理自己这一代，避免 restart 后误清新 child */
-    const child = spawn(getNativeBinaryPath(this.config.name), this.config.args ?? [], {
+    const child = spawn(getNativeBinaryPath(this.config.binaryName ?? this.config.name), this.config.args ?? [], {
       stdio: [
         this.config.writable
           ? 'pipe'
@@ -201,7 +201,7 @@ export class NativeBridge<T extends Record<string, any>> {
     this.finishRestart(generation)
   }
 
-  stop(): void {
+  stop(signal: NodeJS.Signals = 'SIGTERM'): void {
     if (this.child === null)
       return
 
@@ -213,7 +213,7 @@ export class NativeBridge<T extends Record<string, any>> {
      */
     this.settledChildren.add(this.child)
 
-    this.child.kill()
+    this.child.kill(signal)
     log.debug('process.stopped', 'native helper process stopped', { helper: this.config.name })
     this.child = null
   }
@@ -325,6 +325,8 @@ export class NativeBridge<T extends Record<string, any>> {
 
 type NativeBridgeConfig<T extends Record<string, any>> = {
   name: string
+  /** 日志实例名与实际二进制名不同时显式指定，适用于隔离的一次性 helper */
+  binaryName?: string
   args?: string[]
   writable?: boolean
   logStderr?: boolean

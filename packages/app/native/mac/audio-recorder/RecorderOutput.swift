@@ -4,13 +4,24 @@ import Darwin
 import Foundation
 
 /** 输出录音生命周期状态及其所属产物 */
-func emitStatus(_ status: String, path: String, duration: Double? = nil, handoffId: Int? = nil) {
+func emitStatus(
+  _ status: String,
+  path: String,
+  duration: Double? = nil,
+  handoffId: Int? = nil,
+  micStrategy: MicCaptureStrategy? = nil,
+  micDeviceKey: String? = nil
+) {
   var json = "{\"status\":\"\(status)\",\"path\":\"\(escapeJSON(path))\""
   if let d = duration {
     json += ",\"duration\":\(String(format: "%.1f", d))"
   }
   if let handoffId {
     json += ",\"handoffId\":\(handoffId)"
+  }
+  if let micStrategy, let micDeviceKey {
+    json += ",\"micStrategy\":\"\(escapeJSON(micStrategy.rawValue))\""
+    json += ",\"micDeviceKey\":\"\(escapeJSON(micDeviceKey))\""
   }
   json += "}"
   print(json)
@@ -25,6 +36,13 @@ func emitStatus(_ status: String, path: String, duration: Double? = nil, handoff
  */
 func emitDiagnostic(_ status: String, detail: String) {
   let json = "{\"status\":\"\(escapeJSON(status))\",\"detail\":\"\(escapeJSON(detail))\"}"
+  print(json)
+  fflush(stdout)
+}
+
+/** 回传启动预检选中的麦克风路线；设备键只在 Electron 主进程内存中流转 */
+func emitMicProbeComplete(strategy: MicCaptureStrategy, deviceKey: String) {
+  let json = "{\"status\":\"mic_probe_complete\",\"micStrategy\":\"\(escapeJSON(strategy.rawValue))\",\"micDeviceKey\":\"\(escapeJSON(deviceKey))\"}"
   print(json)
   fflush(stdout)
 }

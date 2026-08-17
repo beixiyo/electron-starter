@@ -212,13 +212,25 @@ export async function ensureSystemAudioSupportChecked(): Promise<void> {
   }
 }
 
+let pendingNativeStart: Promise<RecordingSnapshot | undefined> | null = null
+
 /** 统一开录入口（native tap）：开录前先把音源偏好同步到主进程 */
 export async function startNativeRecording(): Promise<RecordingSnapshot | undefined> {
   if (!isElectron()) {
     return undefined
   }
-  await pushManualRecordingPrefs()
-  return $ipc.recording.start()
+
+  if (pendingNativeStart)
+    return pendingNativeStart
+
+  pendingNativeStart = pushManualRecordingPrefs().then(() => $ipc.recording.start())
+
+  try {
+    return await pendingNativeStart
+  }
+  finally {
+    pendingNativeStart = null
+  }
 }
 
 export function pauseNativeRecording(): Promise<RecordingSnapshot> | undefined {

@@ -9,6 +9,13 @@ enum MicCaptureProcessingMode: String {
   case raw
 }
 
+/** 主进程可跨 helper 安全保留的麦克风采集路线提示 */
+enum MicCaptureStrategy: String {
+  case voiceProcessed
+  case rawAudioEngine
+  case captureSession
+}
+
 /**
  * tap 引擎的物理麦克风采集器
  *
@@ -53,6 +60,8 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
    * helper 被录音 terminal 回收；正常成功的 engine 仍由 stopPhysicalResources 成对拆除
    */
   private var quarantinedAudioEngines: [AVAudioEngine] = []
+  private(set) var activeStrategy: MicCaptureStrategy?
+  private(set) var activeDeviceKey: String?
 
   init(sampleQueue: DispatchQueue, onSample: @escaping SampleHandler) {
     self.sampleQueue = sampleQueue
@@ -88,7 +97,11 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
 
   /** 按 VPIO → 裸 AVAudioEngine → AVCaptureSession 的顺序挂载物理输入 */
   @discardableResult
-  func attach(aec: Bool) -> UUID? {
+  func attach(
+    aec: Bool,
+    preferredStrategy: MicCaptureStrategy? = nil,
+    preferredDeviceKey: String? = nil
+  ) -> UUID? {
     lifecycleLock.lock()
     defer { lifecycleLock.unlock() }
 
@@ -104,7 +117,12 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     active = false
     generationLock.unlock()
 
-    guard prepareMicCapture(aec: aec, generation: generation) else {
+    guard prepareMicCapture(
+      aec: aec,
+      generation: generation,
+      preferredStrategy: preferredStrategy,
+      preferredDeviceKey: preferredDeviceKey
+    ) else {
       invalidateGeneration()
       return nil
     }
@@ -164,6 +182,8 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     activeCaptureOutput = nil
     activeCaptureProbeToken = nil
     active = false
+    activeStrategy = nil
+    activeDeviceKey = nil
     generationLock.unlock()
     return true
   }
@@ -174,17 +194,76 @@ final class TapMicCapture: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     return activeGeneration
   }
 
-  private func prepareMicCapture(aec: Bool, generation: UUID) -> Bool {
-    guard isCurrent(generation) else { return false }
-    if aec, prepareVoiceProcessedMic(generation: generation) {
-      return true
+  private func prepareMicCapture(
+    aec: Bool,
+    generation: UUID,
+    preferredStrategy: MicCaptureStrategy?,
+    preferredDeviceKey: String?
+  ) -> Bool {
+    let fingerprint = getDefaultInputDeviceFingerprint()
+    if let fingerprint,
+       let preferred = preferredStrategy,
+       preferredDeviceKey == fingerprint.cacheKey,
+       (aec || preferred != .voiceProcessed)
+    {
+      log("tap: trying cached mic strategy \(preferred.rawValue)")
+      if prepareMicCapture(
+        strategy: preferred,
+        generation: generation,
+        rawWithRetry: false
+      ) {
+        activeStrategy = preferred
+        activeDeviceKey = fingerprint.cacheKey
+        log("tap: cached mic strategy \(preferred.rawValue) ready")
+        return true
+      }
+
+      log("tap: cached mic strategy \(preferred.rawValue) failed, restoring full fallback")
     }
+
     guard isCurrent(generation) else { return false }
-    if prepareRawAudioEngineMicWithRetry(generation: generation) {
-      return true
+    let strategies: [MicCaptureStrategy] = aec
+      ? [.voiceProcessed, .rawAudioEngine, .captureSession]
+      : [.rawAudioEngine, .captureSession]
+
+    for strategy in strategies {
+      guard isCurrent(generation) else { return false }
+      let startedAt = Date()
+      let ready = prepareMicCapture(
+        strategy: strategy,
+        generation: generation,
+        rawWithRetry: true
+      )
+      let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+      log("tap: mic strategy \(strategy.rawValue) ready=\(ready) elapsed=\(elapsedMs)ms")
+      if ready {
+        if let fingerprint {
+          activeStrategy = strategy
+          activeDeviceKey = fingerprint.cacheKey
+        }
+        return true
+      }
     }
-    guard isCurrent(generation) else { return false }
-    return prepareCaptureSessionMic(generation: generation)
+
+    return false
+  }
+
+  private func prepareMicCapture(
+    strategy: MicCaptureStrategy,
+    generation: UUID,
+    rawWithRetry: Bool
+  ) -> Bool {
+    switch strategy {
+    case .voiceProcessed:
+      return prepareVoiceProcessedMic(generation: generation)
+    case .rawAudioEngine:
+      if rawWithRetry {
+        return prepareRawAudioEngineMicWithRetry(generation: generation)
+      }
+      return prepareRawAudioEngineMic(generation: generation) == .ready
+    case .captureSession:
+      return prepareCaptureSessionMic(generation: generation)
+    }
   }
 
   private func prepareRawAudioEngineMicWithRetry(generation: UUID) -> Bool {

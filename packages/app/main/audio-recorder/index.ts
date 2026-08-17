@@ -1,4 +1,4 @@
-import type { RecorderEvents } from './protocol'
+import type { MicCaptureStrategy, RecorderEvents } from './protocol'
 import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
@@ -11,6 +11,8 @@ import { parseRecorderMessage } from './protocol'
 
 const nativeLog = createMainDiagnosticLogger('native.recorder')
 let handoffCoordinator: RecorderHandoffCoordinator
+/** helper 每场后会强制重启；路线提示由主进程内存跨代持有，App 退出即清空 */
+let preferredMicStrategyHint: { strategy: MicCaptureStrategy, deviceKey: string } | null = null
 
 const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
@@ -18,6 +20,8 @@ const bridge = new NativeBridge<RecorderEvents>({
   logStderr: true,
   onStderrLine: line => nativeLog.debug('native.stderr', line),
   onUnexpectedExit: (code, signal) => {
+    /** helper 崩溃可能正由缓存路线触发；下次必须恢复完整探测，不能重复信任旧 hint */
+    preferredMicStrategyHint = null
     bridge.events.emit('exited', { code, signal })
   },
   onHandoffComplete: generation => handoffCoordinator.onHandoffComplete(generation),
@@ -26,6 +30,9 @@ const bridge = new NativeBridge<RecorderEvents>({
     try {
       const msg = parseRecorderMessage(line)
       if ('error' in msg) {
+        if (msg.terminal === true) {
+          preferredMicStrategyHint = null
+        }
         const emitError = () => {
           bus.emit('error', {
             code: msg.error,
@@ -51,6 +58,12 @@ const bridge = new NativeBridge<RecorderEvents>({
         }
       }
       else if (msg.status === 'recording') {
+        if (msg.micStrategy && msg.micDeviceKey) {
+          preferredMicStrategyHint = {
+            strategy: msg.micStrategy,
+            deviceKey: msg.micDeviceKey,
+          }
+        }
         bus.emit('recording', { path: msg.path })
       }
       else if (msg.status === 'paused') {
@@ -84,6 +97,8 @@ const bridge = new NativeBridge<RecorderEvents>({
         nativeLog.debug('process.recycle-required', 'audio recorder requested process recycle after recording stop')
       }
       else if (msg.status === 'mic_degraded') {
+        /** 当前路线已无法持续出样；下次正式录音从完整降级链重新判断 */
+        preferredMicStrategyHint = null
         /** 非致命：麦克风掉线且未能自愈，录音继续保留系统音轨 */
         console.warn(`[audio-recorder] mic degraded${msg.detail
           ? ` (${msg.detail})`
@@ -96,6 +111,48 @@ const bridge = new NativeBridge<RecorderEvents>({
     }
   },
 })
+
+let micProbeBridge: NativeBridge<RecorderEvents> | null = null
+
+/** 启动预检使用隔离 helper；惰性创建避免普通录音测试和非 macOS 运行时持有无用实例 */
+function getMicProbeBridge(): NativeBridge<RecorderEvents> {
+  if (micProbeBridge)
+    return micProbeBridge
+
+  const probeBridge = new NativeBridge<RecorderEvents>({
+    name: 'audio-recorder-probe',
+    binaryName: 'audio-recorder',
+    writable: true,
+    logStderr: true,
+    onStderrLine: line => nativeLog.debug('native.probe.stderr', line),
+    onUnexpectedExit: (code, signal) => {
+      probeBridge.events.emit('exited', { code, signal })
+    },
+    parseLine(line, bus) {
+      try {
+        const msg = parseRecorderMessage(line)
+        if (msg.status === 'mic_probe_complete') {
+          preferredMicStrategyHint = {
+            strategy: msg.micStrategy,
+            deviceKey: msg.micDeviceKey,
+          }
+          bus.emit('mic_probe_complete', {
+            strategy: msg.micStrategy,
+            deviceKey: msg.micDeviceKey,
+          })
+        }
+        else if (msg.status === 'mic_probe_failed') {
+          bus.emit('mic_probe_failed', { detail: msg.detail })
+        }
+      }
+      catch {
+        nativeLog.warn('protocol.probe-parse-failed', 'failed to parse microphone probe message', { line })
+      }
+    },
+  })
+  micProbeBridge = probeBridge
+  return probeBridge
+}
 
 handoffCoordinator = new RecorderHandoffCoordinator({
   getHandoffGeneration: () => bridge.handoffGeneration,
@@ -123,6 +180,35 @@ export function startRecorder(): void {
   bridge.start()
 }
 
+/** 已授权启动预检；使用隔离 helper，预检卡死或回收都不会影响正式录音 */
+export async function probeMicCaptureStrategy(): Promise<boolean> {
+  const probeBridge = getMicProbeBridge()
+  if (!probeBridge.running)
+    probeBridge.start()
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false
+    const finish = (success: boolean) => {
+      if (settled)
+        return
+      settled = true
+      clearTimeout(timeout)
+      unsubscribeComplete()
+      unsubscribeFailed()
+      unsubscribeExited()
+      /** SIGKILL 确保系统 API 卡住时也立即释放一次性进程；正式 helper 是另一进程 */
+      probeBridge.stop('SIGKILL')
+      resolve(success)
+    }
+    const unsubscribeComplete = probeBridge.events.on('mic_probe_complete', () => finish(true))
+    const unsubscribeFailed = probeBridge.events.on('mic_probe_failed', () => finish(false))
+    const unsubscribeExited = probeBridge.events.on('exited', () => finish(false))
+    const timeout = setTimeout(() => finish(false), 5_000)
+    if (!probeBridge.send(JSON.stringify({ action: 'probeMic', micAec: true })))
+      finish(false)
+  })
+}
+
 export function stopRecorder(): void {
   bridge.stop()
 }
@@ -143,7 +229,20 @@ export function startRecording(outputPath?: string, options?: StartRecordingOpti
   /** helper 异常退出后允许下一次 start 自愈；start() 对存活进程幂等 */
   if (!bridge.running)
     bridge.start()
-  return bridge.send(JSON.stringify({ action: 'start', outputPath: filePath, ...options }))
+  const micHint = options?.engine === 'tap' && options.mic !== false
+    ? preferredMicStrategyHint
+    : null
+  return bridge.send(JSON.stringify({
+    action: 'start',
+    outputPath: filePath,
+    ...options,
+    ...(micHint
+      ? {
+          preferredMicStrategy: micHint.strategy,
+          preferredMicDeviceKey: micHint.deviceKey,
+        }
+      : {}),
+  }))
 }
 
 /** tap 录音中热挂/卸音源（mic + 系统音轨）或变更混入进程集合（仅 engine='tap' 的录音有效，SCK 链路忽略） */
@@ -205,6 +304,8 @@ export type StartRecordingOptions = {
    * @default true
    */
   mic?: boolean
+  /** tap 引擎：是否优先尝试 Voice Processing AEC；@default true */
+  micAec?: boolean
 }
 
 /** tap 录音中热挂/卸的完整音源状态（renderer 每次变更下发全量，Swift 据此挂/卸 mic 与 tap） */

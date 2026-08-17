@@ -151,7 +151,7 @@ export function useNativeManualRecording(onSaved?: () => void) {
   const isPaused = phase === 'paused'
   const isBusy = isStarting || isRecording || isPaused
 
-  const start = useLatestCallback(() => { void startNativeRecording() })
+  const start = useLatestCallback(() => startNativeRecording())
   const pause = useLatestCallback(() => { void pauseNativeRecording() })
   const resume = useLatestCallback(() => { void resumeNativeRecording() })
   const stop = useLatestCallback(() => { void stopNativeRecording() })

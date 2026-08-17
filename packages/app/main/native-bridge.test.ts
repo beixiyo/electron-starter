@@ -127,6 +127,25 @@ describe('native bridge 重启生命周期', () => {
     expect(vi.getTimerCount()).toBe(0)
     expect(unexpectedExit).not.toHaveBeenCalled()
   })
+
+  it('隔离 helper 使用实际二进制名并可通过 SIGKILL 终止', () => {
+    const bridge = new NativeBridge<{ event: string }>({
+      name: 'audio-recorder-probe',
+      binaryName: 'audio-recorder',
+      writable: true,
+      parseLine: () => {},
+    })
+
+    bridge.start()
+    bridge.stop('SIGKILL')
+
+    expect(harness.spawn).toHaveBeenCalledWith(
+      expect.stringMatching(/native\/mac\/audio-recorder$/),
+      [],
+      expect.any(Object),
+    )
+    expect(harness.children[0].kill).toHaveBeenCalledWith('SIGKILL')
+  })
 })
 
 function createBridge(options: {

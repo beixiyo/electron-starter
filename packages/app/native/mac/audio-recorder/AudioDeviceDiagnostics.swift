@@ -3,12 +3,52 @@
 import CoreAudio
 import Foundation
 
+/** 当前默认输入设备的进程内快速路径匹配键；任一硬件属性变化都会自然错过旧策略 */
+struct DefaultInputDeviceFingerprint: Hashable {
+  let uid: String
+  let sampleRate: UInt64
+  let transport: UInt32
+
+  /** 跨 helper 代际回传给主进程的内存提示键；不落盘、不写诊断日志 */
+  var cacheKey: String {
+    let encodedUID = Data(uid.utf8).base64EncodedString()
+    return "\(encodedUID)|\(sampleRate)|\(transport)"
+  }
+}
+
 /** 返回默认输入和输出设备的名称、采样率及传输类型，读取失败时返回错误码占位 */
 func describeDefaultAudioDevices() -> String {
   "in=\(describeDefaultDevice(selector: kAudioHardwarePropertyDefaultInputDevice)) out=\(describeDefaultDevice(selector: kAudioHardwarePropertyDefaultOutputDevice))"
 }
 
+/** 读取当前系统默认输入设备身份，不枚举设备、不打开麦克风，失败时禁用本次快速路径 */
+func getDefaultInputDeviceFingerprint() -> DefaultInputDeviceFingerprint? {
+  guard let deviceID = readDefaultDeviceID(selector: kAudioHardwarePropertyDefaultInputDevice),
+        let uid = readDeviceCFString(deviceID, selector: kAudioDevicePropertyDeviceUID),
+        let sampleRate = readDeviceSampleRate(deviceID),
+        let transport = readDeviceTransportValue(deviceID)
+  else {
+    return nil
+  }
+
+  return DefaultInputDeviceFingerprint(
+    uid: uid,
+    sampleRate: sampleRate.bitPattern,
+    transport: transport
+  )
+}
+
 private func describeDefaultDevice(selector: AudioObjectPropertySelector) -> String {
+  guard let deviceID = readDefaultDeviceID(selector: selector) else {
+    return "<unavailable>"
+  }
+
+  let name = readDeviceCFString(deviceID, selector: kAudioObjectPropertyName) ?? "<unnamed>"
+  let rate = readDeviceSampleRate(deviceID).map { "\(Int($0))Hz" } ?? "?Hz"
+  return "\"\(name)\" (\(rate), \(readDeviceTransport(deviceID)))"
+}
+
+private func readDefaultDeviceID(selector: AudioObjectPropertySelector) -> AudioObjectID? {
   var address = AudioObjectPropertyAddress(
     mSelector: selector,
     mScope: kAudioObjectPropertyScopeGlobal,
@@ -21,12 +61,9 @@ private func describeDefaultDevice(selector: AudioObjectPropertySelector) -> Str
     &address, 0, nil, &dataSize, &deviceID
   )
   guard err == noErr, deviceID != AudioObjectID(kAudioObjectUnknown) else {
-    return "<unavailable_\(err)>"
+    return nil
   }
-
-  let name = readDeviceCFString(deviceID, selector: kAudioObjectPropertyName) ?? "<unnamed>"
-  let rate = readDeviceSampleRate(deviceID).map { "\(Int($0))Hz" } ?? "?Hz"
-  return "\"\(name)\" (\(rate), \(readDeviceTransport(deviceID)))"
+  return deviceID
 }
 
 private func readDeviceCFString(_ deviceID: AudioObjectID, selector: AudioObjectPropertySelector) -> String? {
@@ -58,15 +95,7 @@ private func readDeviceSampleRate(_ deviceID: AudioObjectID) -> Double? {
 }
 
 private func readDeviceTransport(_ deviceID: AudioObjectID) -> String {
-  var address = AudioObjectPropertyAddress(
-    mSelector: kAudioDevicePropertyTransportType,
-    mScope: kAudioObjectPropertyScopeGlobal,
-    mElement: kAudioObjectPropertyElementMain
-  )
-  var transport: UInt32 = 0
-  var size = UInt32(MemoryLayout<UInt32>.size)
-  let err = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport)
-  guard err == noErr else { return "transport?" }
+  guard let transport = readDeviceTransportValue(deviceID) else { return "transport?" }
 
   switch transport {
   case kAudioDeviceTransportTypeBuiltIn: return "builtin"
@@ -80,4 +109,17 @@ private func readDeviceTransport(_ deviceID: AudioObjectID) -> String {
   case kAudioDeviceTransportTypeThunderbolt: return "thunderbolt"
   default: return String(format: "transport_0x%08x", transport)
   }
+}
+
+private func readDeviceTransportValue(_ deviceID: AudioObjectID) -> UInt32? {
+  var address = AudioObjectPropertyAddress(
+    mSelector: kAudioDevicePropertyTransportType,
+    mScope: kAudioObjectPropertyScopeGlobal,
+    mElement: kAudioObjectPropertyElementMain
+  )
+  var transport: UInt32 = 0
+  var size = UInt32(MemoryLayout<UInt32>.size)
+  let err = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transport)
+  guard err == noErr else { return nil }
+  return transport
 }

@@ -1,9 +1,11 @@
 import type { NativeRecordingSource, RecordingPhase } from '@shared'
 import type { NativeRecordingSession } from './session'
 import { stat, unlink } from 'node:fs/promises'
-import { onRecorderEvent, pauseRecording, resumeRecording, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { onRecorderEvent, pauseRecording, probeMicCaptureStrategy, resumeRecording, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { getPermissionStatus } from '@main/permissions'
 import { deleteRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
+import { isMacOSAtLeast } from '@main/utils/macos-version'
 import { app } from 'electron'
 import { clearNativeRecordingSession, consumeNativeRecordingSession, peekNativeRecordingSession } from './session'
 import { createNativeStartRecovery } from './start-recovery'
@@ -306,6 +308,13 @@ export function initNativeRecordingPipeline(): void {
   })
 
   startRecorder()
+
+  /** 只读权限已授权时才预检；绝不因后台探测触发系统授权框或应用内权限门 */
+  if (process.platform === 'darwin' && isMacOSAtLeast(14, 2) && getPermissionStatus('microphone') === 'granted') {
+    void probeMicCaptureStrategy().then((ready) => {
+      console.log(`[native-recording] startup microphone strategy probe completed (ready=${ready})`)
+    })
+  }
 }
 
 export type NativeRecordingHandlers = {

@@ -41,6 +41,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
             variant={ primaryAction.variant }
             size="sm"
             block
+            onPointerDown={ primaryAction.onPointerDown }
             onClick={ primaryAction.onClick }
             disabled={ primaryAction.disabled }
             leftIcon={ primaryAction.icon }

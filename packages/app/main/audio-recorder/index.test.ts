@@ -28,6 +28,7 @@ const harness = vi.hoisted(() => {
     running: false,
     send: vi.fn<(data: string) => boolean>(() => true),
     start: vi.fn(),
+    stop: vi.fn<(signal?: NodeJS.Signals) => void>(),
   }
 })
 
@@ -61,7 +62,11 @@ vi.mock('../native-bridge', () => ({
       harness.running = true
     }
 
-    stop(): void {}
+    stop(signal?: NodeJS.Signals): void {
+      harness.stop(signal)
+      harness.running = false
+    }
+
     send(data: string): boolean {
       return harness.send(data)
     }
@@ -151,6 +156,7 @@ describe('audio recorder stop handoff', () => {
     harness.running = false
     harness.send.mockReset().mockReturnValue(true)
     harness.start.mockClear()
+    harness.stop.mockClear()
     recorder = await import('.')
   })
 
@@ -478,6 +484,34 @@ describe('audio recorder stop handoff', () => {
     expect(stoppedListener).not.toHaveBeenCalled()
     expect(errorListener).toHaveBeenCalledOnce()
     expect(harness.forceRestart).not.toHaveBeenCalled()
+  })
+
+  it('启动预检成功后把策略作为正式 tap 录音提示，并强制回收隔离 helper', async () => {
+    const probe = recorder.probeMicCaptureStrategy()
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toEqual({ action: 'probeMic', micAec: true })
+
+    emitNative({
+      status: 'mic_probe_complete',
+      micStrategy: 'rawAudioEngine',
+      micDeviceKey: 'device-key',
+    })
+    await expect(probe).resolves.toBe(true)
+    expect(harness.stop).toHaveBeenCalledWith('SIGKILL')
+
+    recorder.startRecording('/tmp/cached.m4a', { engine: 'tap', mic: true })
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toEqual(expect.objectContaining({
+      preferredMicStrategy: 'rawAudioEngine',
+      preferredMicDeviceKey: 'device-key',
+    }))
+  })
+
+  it('启动预检明确失败时立即结束并回收隔离 helper', async () => {
+    const probe = recorder.probeMicCaptureStrategy()
+
+    emitNative({ status: 'mic_probe_failed', detail: 'no_capture_source' })
+
+    await expect(probe).resolves.toBe(false)
+    expect(harness.stop).toHaveBeenCalledWith('SIGKILL')
   })
 })
 

@@ -3,7 +3,7 @@
 import Foundation
 
 /// native helper 构建标识,启动时打进二进制并输出横幅;发包时用 `strings ... | rg` 核验装进去的是最新 helper 而非旧缓存
-let AUDIO_RECORDER_BUILD_ID = "2026-08-11-system-audio-quality"
+let AUDIO_RECORDER_BUILD_ID = "2026-08-15-startup-mic-probe-v3"
 
 /// raw AVAudioEngine 启动瞬时失败(如 `!dev` 设备忙:上一条录音/VPIO 拆除未完成即抢设备)的最大重试次数
 let RAW_AUDIO_ENGINE_START_ATTEMPTS = 3

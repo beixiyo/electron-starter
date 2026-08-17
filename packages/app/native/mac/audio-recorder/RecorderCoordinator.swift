@@ -14,6 +14,8 @@ final class RecorderCoordinator {
     switch command {
     case .start(let options):
       await start(options)
+    case .probeMic(let options):
+      await probeMic(options)
     case .update(let options):
       update(options)
     case .pause:
@@ -23,6 +25,19 @@ final class RecorderCoordinator {
     case .stop(let handoffId):
       await stop(handoffId: handoffId)
     }
+  }
+
+  private func probeMic(_ options: RecorderCommand.ProbeMicOptions) async {
+    guard activeEngine == .none else {
+      emitError("already_recording")
+      return
+    }
+    guard #available(macOS 14.2, *) else {
+      emitDiagnostic("mic_probe_skipped", detail: "tap_requires_macos_14_2")
+      return
+    }
+
+    await tapRecorder().probeMic(aec: options.micAec)
   }
 
   func stop(handoffId: Int? = nil) async {
@@ -62,7 +77,9 @@ final class RecorderCoordinator {
         excludePids: tapOptions.excludePids,
         withMic: tapOptions.mic,
         tapEnabled: tapOptions.tapEnabled,
-        micAec: tapOptions.micAec
+        micAec: tapOptions.micAec,
+        preferredMicStrategy: tapOptions.preferredMicStrategy,
+        preferredMicDeviceKey: tapOptions.preferredMicDeviceKey
       )
       if !started {
         activeEngine = .none

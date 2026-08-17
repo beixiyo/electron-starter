@@ -5,6 +5,7 @@ import Foundation
 /** stdin NDJSON 命令的内部模型，只描述协议数据，不执行录音策略 */
 enum RecorderCommand {
   case start(StartOptions)
+  case probeMic(ProbeMicOptions)
   case update(UpdateOptions)
   case pause
   case resume
@@ -13,6 +14,10 @@ enum RecorderCommand {
   struct StartOptions {
     let outputPath: String
     let engine: Engine
+  }
+
+  struct ProbeMicOptions {
+    let micAec: Bool
   }
 
   enum Engine {
@@ -26,6 +31,8 @@ enum RecorderCommand {
     let mic: Bool
     let tapEnabled: Bool
     let micAec: Bool
+    let preferredMicStrategy: MicCaptureStrategy?
+    let preferredMicDeviceKey: String?
   }
 
   struct UpdateOptions {
@@ -51,6 +58,8 @@ enum RecorderCommandDecoder {
     switch action {
     case "start":
       return decodeStart(json)
+    case "probeMic":
+      return .probeMic(.init(micAec: json["micAec"] as? Bool ?? true))
     case "update":
       return .update(.init(
         tapEnabled: json["tapEnabled"] as? Bool ?? true,
@@ -84,7 +93,10 @@ enum RecorderCommandDecoder {
         excludePids: processIDs(json["excludePids"]),
         mic: json["mic"] as? Bool ?? true,
         tapEnabled: json["tapEnabled"] as? Bool ?? true,
-        micAec: json["micAec"] as? Bool ?? true
+        micAec: json["micAec"] as? Bool ?? true,
+        preferredMicStrategy: (json["preferredMicStrategy"] as? String)
+          .flatMap(MicCaptureStrategy.init(rawValue:)),
+        preferredMicDeviceKey: json["preferredMicDeviceKey"] as? String
       ))
     ))
   }
