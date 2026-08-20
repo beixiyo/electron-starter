@@ -9,6 +9,7 @@ import { setIpcServiceErrorLogger } from '@ipc/core/service'
 import { focusService } from '@ipc/services/focus/service'
 import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
 import { createShortcutConfigService, notifyShortcutRuntimeChanged } from '@ipc/services/shortcut-config/service'
+import { startSystemPreferencesListener } from '@ipc/services/system-preferences/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
 import {
@@ -77,6 +78,7 @@ initDeeplink(() => {
   setupDisplayMediaHandler()
   setupBrowserWindowLifecycle()
   setupAppActivation()
+  startSystemPreferencesListener()
 
   createMainWindow()
 

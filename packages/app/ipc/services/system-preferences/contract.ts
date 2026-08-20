@@ -9,4 +9,8 @@ export type SystemPreferencesContract = IpcContract<{
     /** 获取当前 macOS 用户实际生效的小时制；非 macOS 或 native helper 不可用时返回 null */
     getHourCycle: () => HourCycle | null
   }
+  rendererOn: {
+    /** macOS 用户小时制发生变化后，由主进程重读并推送最新值 */
+    hourCycleChanged: HourCycle
+  }
 }>
