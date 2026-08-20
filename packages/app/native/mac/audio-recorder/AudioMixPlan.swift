@@ -68,7 +68,8 @@ func canPassthrough(
   extraInputs: [MixInput],
   primaryInputVolume: Float,
   primaryInputVolumesByChannelCount: [UInt32: Float],
-  primaryTimelineSegments: [AudioTimelineSegment]
+  primaryTimelineSegments: [AudioTimelineSegment],
+  targetChannelCount: Int
 ) -> Bool {
   guard let primaryInput,
         primaryInput.nonEmptyTracks.count == 1,
@@ -78,6 +79,15 @@ func canPassthrough(
   }
 
   let source = primaryInput.nonEmptyTracks[0]
+  if let sourceChannelCount = source.channelCount {
+    /** 源声道数与目标不一致必须 render，passthrough 会整段绕过声道折叠 */
+    guard Int(sourceChannelCount) == targetChannelCount else { return false }
+  }
+  else if targetChannelCount != 2 {
+    /** 读不到源声道数时只有默认 2ch 目标维持既有 passthrough；非默认目标保守 render，避免 2ch 漏出 */
+    return false
+  }
+
   let effectiveVolume = source.channelCount.flatMap { primaryInputVolumesByChannelCount[$0] }
     ?? primaryInputVolume
   guard effectiveVolume == 1 else { return false }

@@ -7,6 +7,7 @@ import Cocoa
 //               "pids":[123],"excludePids":[456],"mic":true,"micAec":true}                        // 手动录音:tap 引擎(macOS 14.2+);tapEnabled=false 先纯 mic
 //            → {"action":"update","tapEnabled":true,"micEnabled":true,"pids":[123],"excludePids":[456]} // tap 录音中热挂/卸 mic 与系统音轨、变更混入进程集合
 //            → {"action":"stop"}
+// 进程级 CLI:--mono-output  最终成品写单声道(下游只接受单声道输入时使用);采集侧仍保持立体声
 // stdout JSON ← {"status":"recording","path":"..."}
 //             ← {"status":"stopped","path":"...","duration":125.3}
 //             ← {"error":"..."}

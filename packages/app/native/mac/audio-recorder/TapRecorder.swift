@@ -143,6 +143,8 @@ class TapRecorder: NSObject {
   private var recordingGeneration = UUID()
   private var recordingFinalizing = false
   private var acceptMicSamples = false
+  /** 暂停期间被采样闸门吞掉的默认输入设备变更；resume 据此决定是否需要重挂 mic */
+  private var micDeviceChangedWhilePaused = false
   private var acceptTapSamples = false
   private var micRecoveryRequested = false
 
@@ -409,6 +411,8 @@ class TapRecorder: NSObject {
     disableMicSampleGate()
     setTapSampleGate(false)
     cancelScheduledMicRecovery()
+    /** 新一轮暂停窗口重新记账，不继承上一轮遗留的设备变更 */
+    _ = consumeMicDeviceChangedWhilePaused()
     pausedAt = Date()
     /** 排空 pause 边界前已投递的 mic callback，防止 resume 后按新 gate 误收旧样本 */
     sampleQueue.sync {}
@@ -424,7 +428,20 @@ class TapRecorder: NSObject {
     recordingTimeline.resume()
     if micRequested {
       enableMicSampleGate()
-      requestMicRecovery(reason: "recording-resumed")
+      /**
+       * pause 只关采样闸门、从不停止引擎，健康的 VPIO 在 resume 时不需要重挂。
+       * 无条件 detach + attach 要付出 settle 延迟、首帧探测和 `!dev` 设备忙重试，
+       * 实测在成品里表现为 resume 后约 1.9s 的静音；只有确有理由时才重挂：
+       * - 暂停期间换过默认输入设备（该事件当时被闸门吞掉，只能记账后补）
+       * - 引擎本就不在活动状态（暂停前已丢麦或重试次数耗尽）
+       * 两者都不成立时若引擎仍僵尸化，由 mic 断流看门狗按 MIC_SAMPLE_GAP_TIMEOUT 兜底
+       */
+      if consumeMicDeviceChangedWhilePaused() {
+        requestMicRecovery(reason: "mic-device-changed-while-paused")
+      }
+      else if !isMicActive() {
+        requestMicRecovery(reason: "mic-inactive-on-resume")
+      }
     }
     setTapSampleGate(tapRequested)
     /** 恢复后重置两轨基准:暂停时段无样本,陈旧时间戳会让下一 tick 误判掉线 */
@@ -923,6 +940,22 @@ class TapRecorder: NSObject {
     micRecoveryLock.unlock()
   }
 
+  /** 登记暂停期间发生的默认输入设备变更（锁内，可从 HAL 监听队列安全调用） */
+  private func markMicDeviceChangedWhilePaused() {
+    micRecoveryLock.lock()
+    micDeviceChangedWhilePaused = true
+    micRecoveryLock.unlock()
+  }
+
+  /** 取出并清空暂停期间的设备变更记账 */
+  private func consumeMicDeviceChangedWhilePaused() -> Bool {
+    micRecoveryLock.lock()
+    defer { micRecoveryLock.unlock() }
+    let changed = micDeviceChangedWhilePaused
+    micDeviceChangedWhilePaused = false
+    return changed
+  }
+
   private func setTapSampleGate(_ enabled: Bool) {
     if enabled {
       recordingTimeline.markTapAcceptanceBoundary()
@@ -1061,6 +1094,15 @@ class TapRecorder: NSObject {
 
   private func handleDefaultInputDeviceChange(generation: UUID) {
     log("tap: default input device changed, devices: \(describeDefaultAudioDevices())")
+    /**
+     * 暂停期间采样闸门关闭，requestMicRecovery 会被 acceptMicSamples 守卫挡掉，
+     * 设备变更会被静默丢弃。这里先记账，由 resume 决定是否重挂
+     */
+    if recordingTimeline.isPaused {
+      markMicDeviceChangedWhilePaused()
+      log("tap: default input change deferred to resume (paused)")
+      return
+    }
     requestMicRecovery(reason: "default-input-changed", expectedGeneration: generation)
   }
 

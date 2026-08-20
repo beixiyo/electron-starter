@@ -38,6 +38,7 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('../native-bridge', () => ({
   getNativeBinaryPath: () => '/mock/audio-recorder',
+  getMonoOutputArgs: () => [],
   NativeBridge: class {
     private generation = 0
     private readonly pendingHandoffs: number[] = []

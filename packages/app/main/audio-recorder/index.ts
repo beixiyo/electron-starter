@@ -5,7 +5,7 @@ import path from 'node:path'
 import { formatDate } from '@jl-org/tool'
 import { createMainDiagnosticLogger } from '@main/logging'
 import { app } from 'electron'
-import { getNativeBinaryPath, NativeBridge } from '../native-bridge'
+import { getMonoOutputArgs, getNativeBinaryPath, NativeBridge } from '../native-bridge'
 import { RecorderHandoffCoordinator } from './handoff-coordinator'
 import { parseRecorderMessage } from './protocol'
 
@@ -18,6 +18,7 @@ const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
   writable: true,
   logStderr: true,
+  args: getMonoOutputArgs(),
   onStderrLine: line => nativeLog.debug('native.stderr', line),
   onUnexpectedExit: (code, signal) => {
     /** helper 崩溃可能正由缓存路线触发；下次必须恢复完整探测，不能重复信任旧 hint */

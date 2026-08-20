@@ -16,6 +16,20 @@ export function getNativeBinaryPath(name: string): string {
   return path.join(__dirname, '../../resources', resourcePath)
 }
 
+/**
+ * 最终录音产物是否写单声道
+ *
+ * 置 `ELECTRON_APP_MONO_OUTPUT=1` 开启，默认保持立体声成品。开关只影响 native helper
+ * 写出的成品，采集侧仍按立体声进行，因此不影响系统音与麦克风分轨处理的可能
+ * 返回值直接拼进命令行；关闭时为空数组，调用方参数保持原样
+ */
+export function getMonoOutputArgs(): string[] {
+  const flag = process.env.ELECTRON_APP_MONO_OUTPUT
+  return flag === '1' || flag === 'true'
+    ? ['--mono-output']
+    : []
+}
+
 function getNativePlatformDir(): string {
   if (process.platform === 'darwin')
     return 'mac'

@@ -95,6 +95,22 @@ helper 发出的 `error` 码：
 | `--recover-mic-sidecar <caf> <out>` | 崩溃后把麦克风 sidecar 混回产物 | 0 = 成功 / 1 = 失败 |
 | `--validate-audio <path>` | 解码文件开头和结尾的有界 PCM 窗口，拒绝空轨与截断产物 | 0 = 可交付 / 1 = 不可解码或空轨 |
 
+### 2.3 修饰参数
+
+不单独触发一次性模式，可与常驻模式或上表的恢复类 CLI 组合：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--mono-output` | 最终成品写单声道（下游只接受单声道输入时使用） |
+
+`--mono-output` 只作用于**离线混音写出的最终产物**：
+
+- 采集侧不变。process tap 仍按 `CATapDescription(stereoMixdownOf…)` 取立体声，系统音中间轨按原生声道数写入，mic sidecar 仍是独立 PCM
+- 因此不会提前折叠系统音与麦克风分轨处理（如各自做 AEC / 分别转写）的空间
+- 声道折叠由 AVFoundation 在混音总线完成（等功率，非丢声道），单声道码率取双声道上限的一半
+- 代价：`canPassthrough` 对 2ch 源不再成立，纯系统音录音会多一次 AAC 编码
+- helper 默认立体声，单声道只由显式 `--mono-output` 触发；Electron 侧由 `ELECTRON_APP_MONO_OUTPUT=1` 决定是否透传，常驻 helper 与恢复类 CLI 共用同一开关
+
 ---
 
 ## 3. 两个引擎

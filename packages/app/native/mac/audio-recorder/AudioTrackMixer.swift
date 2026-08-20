@@ -50,7 +50,8 @@ func mixTracks(
       extraInputs: extraInputs,
       primaryInputVolume: primaryInputVolume,
       primaryInputVolumesByChannelCount: primaryInputVolumesByChannelCount,
-      primaryTimelineSegments: primaryTimelineSegments
+      primaryTimelineSegments: primaryTimelineSegments,
+      targetChannelCount: AUDIO_OUTPUT_CHANNEL_COUNT
     ) {
       log("mixTracks: passthrough \(inputURL.lastPathComponent) (single identity primary track)")
       return true
@@ -112,17 +113,23 @@ private func render(
         ?? primaryInputVolume
     }
 
+    let outputChannelCount = AUDIO_OUTPUT_CHANNEL_COUNT
+    var pcmSettings: [String: Any] = [
+      AVFormatIDKey: Int(kAudioFormatLinearPCM),
+      AVLinearPCMIsFloatKey: true,
+      AVLinearPCMBitDepthKey: 32,
+      AVLinearPCMIsNonInterleaved: false,
+      AVSampleRateKey: sampleRate,
+      AVNumberOfChannelsKey: outputChannelCount,
+    ]
+    if outputChannelCount == 1 {
+      pcmSettings[AVChannelLayoutKey] = monoChannelLayoutData()
+    }
+
     let reader = try AVAssetReader(asset: plan.composition)
     let mixOutput = AVAssetReaderAudioMixOutput(
       audioTracks: plan.mixTracks,
-      audioSettings: [
-        AVFormatIDKey: Int(kAudioFormatLinearPCM),
-        AVLinearPCMIsFloatKey: true,
-        AVLinearPCMBitDepthKey: 32,
-        AVLinearPCMIsNonInterleaved: false,
-        AVSampleRateKey: sampleRate,
-        AVNumberOfChannelsKey: 2,
-      ]
+      audioSettings: pcmSettings
     )
     if primaryTrackVolumes.contains(where: { $0 != 1 }) {
       let audioMix = AVMutableAudioMix()
@@ -141,11 +148,11 @@ private func render(
 
     /** 多轨相加或单轨主动放大时才限幅；未增益的单轨时间线 render 保持原始样本 */
     let limiter = plan.mixTracks.count > 1 || primaryTrackVolumes.contains(where: { $0 > 1 })
-      ? try AudioPeakLimiter(sampleRate: sampleRate, channelCount: 2)
+      ? try AudioPeakLimiter(sampleRate: sampleRate, channelCount: outputChannelCount)
       : nil
 
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .m4a)
-    let outputSettings = aacSystemAudioSettings(sampleRate: sampleRate)
+    let outputSettings = aacSystemAudioSettings(sampleRate: sampleRate, channels: outputChannelCount)
     let writerInput = try addAudioWriterInput(
       to: writer,
       outputSettings: outputSettings,

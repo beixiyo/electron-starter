@@ -14,6 +14,7 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('@main/native-bridge', () => ({
   getNativeBinaryPath: () => '/mock/audio-recorder',
+  getMonoOutputArgs: () => [],
 }))
 
 vi.mock('@main/storage', () => ({

@@ -10,6 +10,15 @@ let SUPPORTED_AAC_SAMPLE_RATES: Set<Double> = [
   8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000,
 ]
 
+/// 最终成品的输出声道数：默认 `2`，helper 启动时传 `--mono-output` 则为 `1`
+///
+/// 只作用于离线混音写出的最终产物。系统音中间轨仍按 tap 的原生声道数写入，mic sidecar 也保持独立，
+/// 因此该参数不会提前折叠系统音与麦克风分轨处理（如各自做 AEC / 分别转写）的空间
+/// 置 1 时 `canPassthrough` 对 2ch 源不再成立，纯系统音录音会多一次 AAC 编码
+let AUDIO_OUTPUT_CHANNEL_COUNT: Int = CommandLine.arguments.contains("--mono-output")
+  ? 1
+  : 2
+
 /// 系统音轨与最终混音成品共用的 AAC 目标码率上限
 ///
 /// 默认 `320_000` bit/s，优先减少浏览器音乐被再次 AAC 编码时的细节损失；

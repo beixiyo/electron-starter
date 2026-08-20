@@ -2,7 +2,7 @@
 
 import { execFile } from 'node:child_process'
 import { readdir, stat } from 'node:fs/promises'
-import { getNativeBinaryPath } from '@main/native-bridge'
+import { getMonoOutputArgs, getNativeBinaryPath } from '@main/native-bridge'
 import {
   getRecoveryCheckpointDir,
   getRecoveryMicBackupPath,
@@ -105,7 +105,7 @@ async function recoverCheckpointIfNeeded(taskId: string): Promise<boolean> {
   if (!hasCheckpointSegment)
     return true
 
-  return runRecoveryCommand(['--merge-checkpoints', segmentDir, getRecoveryOutputPath(taskId)])
+  return runRecoveryCommand(['--merge-checkpoints', segmentDir, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
 }
 
 async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
@@ -114,7 +114,7 @@ async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
 
   /** marker / backup 会保留到 renderer 导入成功；helper 只判定并完成事务 */
   if (hasTransaction)
-    return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId)])
+    return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
 
   let sidecar
   try {
@@ -130,7 +130,7 @@ async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
   if (!sidecar.isFile())
     return false
 
-  return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId)])
+  return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
 }
 
 async function hasMicSidecarTransaction(taskId: string): Promise<boolean> {

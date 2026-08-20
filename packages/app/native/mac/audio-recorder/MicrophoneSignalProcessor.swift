@@ -36,6 +36,14 @@ final class MicrophoneSignalProcessor {
     static let minimumSignalDurationSeconds = 0.1
     /** 电平变小时平滑抬升，兼顾短录音起音与 buffer 间稳定性 */
     static let gainRiseTimeSeconds = 0.18
+    /**
+     * 输入突然变大时快速收低增益
+     *
+     * 原实现直接把 currentGain 赋成目标值，在 buffer 粒度上表现为增益瞬跳；
+     * 改为逐采样的短时间常数。削波保护不依赖这里的瞬时性——帧循环里的
+     * peakSafeGain 仍逐帧硬限幅
+     */
+    static let gainFallTimeSeconds = 0.005
     /** 短暂低于门槛时保留语音增益，之后平滑回到 1 倍 */
     static let signalHoldSeconds = 0.15
     static let gainReleaseTimeSeconds = 0.4
@@ -126,6 +134,19 @@ final class MicrophoneSignalProcessor {
     let containsSignal = rms >= signalRMSFloor && peak >= signalPeakFloor
     let bufferDuration = Double(frameCount) / max(1, buffer.format.sampleRate)
     switchModeIfNeeded(mode)
+
+    /**
+     * 增益目标按 buffer 求，推进放到帧循环里逐采样进行
+     *
+     * 原实现把 currentGain 与 expanderGain 当整块常量，只在 buffer 边界更新，于是每个
+     * 100 ms buffer 边界上都出现一次增益台阶。实测成品波形每 4800 采样一道拼接缝：
+     * 说话时统计显著，恒定底噪时不可见——因为那时增益本来就不动。
+     * 平滑时间常数也一并失效过：duration 传的是 bufferDuration，
+     * expanderOpenSeconds = 10 ms 在 100 ms 步长下 alpha ≈ 0.99995，等于瞬间到位
+     */
+    var agcTarget: Float?
+    var agcRamp = GainRamp.rise
+    var agcHoldFrames = 0
     if containsSignal {
       signalInactiveSeconds = 0
       signalRunSeconds += bufferDuration
@@ -135,36 +156,32 @@ final class MicrophoneSignalProcessor {
       }
       if signalConfirmed {
         signalHoldRemainingSeconds = Policy.signalHoldSeconds
-        updateSmoothedGain(
-          desiredGain: desiredGainForSignal(rms: rms, mode: mode),
-          duration: bufferDuration
-        )
+        agcTarget = desiredGainForSignal(rms: rms, mode: mode)
       }
     }
     else {
       signalRunSeconds = 0
       if signalConfirmed {
+        let holdBeforeBuffer = signalHoldRemainingSeconds
         signalInactiveSeconds += bufferDuration
-        let releaseDuration = max(0, bufferDuration - signalHoldRemainingSeconds)
-        signalHoldRemainingSeconds = max(0, signalHoldRemainingSeconds - bufferDuration)
-        if releaseDuration > 0 {
-          releaseGainTowardUnity(duration: releaseDuration)
+        signalHoldRemainingSeconds = max(0, holdBeforeBuffer - bufferDuration)
+        /** hold 覆盖的前若干采样保持原增益，其后才开始回落，保留原 hold 语义 */
+        agcHoldFrames = min(frameCount, Int((holdBeforeBuffer * buffer.format.sampleRate).rounded()))
+        if agcHoldFrames < frameCount {
+          agcTarget = 1
+          agcRamp = .release
         }
         if signalInactiveSeconds >= Policy.signalResetSeconds {
           signalConfirmed = false
           signalInactiveSeconds = 0
           currentGain = 1
+          agcTarget = nil
         }
       }
     }
 
-    updateExpanderGain(
-      targetGain: expanderTargetGain(rms: rms, containsSignal: containsSignal, mode: mode),
-      duration: bufferDuration
-    )
-
-    /** 人声确认前不放大候选噪声；确认后短暂保持并平滑回落 */
-    let desiredAppliedGain: Float = signalConfirmed ? currentGain : 1
+    let expanderTarget = expanderTargetGain(rms: rms, containsSignal: containsSignal, mode: mode)
+    let smoothingStepSeconds = 1 / max(1, buffer.format.sampleRate)
 
     var processedSquareSum = 0.0
     var processedPeak: Float = 0
@@ -184,6 +201,13 @@ final class MicrophoneSignalProcessor {
         }
       }
 
+      if let agcTarget, frameIndex >= agcHoldFrames {
+        advanceSmoothedGain(toward: agcTarget, ramp: agcRamp, stepSeconds: smoothingStepSeconds)
+      }
+      updateExpanderGain(targetGain: expanderTarget, duration: smoothingStepSeconds)
+
+      /** 人声确认前不放大候选噪声；确认后短暂保持并平滑回落 */
+      let desiredAppliedGain: Float = signalConfirmed ? currentGain : 1
       updateCompressorGain(
         targetGain: compressionGain(for: framePeak * desiredAppliedGain),
         sampleRate: buffer.format.sampleRate
@@ -320,24 +344,25 @@ final class MicrophoneSignalProcessor {
     compressorGain = targetGain + (compressorGain - targetGain) * coefficient
   }
 
-  private func updateSmoothedGain(
-    desiredGain: Float,
-    duration: Double
-  ) {
-    if desiredGain <= currentGain {
-      /** 输入突然变大时立即收低增益，优先避免削波 */
-      currentGain = desiredGain
-      return
-    }
-
-    let alpha = Float(1 - exp(-duration / Policy.gainRiseTimeSeconds))
-    currentGain += (desiredGain - currentGain) * alpha
+  /** 增益推进方向：抬升走 rise/fall 常数，人声结束后的回落走 release 常数 */
+  private enum GainRamp {
+    case rise
+    case release
   }
 
-  private func releaseGainTowardUnity(duration: Double) {
-    let alpha = Float(1 - exp(-duration / Policy.gainReleaseTimeSeconds))
-    currentGain += (1 - currentGain) * alpha
-    if abs(currentGain - 1) < 0.001 {
+  /**
+   * 以单采样步长把 currentGain 推向目标
+   *
+   * 逐采样调用，因此 Policy 里的时间常数才是它字面的意思；不再出现 buffer 边界台阶
+   */
+  private func advanceSmoothedGain(toward target: Float, ramp: GainRamp, stepSeconds: Double) {
+    let timeConstant: Double = switch ramp {
+    case .release: Policy.gainReleaseTimeSeconds
+    case .rise: target <= currentGain ? Policy.gainFallTimeSeconds : Policy.gainRiseTimeSeconds
+    }
+    let alpha = Float(1 - exp(-stepSeconds / timeConstant))
+    currentGain += (target - currentGain) * alpha
+    if ramp == .release, abs(currentGain - 1) < 0.001 {
       currentGain = 1
     }
   }
