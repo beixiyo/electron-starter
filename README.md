@@ -64,7 +64,7 @@ MAIN_VITE_ASR_CLUSTER=xxx
 pnpm i
 pnpm build
 
-# macOS：编译 Swift native 二进制（audio-monitor / audio-recorder / fn-listener / focus-check）
+# macOS：编译 Swift native 二进制（audio-monitor / audio-recorder / fn-listener / focus-check / hour-cycle）
 bash packages/app/scripts/build-native.sh
 
 cd packages/app
@@ -89,6 +89,7 @@ bash packages/app/scripts/build-native.sh
 | `audio-recorder` | `audio-recorder.swift` | ScreenCaptureKit 录制系统音频 + 麦克风，stdin/stdout JSON 通信 |
 | `fn-listener` | `fn-listener.swift` | 监听 Fn 键事件 |
 | `focus-check` | `focus-check.swift` | 检查前台应用焦点状态 |
+| `hour-cycle` | `main.swift` | 读取 macOS 当前生效的 12/24 小时制偏好 |
 
 所有二进制通过 `NativeBridge` 类（`main/native-bridge.ts`）统一管理生命周期和事件通信。
 

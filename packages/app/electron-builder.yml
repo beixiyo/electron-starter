@@ -42,6 +42,7 @@ mac:
   binaries:
     - Contents/Resources/native/mac/fn-listener
     - Contents/Resources/native/mac/focus-check
+    - Contents/Resources/native/mac/hour-cycle
     - Contents/Resources/native/mac/audio-monitor
     - Contents/Resources/native/mac/audio-recorder
   extendInfo:
@@ -56,6 +57,8 @@ mac:
       to: native/mac/fn-listener
     - from: resources/native/mac/focus-check
       to: native/mac/focus-check
+    - from: resources/native/mac/hour-cycle
+      to: native/mac/hour-cycle
     - from: resources/native/mac/audio-monitor
       to: native/mac/audio-monitor
     - from: resources/native/mac/audio-recorder

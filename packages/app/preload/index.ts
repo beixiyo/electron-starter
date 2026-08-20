@@ -13,6 +13,7 @@ import { recordingClient } from '@ipc/services/recording/client'
 import { screenshotClient } from '@ipc/services/screenshot/client'
 import { selectionClient } from '@ipc/services/selection/client'
 import { shortcutConfigClient } from '@ipc/services/shortcut-config/client'
+import { systemPreferencesClient } from '@ipc/services/system-preferences/client'
 import { updateClient } from '@ipc/services/update/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
@@ -36,6 +37,7 @@ export const ipc = {
   meetingDetection: meetingDetectionClient,
   notification: notificationClient,
   update: updateClient,
+  systemPreferences: systemPreferencesClient,
 }
 
 if (process.contextIsolated) {

@@ -33,6 +33,7 @@ packages/app/resources/native/mac/audio-monitor
 packages/app/resources/native/mac/audio-recorder
 packages/app/resources/native/mac/fn-listener
 packages/app/resources/native/mac/focus-check
+packages/app/resources/native/mac/hour-cycle
 
 # build
 *.tsbuildinfo

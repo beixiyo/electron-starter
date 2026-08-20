@@ -126,6 +126,7 @@ build_product() {
 
 build_product accessibility focus-check 11.0
 build_product accessibility fn-listener 11.0
+build_product hour-cycle hour-cycle 14.2
 build_product audio-monitor audio-monitor 14.2
 build_product audio-recorder audio-recorder 14.0
 
