@@ -8,7 +8,8 @@
   "homepage": "https://electron-vite.org",
   "scripts": {
     "----- quality -----": "-----",
-    "lint": "eslint --fix .",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
     "test": "vitest run --environment node",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",

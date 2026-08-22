@@ -24,7 +24,8 @@
   "scripts": {
     "build": "vite build",
     "test": "vitest run --config ../../vitest.config.ts packages/hooks/src",
-    "lint": "eslint ./src --fix --quiet"
+    "lint": "oxlint ./src",
+    "lint:fix": "oxlint ./src --fix"
   },
   "dependencies": {
     "@jl-org/tool": "^5.0.0",

@@ -303,7 +303,7 @@ pnpm build:unpack
 
 ## 代码规范
 
-- **无分号、两格缩进、单引号**（遵循项目根 ESLint 配置 `@antfu/eslint-config`）
+- **无分号、两格缩进、单引号**（lint 走根目录 `oxlint.config.ts`；oxlint 只管逻辑规则，不做格式化）
 - **具名导出**，避免 `export default`，通过 `index.ts` 统一导出
 - **类型定义放在文件底部**，不影响代码阅读
 - **主进程代码**（`main/`, `preload/`）使用 CommonJS 输出（electron-vite 自动处理），但源码写 ESM
