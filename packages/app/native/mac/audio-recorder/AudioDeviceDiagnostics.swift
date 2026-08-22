@@ -38,6 +38,19 @@ func getDefaultInputDeviceFingerprint() -> DefaultInputDeviceFingerprint? {
   )
 }
 
+/**
+ * 默认输出设备的传输类型，取值同 `readDeviceTransport`（builtin / bluetooth / usb ...）
+ *
+ * 用途:判断本场录音有没有外放回声风险。实测在 builtin 扬声器 + 无 AEC 时，对端声音会以
+ * 约 124ms 延迟漏进麦克风，占麦克风轨约 78% 能量;戴耳机则不存在该路径
+ * 只读传输类型不读设备名，避免把用户设备名写进日志
+ */
+func getDefaultOutputTransport() -> String? {
+  guard let deviceID = readDefaultDeviceID(selector: kAudioHardwarePropertyDefaultOutputDevice)
+  else { return nil }
+  return readDeviceTransport(deviceID)
+}
+
 private func describeDefaultDevice(selector: AudioObjectPropertySelector) -> String {
   guard let deviceID = readDefaultDeviceID(selector: selector) else {
     return "<unavailable>"

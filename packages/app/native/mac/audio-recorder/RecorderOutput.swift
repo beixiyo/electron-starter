@@ -10,7 +10,12 @@ func emitStatus(
   duration: Double? = nil,
   handoffId: Int? = nil,
   micStrategy: MicCaptureStrategy? = nil,
-  micDeviceKey: String? = nil
+  micDeviceKey: String? = nil,
+  micVoiceProcessing: MicVoiceProcessingOutcome? = nil,
+  micVoiceProcessingChannels: Int? = nil,
+  outputTransport: String? = nil,
+  trackSampleCounts: (system: Int, mic: Int)? = nil,
+  systemAudioDiagnostics: (requested: Bool, callbacks: Int, drops: Int)? = nil
 ) {
   var json = "{\"status\":\"\(status)\",\"path\":\"\(escapeJSON(path))\""
   if let d = duration {
@@ -22,6 +27,26 @@ func emitStatus(
   if let micStrategy, let micDeviceKey {
     json += ",\"micStrategy\":\"\(escapeJSON(micStrategy.rawValue))\""
     json += ",\"micDeviceKey\":\"\(escapeJSON(micDeviceKey))\""
+  }
+  json += micVoiceProcessingFields(micVoiceProcessing, micVoiceProcessingChannels)
+  if let outputTransport {
+    json += ",\"outputTransport\":\"\(escapeJSON(outputTransport))\""
+  }
+  if let trackSampleCounts {
+    json += ",\"systemAudioAppends\":\(trackSampleCounts.system)"
+    json += ",\"micAppends\":\(trackSampleCounts.mic)"
+  }
+  if let systemAudioDiagnostics {
+    /**
+     * 原始回调数与写入数必须分开上报
+     *
+     * 只看 appends 无法区分两种完全不同的故障:callbacks=0 表示 IOProc 压根没跑
+     * （tap 挂上了但内核侧没出数据）；callbacks>0 而 appends=0 表示出了数据但全被
+     * 丢弃或忽略。二者的排查方向不同
+     */
+    json += ",\"systemAudioRequested\":\(systemAudioDiagnostics.requested)"
+    json += ",\"systemAudioCallbacks\":\(systemAudioDiagnostics.callbacks)"
+    json += ",\"systemAudioDrops\":\(systemAudioDiagnostics.drops)"
   }
   json += "}"
   print(json)
@@ -41,8 +66,77 @@ func emitDiagnostic(_ status: String, detail: String) {
 }
 
 /** 回传启动预检选中的麦克风路线；设备键只在 Electron 主进程内存中流转 */
-func emitMicProbeComplete(strategy: MicCaptureStrategy, deviceKey: String) {
-  let json = "{\"status\":\"mic_probe_complete\",\"micStrategy\":\"\(escapeJSON(strategy.rawValue))\",\"micDeviceKey\":\"\(escapeJSON(deviceKey))\"}"
+func emitMicProbeComplete(
+  strategy: MicCaptureStrategy,
+  deviceKey: String,
+  voiceProcessing: MicVoiceProcessingOutcome? = nil,
+  voiceProcessingChannels: Int? = nil
+) {
+  var json = "{\"status\":\"mic_probe_complete\",\"micStrategy\":\"\(escapeJSON(strategy.rawValue))\",\"micDeviceKey\":\"\(escapeJSON(deviceKey))\""
+  json += micVoiceProcessingFields(voiceProcessing, voiceProcessingChannels)
+  json += "}"
+  print(json)
+  fflush(stdout)
+}
+
+/**
+ * VPIO 结果字段的统一序列化
+ *
+ * 走同一个函数是为了让 recording 与 mic_probe_complete 两条消息的字段名和取值域完全一致，
+ * 否则跨机型统计时要按消息类型分别清洗。声道数只在 unstableChannelLayout 下有意义，
+ * 其余情况省略而不是写 0，避免消费方把「没有这个概念」误读成「0 声道」
+ */
+private func micVoiceProcessingFields(
+  _ outcome: MicVoiceProcessingOutcome?,
+  _ channels: Int?
+) -> String {
+  guard let outcome else { return "" }
+  var json = ",\"micVoiceProcessing\":\"\(escapeJSON(outcome.rawValue))\""
+  /** active 时也带上:VPIO 报的声道数每台机器不同(实测 5ch / 7ch),需要跨机型统计 */
+  if let channels {
+    json += ",\"micVoiceProcessingChannels\":\(channels)"
+  }
+  return json
+}
+
+/**
+ * 录音中途麦克风重挂成功
+ *
+ * 实测症状:某条 75 分钟长录音的中段本底噪声抬高约 35dB 并再未恢复，
+ * 全程无任何默认级别日志可解释。根因候选之一就是这里——重挂会重新走一遍路线探测，
+ * 可能落到与开场不同的采集路线（例如从 voiceProcessed 掉到 raw，同时失去 AEC 与系统降噪）。
+ *
+ * 方案边界:只上报既成事实，不改变任何重挂或降级判断。`mic_degraded` 只在重挂彻底失败时发出，
+ * 覆盖不到「重挂成功但换了路线」这一类静默降级
+ */
+func emitMicRouteChanged(
+  reason: String,
+  strategy: MicCaptureStrategy?,
+  voiceProcessing: MicVoiceProcessingOutcome?,
+  voiceProcessingChannels: Int?
+) {
+  var json = "{\"status\":\"mic_route_changed\",\"reason\":\"\(escapeJSON(reason))\""
+  if let strategy {
+    json += ",\"micStrategy\":\"\(escapeJSON(strategy.rawValue))\""
+  }
+  json += micVoiceProcessingFields(voiceProcessing, voiceProcessingChannels)
+  json += "}"
+  print(json)
+  fflush(stdout)
+}
+
+/**
+ * 录音中热挂系统音轨失败
+ *
+ * 实测症状:某台机器 tap 在 start 阶段挂载成功（否则整场录音会直接报错），却全程 0 回调，
+ * 成品只剩麦克风轨，用户毫无察觉。首样本看门狗的条件是「两轨样本合计为 0」，
+ * mic 正常时它永远不会触发，整条系统音轨死掉对它不可见。
+ *
+ * 方案边界:只上报失败事实与阶段，不改变现有「mic 轨继续录」的降级行为——那是刻意为之，
+ * 丢掉系统音也好过整场失败
+ */
+func emitTapAttachFailed(phase: String, detail: String) {
+  let json = "{\"status\":\"tap_attach_failed\",\"phase\":\"\(escapeJSON(phase))\",\"detail\":\"\(escapeJSON(detail))\"}"
   print(json)
   fflush(stdout)
 }

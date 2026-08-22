@@ -1,4 +1,4 @@
-import type { MicCaptureStrategy, RecorderEvents } from './protocol'
+import type { MicCaptureStrategy, MicVoiceProcessingOutcome, RecorderEvents } from './protocol'
 import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
@@ -65,7 +65,14 @@ const bridge = new NativeBridge<RecorderEvents>({
             deviceKey: msg.micDeviceKey,
           }
         }
-        bus.emit('recording', { path: msg.path })
+        /** deviceKey 是设备指纹，只留在主进程内存里，不随事件外发也不落日志 */
+        bus.emit('recording', {
+          path: msg.path,
+          outputTransport: msg.outputTransport,
+          strategy: msg.micStrategy,
+          voiceProcessing: msg.micVoiceProcessing,
+          voiceProcessingChannels: msg.micVoiceProcessingChannels,
+        })
       }
       else if (msg.status === 'paused') {
         bus.emit('paused', { path: msg.path })
@@ -77,7 +84,15 @@ const bridge = new NativeBridge<RecorderEvents>({
         const emitStopped = () => {
           void validateRecorderOutput(msg.path).then((valid) => {
             if (valid) {
-              bus.emit('stopped', { path: msg.path, duration: msg.duration ?? 0 })
+              bus.emit('stopped', {
+                path: msg.path,
+                duration: msg.duration ?? 0,
+                systemAudioAppends: msg.systemAudioAppends,
+                micAppends: msg.micAppends,
+                systemAudioRequested: msg.systemAudioRequested,
+                systemAudioCallbacks: msg.systemAudioCallbacks,
+                systemAudioDrops: msg.systemAudioDrops,
+              })
               return
             }
 
@@ -105,6 +120,24 @@ const bridge = new NativeBridge<RecorderEvents>({
           ? ` (${msg.detail})`
           : ''}`)
         bus.emit('mic_degraded', { detail: msg.detail })
+      }
+      else if (msg.status === 'tap_attach_failed') {
+        /** 系统音轨缺失是数据丢失，不是噪声：录音仍在继续，但成品会少掉整条系统音轨 */
+        nativeLog.warn('recorder.tap-attach-failed', 'system audio capture failed to attach mid-recording', {
+          phase: msg.phase,
+          detail: msg.detail,
+        })
+        bus.emit('tap_attach_failed', { phase: msg.phase, detail: msg.detail })
+      }
+      else if (msg.status === 'mic_route_changed') {
+        /** 重挂会重新探测路线，旧提示可能已不成立 */
+        preferredMicStrategyHint = null
+        bus.emit('mic_route_changed', {
+          reason: msg.reason,
+          strategy: msg.micStrategy,
+          voiceProcessing: msg.micVoiceProcessing,
+          voiceProcessingChannels: msg.micVoiceProcessingChannels,
+        })
       }
     }
     catch {
@@ -140,6 +173,8 @@ function getMicProbeBridge(): NativeBridge<RecorderEvents> {
           bus.emit('mic_probe_complete', {
             strategy: msg.micStrategy,
             deviceKey: msg.micDeviceKey,
+            voiceProcessing: msg.micVoiceProcessing,
+            voiceProcessingChannels: msg.micVoiceProcessingChannels,
           })
         }
         else if (msg.status === 'mic_probe_failed') {
@@ -181,15 +216,20 @@ export function startRecorder(): void {
   bridge.start()
 }
 
-/** 已授权启动预检；使用隔离 helper，预检卡死或回收都不会影响正式录音 */
-export async function probeMicCaptureStrategy(): Promise<boolean> {
+/**
+ * 已授权启动预检；使用隔离 helper，预检卡死或回收都不会影响正式录音
+ *
+ * 返回具名对象而不是裸 boolean：`ready` 只说明三条路线里有一条能出样，raw 兜底成功也是
+ * true，恰好把「有没有系统回声消除」这个唯一有诊断价值的区分抹平了
+ */
+export async function probeMicCaptureStrategy(): Promise<MicCaptureProbeResult> {
   const probeBridge = getMicProbeBridge()
   if (!probeBridge.running)
     probeBridge.start()
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<MicCaptureProbeResult>((resolve) => {
     let settled = false
-    const finish = (success: boolean) => {
+    const finish = (result: MicCaptureProbeResult) => {
       if (settled)
         return
       settled = true
@@ -199,14 +239,19 @@ export async function probeMicCaptureStrategy(): Promise<boolean> {
       unsubscribeExited()
       /** SIGKILL 确保系统 API 卡住时也立即释放一次性进程；正式 helper 是另一进程 */
       probeBridge.stop('SIGKILL')
-      resolve(success)
+      resolve(result)
     }
-    const unsubscribeComplete = probeBridge.events.on('mic_probe_complete', () => finish(true))
-    const unsubscribeFailed = probeBridge.events.on('mic_probe_failed', () => finish(false))
-    const unsubscribeExited = probeBridge.events.on('exited', () => finish(false))
-    const timeout = setTimeout(() => finish(false), 5_000)
+    const unsubscribeComplete = probeBridge.events.on('mic_probe_complete', event => finish({
+      ready: true,
+      strategy: event.strategy,
+      voiceProcessing: event.voiceProcessing,
+      voiceProcessingChannels: event.voiceProcessingChannels,
+    }))
+    const unsubscribeFailed = probeBridge.events.on('mic_probe_failed', () => finish({ ready: false }))
+    const unsubscribeExited = probeBridge.events.on('exited', () => finish({ ready: false }))
+    const timeout = setTimeout(() => finish({ ready: false }), 5_000)
     if (!probeBridge.send(JSON.stringify({ action: 'probeMic', micAec: true })))
-      finish(false)
+      finish({ ready: false })
   })
 }
 
@@ -319,4 +364,14 @@ export type UpdateRecordingOptions = {
   pids: number[]
   /** tap 全系统模式排除的进程（自身进程族） */
   excludePids: number[]
+}
+
+/** 启动预检结果；deviceKey 是设备指纹，刻意不外发，只留在主进程内存里做下次探测提示 */
+export type MicCaptureProbeResult = {
+  /** 三条采集路线里是否有一条能出样；raw 兜底成功同样为 true */
+  ready: boolean
+  strategy?: MicCaptureStrategy
+  voiceProcessing?: MicVoiceProcessingOutcome
+  /** VPIO 报的声道数，跨机型不固定（实测 5ch / 7ch），>2 时由 Swift 侧折成 ch0 */
+  voiceProcessingChannels?: number
 }

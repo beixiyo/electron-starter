@@ -496,7 +496,7 @@ describe('audio recorder stop handoff', () => {
       micStrategy: 'rawAudioEngine',
       micDeviceKey: 'device-key',
     })
-    await expect(probe).resolves.toBe(true)
+    await expect(probe).resolves.toMatchObject({ ready: true })
     expect(harness.stop).toHaveBeenCalledWith('SIGKILL')
 
     recorder.startRecording('/tmp/cached.m4a', { engine: 'tap', mic: true })
@@ -506,12 +506,104 @@ describe('audio recorder stop handoff', () => {
     }))
   })
 
+  /**
+   * 改动前 probe 只 resolve 一个 boolean，raw 兜底与 VPIO 生效同为 true，
+   * 收到用户日志也无法判断这台机器有没有系统回声消除
+   */
+  it('启动预检把 VPIO 放弃原因与声道数透传给调用方', async () => {
+    const probe = recorder.probeMicCaptureStrategy()
+
+    emitNative({
+      status: 'mic_probe_complete',
+      micStrategy: 'rawAudioEngine',
+      micDeviceKey: 'device-key',
+      micVoiceProcessing: 'unstable-channel-layout',
+      micVoiceProcessingChannels: 7,
+    })
+
+    await expect(probe).resolves.toEqual({
+      ready: true,
+      strategy: 'rawAudioEngine',
+      voiceProcessing: 'unstable-channel-layout',
+      voiceProcessingChannels: 7,
+    })
+  })
+
+  /**
+   * mic_route_changed 覆盖「重挂成功但换了路线」这类静默降级——mic_degraded 只在重挂
+   * 彻底失败时发出，覆盖不到。字段一旦在转发时被丢弃，事后就只能靠猜
+   */
+  it('录音中途换麦克风路线时透传原因与路线，并作废旧路线提示', () => {
+    /** 先让正式录音留下一条缓存路线提示 */
+    emitNative({
+      status: 'recording',
+      path: '/tmp/running.m4a',
+      micStrategy: 'voiceProcessed',
+      micDeviceKey: 'device-key',
+    })
+
+    const routeChanged = vi.fn()
+    recorder.onRecorderEvent('mic_route_changed', routeChanged)
+    emitNative({
+      status: 'mic_route_changed',
+      reason: 'default-input-changed',
+      micStrategy: 'rawAudioEngine',
+      micVoiceProcessing: 'unstable-channel-layout',
+      micVoiceProcessingChannels: 7,
+    })
+
+    expect(routeChanged).toHaveBeenCalledWith({
+      reason: 'default-input-changed',
+      strategy: 'rawAudioEngine',
+      voiceProcessing: 'unstable-channel-layout',
+      voiceProcessingChannels: 7,
+    })
+
+    /** 重挂已重新探测过路线，旧提示不能再拿去加速下一场 */
+    recorder.startRecording('/tmp/after-route-change.m4a', { engine: 'tap', mic: true })
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).not.toEqual(expect.objectContaining({
+      preferredMicStrategy: expect.anything(),
+    }))
+  })
+
+  /**
+   * 实测形态：tap 在 start 阶段挂载成功（否则整场录音会直接报错），却全程 0 回调，
+   * 成品只剩麦克风轨。首样本看门狗的条件是两轨样本合计为 0，mic 正常时不触发，
+   * 只能靠这几个字段发现
+   */
+  it('停止时透传系统音轨采集统计，可区分「没出数据」与「全被丢弃」', async () => {
+    const expectedPath = '/tmp/empty-system.m4a'
+    const stopped = vi.fn()
+    recorder.onRecorderEvent('stopped', stopped)
+
+    recorder.stopRecording(expectedPath)
+    emitNative({
+      status: 'stopped',
+      path: expectedPath,
+      duration: 34.9,
+      handoffId: getLastGeneration(),
+      systemAudioRequested: true,
+      systemAudioAppends: 0,
+      systemAudioCallbacks: 0,
+      systemAudioDrops: 0,
+      micAppends: 349,
+    })
+    await flushPromises()
+
+    expect(stopped).toHaveBeenCalledWith(expect.objectContaining({
+      systemAudioRequested: true,
+      systemAudioAppends: 0,
+      systemAudioCallbacks: 0,
+      micAppends: 349,
+    }))
+  })
+
   it('启动预检明确失败时立即结束并回收隔离 helper', async () => {
     const probe = recorder.probeMicCaptureStrategy()
 
     emitNative({ status: 'mic_probe_failed', detail: 'no_capture_source' })
 
-    await expect(probe).resolves.toBe(false)
+    await expect(probe).resolves.toEqual({ ready: false })
     expect(harness.stop).toHaveBeenCalledWith('SIGKILL')
   })
 })

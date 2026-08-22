@@ -107,7 +107,7 @@ export function initNativeRecordingPipeline(): void {
 
   recordingState.onPhaseChange(syncToRecorder)
 
-  onRecorderEvent('recording', ({ path }) => {
+  onRecorderEvent('recording', ({ path, strategy, voiceProcessing, voiceProcessingChannels, outputTransport }) => {
     const session = peekNativeRecordingSession()
     if (
       !session
@@ -123,6 +123,20 @@ export function initNativeRecordingPipeline(): void {
       return
     }
 
+    /**
+     * 本轮实际走的采集路线
+     *
+     * strategy 是主字段：正式录音多数会命中预检留下的缓存路线，此时 voiceProcessing
+     * 只会是 skipped-cached-route，真正的失败原因在启动预检那条日志里。
+     * outputTransport 一并记：builtin 扬声器 + 无 AEC 才存在外放回声路径，耳机不存在
+     */
+    console.log('[native-recording] recording started', {
+      strategy,
+      voiceProcessing,
+      voiceProcessingChannels,
+      outputTransport,
+    })
+
     /** 只有当前 starting session 的 ready 回执才能开始计时并撤销 discard */
     if (recordingState.confirmNativeStarted())
       pendingDiscard = 'none'
@@ -136,6 +150,28 @@ export function initNativeRecordingPipeline(): void {
     const source = recordingState.nativeSource
     if (source)
       handlersBySource[source]?.onMicDegraded?.(detail)
+  })
+
+  /**
+   * 录音中途麦克风重挂成功且重新选路
+   *
+   * 与 mic_degraded 互补：那条只在重挂彻底失败时发出，覆盖不到「重挂成功但换了路线」的
+   * 静默降级——例如从 voiceProcessed 掉到 raw，整场后半段同时失去 AEC 与系统降噪
+   */
+  onRecorderEvent('mic_route_changed', ({ reason, strategy, voiceProcessing, voiceProcessingChannels }) => {
+    console.warn('[native-recording] microphone capture route changed mid-recording', {
+      reason,
+      strategy,
+      voiceProcessing,
+      voiceProcessingChannels,
+    })
+  })
+
+  onRecorderEvent('tap_attach_failed', ({ phase, detail }) => {
+    console.warn('[native-recording] system audio capture failed to attach, recording continues without it', {
+      phase,
+      detail,
+    })
   })
 
   onRecorderEvent('exited', ({ code, signal }) => {
@@ -248,7 +284,31 @@ export function initNativeRecordingPipeline(): void {
     handlersBySource[source]?.onError(code, detail)
   })
 
-  onRecorderEvent('stopped', async ({ path: filePath, duration }) => {
+  onRecorderEvent('stopped', async ({
+    path: filePath,
+    duration,
+    systemAudioAppends,
+    micAppends,
+    systemAudioRequested,
+    systemAudioCallbacks,
+    systemAudioDrops,
+  }) => {
+    /**
+     * 请求了系统音却一个样本都没写入 = 整条系统音轨丢失，用户毫无察觉
+     *
+     * 必须单独 warn 而不是只留统计字段：那是一场正常结束的录音，不 warn 就没人会去看。
+     * callbacks 一并带上以区分「内核侧没出数据」和「出了数据但全被丢弃」
+     */
+    if (systemAudioRequested && systemAudioAppends === 0) {
+      console.warn('[native-recording] system audio was requested but no samples were captured', {
+        path: filePath,
+        duration,
+        systemAudioCallbacks,
+        systemAudioDrops,
+        micAppends,
+      })
+    }
+
     const stoppedSession = peekNativeRecordingSession()
     if (stoppedSession && stoppedSession.outputPath !== filePath) {
       console.warn('[native-recording] stale stopped event ignored, file left for recovery', {
@@ -311,8 +371,20 @@ export function initNativeRecordingPipeline(): void {
 
   /** 只读权限已授权时才预检；绝不因后台探测触发系统授权框或应用内权限门 */
   if (process.platform === 'darwin' && isMacOSAtLeast(14, 2) && getPermissionStatus('microphone') === 'granted') {
-    void probeMicCaptureStrategy().then((ready) => {
-      console.log(`[native-recording] startup microphone strategy probe completed (ready=${ready})`)
+    void probeMicCaptureStrategy().then((probe) => {
+      /**
+       * strategy / voiceProcessing 必须记下来
+       *
+       * 只记 `ready` 是不够的：raw 兜底成功同样是 true，恰好把「这台机器有没有系统回声
+       * 消除」这个唯一有诊断价值的区分抹平——外放通话时对端声音会延迟约 120ms 漏进麦克风
+       * 录第二遍，排查该问题只需要这一位信息。deviceKey 是设备指纹，不进日志
+       */
+      console.log('[native-recording] startup microphone strategy probe completed', {
+        ready: probe.ready,
+        strategy: probe.strategy,
+        voiceProcessing: probe.voiceProcessing,
+        voiceProcessingChannels: probe.voiceProcessingChannels,
+      })
     })
   }
 }

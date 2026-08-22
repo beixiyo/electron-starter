@@ -164,8 +164,16 @@ class TapRecorder: NSObject {
       return
     }
 
+    /** 必须在 detach 前取值：探测结果只反映刚结束的这一轮 attach */
+    let voiceProcessing = micCapture.voiceProcessingOutcome
+    let voiceProcessingChannels = micCapture.voiceProcessingChannelCount
     micCapture.detach()
-    emitMicProbeComplete(strategy: strategy, deviceKey: deviceKey)
+    emitMicProbeComplete(
+      strategy: strategy,
+      deviceKey: deviceKey,
+      voiceProcessing: voiceProcessing,
+      voiceProcessingChannels: voiceProcessingChannels
+    )
   }
 
   @discardableResult
@@ -241,7 +249,10 @@ class TapRecorder: NSObject {
         "recording",
         path: outputPath,
         micStrategy: micCapture.activeStrategy,
-        micDeviceKey: micCapture.activeDeviceKey
+        micDeviceKey: micCapture.activeDeviceKey,
+        micVoiceProcessing: micReady ? micCapture.voiceProcessingOutcome : nil,
+        micVoiceProcessingChannels: micCapture.voiceProcessingChannelCount,
+        outputTransport: getDefaultOutputTransport()
       )
       return true
     }
@@ -348,7 +359,9 @@ class TapRecorder: NSObject {
       description = try tapCapture.makeDescription(pids: pids, excludePids: excludePids)
     }
     catch {
-      log("tap update rejected: \((error as? TapRecorderError)?.message ?? error.localizedDescription)")
+      let detail = (error as? TapRecorderError)?.message ?? error.localizedDescription
+      log("tap update rejected: \(detail)")
+      emitTapAttachFailed(phase: "description", detail: detail)
       return
     }
 
@@ -376,7 +389,9 @@ class TapRecorder: NSObject {
        * 分阶段失败(tap 建成后 aggregate/IOProc 抛错)会留下半建的内核对象句柄,
        * 必须拆干净(teardown 对 kAudioObjectUnknown 幂等),否则下次重试覆盖 ID 永久泄漏 */
       tapCapture.teardown()
-      log("tap update failed after teardown: \((error as? TapRecorderError)?.message ?? error.localizedDescription)")
+      let detail = (error as? TapRecorderError)?.message ?? error.localizedDescription
+      log("tap update failed after teardown: \(detail)")
+      emitTapAttachFailed(phase: "prepare-or-start", detail: detail)
     }
   }
 
@@ -548,6 +563,18 @@ class TapRecorder: NSObject {
     }
     let stats = "tapCb=\(tapStatistics.callbackCount) sysOK=\(tapStatistics.appendCount) sysDrop=\(tapStatistics.dropCount) micCb=\(micCapture.callbackCount) micConvFail=\(micCapture.convertFailCount) micOK=\(sidecarSummary.appendCount) micDrop=\(sidecarSummary.dropCount)"
     log("tap stats: \(stats) devices: \(describeDefaultAudioDevices())")
+    /**
+     * 两轨各自实际写入的 buffer 块数，随 stopped 上报
+     *
+     * 排查「对端声音到底在不在文件里」时缺这一位:成品是单声道混音，事后无法区分
+     * 系统音轨为空还是被外放漏音顶替。system=0 即可直接判定系统音采集未生效
+     */
+    let stoppedTrackSampleCounts = (system: tapStatistics.appendCount, mic: sidecarSummary.appendCount)
+    let stoppedSystemAudioDiagnostics = (
+      requested: tapRequested,
+      callbacks: tapStatistics.callbackCount,
+      drops: tapStatistics.dropCount
+    )
 
     let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
     let duration = max(0, elapsed - totalPausedDuration)
@@ -625,7 +652,14 @@ class TapRecorder: NSObject {
     }
 
     emitRecycleRequired(handoffId: handoffId)
-    emitStatus("stopped", path: savedPath, duration: duration, handoffId: handoffId)
+    emitStatus(
+      "stopped",
+      path: savedPath,
+      duration: duration,
+      handoffId: handoffId,
+      trackSampleCounts: stoppedTrackSampleCounts,
+      systemAudioDiagnostics: stoppedSystemAudioDiagnostics
+    )
   }
 
   private func startFirstSampleWatchdog() {
@@ -1054,6 +1088,12 @@ class TapRecorder: NSObject {
     if recovered {
       /** attachMic 成功路径已清零 micRecoveryAttempts / micDegradedEmitted */
       log("tap: mic recovery succeeded (micCb=\(micCapture.callbackCount)), devices: \(describeDefaultAudioDevices())")
+      emitMicRouteChanged(
+        reason: reason,
+        strategy: micCapture.activeStrategy,
+        voiceProcessing: micCapture.voiceProcessingOutcome,
+        voiceProcessingChannels: micCapture.voiceProcessingChannelCount
+      )
       return
     }
 

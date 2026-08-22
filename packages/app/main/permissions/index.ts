@@ -11,6 +11,8 @@ const SCREEN_SETTINGS_OPEN_DELAY_MS = 500
 /** 授权弹窗等待用户决策，给足时间；Swift 侧 300s 自行超时退出 */
 const AUDIO_CAPTURE_PROMPT_TIMEOUT_MS = 310_000
 const nativePromptRequestedKinds = new Set<PermissionKind>()
+/** 「仅系统音频录制」补发申请每进程只做一次，避免每场录音都拉起 helper */
+let audioCaptureBackfillRequested = false
 
 /** macOS 各权限对应的隐私设置面板 URL */
 const MACOS_PRIVACY_URLS: Record<PermissionKind, string> = {
@@ -208,6 +210,63 @@ const AUDIO_CAPTURE_STATUS_TTL_MS = 3000
 let audioCaptureStatusCache: { status: PermissionStatus, at: number } | null = null
 
 /**
+ * 「仅系统音频录制」从未被询问过时补发一次授权申请
+ *
+ * 实测症状：某台机器权限门放行、tap 创建与启动均成功，却全程零回调
+ * （systemAudioCallbacks=0），成品丢失整条系统音轨，用户毫无察觉。
+ *
+ * 根因机制：`requestPermission('system-audio')` 与判定走同一条
+ * 「屏幕录制已授权即 granted」短路，于是 kTCCServiceAudioCapture 的系统弹窗
+ * 永远不会出现。只授过屏幕录制的机器会永久停在「判定通过、tap 不出数据」，
+ * 系统不会问、App 也不会提示，**用户自己无从修复**。
+ *
+ * 方案边界：只在 `not-determined`（从未询问过）时补发，**不改变任何放行判定**，
+ * 也不阻塞调用方——本场录音照常开始，授权结果影响的是之后的录音。
+ * `denied` 刻意不重试：TCC 明确拒绝后不再弹窗，重复调用只会白白拉起 helper 进程。
+ *
+ * 治本方向：待 `getSystemAudioPermissionDetail` 收集到跨机型数据、确认
+ * 「两者任一已授权即可」这个前提在哪些机型上不成立后，应直接修正判定本身，
+ * 而不是长期依赖这里补发
+ */
+export function requestAudioCaptureIfNeverAsked(): void {
+  if (audioCaptureBackfillRequested || process.platform !== 'darwin') {
+    return
+  }
+  if (getAudioCaptureStatus() !== 'not-determined') {
+    return
+  }
+
+  audioCaptureBackfillRequested = true
+  log.info('audioCapture.backfill.requested', 'requesting never-asked system audio recording permission')
+  void requestAudioCaptureAccess().then((status) => {
+    /** 补发是否触发、用户是否授权，正是排查「系统音轨为空」时唯一需要的一位信息 */
+    log.info('audioCapture.backfill.settled', 'system audio recording permission request settled', { status })
+  })
+}
+
+/**
+ * 系统音权限的分解状态，仅供诊断落盘，不参与任何放行判定
+ *
+ * 实测症状：某台机器权限门放行（gate.passed systemAudioEnabled=true），tap 创建与启动
+ * 均成功，却全程零回调（systemAudioCallbacks=0），成品丢失整条系统音轨且用户无感知。
+ * 输出设备是 builtin，非虚拟声卡，也没有 tapAttachFailed。
+ *
+ * 待验证的疑点：`getSystemAudioPermissionStatus` 按「两者任一已授权即可」短路，
+ * 屏幕录制通过时不再探测 kTCCServiceAudioCapture。若该前提在某些机型上不成立
+ * （tap 实际只认 audio-only 那一项），就会正好落到上述形态。短路本身又让
+ * audioCapture 从不被探测，日志里没有这一位，无法证实也无法证伪。
+ *
+ * 方案边界：只把两个服务的状态与最终判定分开如实上报，不改变任何放行决定
+ */
+export function getSystemAudioPermissionDetail(): SystemAudioPermissionDetail {
+  return {
+    screen: getMediaAccessStatus('screen'),
+    audioCapture: getAudioCaptureStatus(),
+    effective: getSystemAudioPermissionStatus(),
+  }
+}
+
+/**
  * macOS 当前把「录屏 + 系统音频」放在同一个 Screen & System Audio Recording 面板：
  * 用户可授权“屏幕和音频”，也可只授权“音频”。Core Audio tap 还可走
  * kTCCServiceAudioCapture 的 audio-only 探测；两者任一已授权，都满足系统音频录制
@@ -359,4 +418,13 @@ export function openPrivacySettings(kind: PermissionKind): boolean {
     log.error('settings.open-failed', 'failed to open system privacy settings', error, { kind })
     return false
   }
+}
+
+/** 系统音权限的分解诊断结果；`effective` 是权限门实际采用的判定 */
+export type SystemAudioPermissionDetail = {
+  /** 屏幕录制（kTCCServiceScreenCapture） */
+  screen: PermissionStatus
+  /** 仅系统音频录制（kTCCServiceAudioCapture），process tap 真正依赖的那一项 */
+  audioCapture: PermissionStatus
+  effective: PermissionStatus
 }

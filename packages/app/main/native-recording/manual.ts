@@ -1,7 +1,7 @@
 import type { AudioSourceCaptureOptions, AudioSourceCaptureResult, ManualRecordingPrefs } from '@ipc/services/recording/contract'
 import type { RecordingSnapshot } from '@shared'
 import { startRecording, updateRecording } from '@main/audio-recorder'
-import { getPermissionStatus, requestPermission } from '@main/permissions'
+import { getPermissionStatus, getSystemAudioPermissionDetail, requestAudioCaptureIfNeverAsked, requestPermission } from '@main/permissions'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable } from '@main/recording-storage'
@@ -78,6 +78,13 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
      */
     if (mixSystemAudio && !isSystemAudioPermissionUsable()) {
       return recordingState.snapshot
+    }
+
+    if (mixSystemAudio) {
+      /** 放行依据的两项 TCC 状态分开记，用于判断屏幕录制短路是否让 tap 静默失效 */
+      console.log('[native-recording] system audio permission', getSystemAudioPermissionDetail())
+      /** 放行之后才补发，确保它绝不参与本次放行判定，也不阻塞本场录音 */
+      requestAudioCaptureIfNeverAsked()
     }
 
     /** 幂等：确保 audio-recorder 子进程与管线已就绪（可能早于 meeting-detection 初始化） */
