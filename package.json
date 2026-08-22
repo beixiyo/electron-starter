@@ -23,6 +23,9 @@
     "lint:utils": "pnpm -F utils lint",
     "lint:hooks": "pnpm -F hooks lint",
     "lint:web": "pnpm -F web lint",
+    "---test---": "---",
+    "test": "nx run-many -t test",
+    "test:watch": "vitest",
     "publish:playground": "node scripts/publish.cjs playground"
   },
   "dependencies": {
@@ -50,11 +53,13 @@
     "@jl-org/ts-tool": "^0.0.8",
     "@jl-org/vite-auto-route": "^2.0.2",
     "@tailwindcss/vite": "^4.3.0",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "code-inspector-plugin": "^1.5.1",
+    "jsdom": "^29.1.1",
     "nx": "^22.3.1 ",
     "oxlint": "1.78.0",
     "sass": "^1.77.8",
@@ -64,6 +69,7 @@
     "vite": "^8.0.12",
     "vite-plugin-dts": "^5.0.0",
     "vite-plugin-env-parse": "^1.0.15",
-    "vite-plugin-svgr": "^5.2.0"
+    "vite-plugin-svgr": "^5.2.0",
+    "vitest": "^4.1.10"
   }
 }

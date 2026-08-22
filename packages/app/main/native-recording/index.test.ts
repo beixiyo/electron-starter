@@ -25,14 +25,28 @@ vi.mock('@main/audio-recorder', () => ({
   startRecorder: vi.fn(),
   stopRecorder: vi.fn(),
   stopRecording: harness.stopRecording,
+  /** 管线初始化末尾会发起启动预检，返回具名结果对象 */
+  probeMicCaptureStrategy: vi.fn(() => Promise.resolve({ ready: true })),
 }))
 
 vi.mock('@main/recording-recovery', () => ({
   deleteRecoveryRecording: harness.deleteRecoveryRecording,
 }))
 
+/**
+ * 管线初始化会一路走到权限探测与窗口工厂，用到的 electron 成员都要给出来，
+ * 少一个就会以「No X export is defined on the electron mock」整套 skip
+ */
 vi.mock('electron', () => ({
-  app: { on: vi.fn() },
+  app: { on: vi.fn(), getPath: vi.fn(() => '/tmp'), whenReady: vi.fn(() => Promise.resolve()) },
+  systemPreferences: { getMediaAccessStatus: vi.fn(() => 'granted') },
+  screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },
+  BrowserWindow: class {
+    static getAllWindows = vi.fn(() => [])
+    on = vi.fn()
+    once = vi.fn()
+    isDestroyed = vi.fn(() => false)
+  },
 }))
 
 describe('native 录音启动代际', () => {

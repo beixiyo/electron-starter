@@ -39,6 +39,15 @@
     },
     "dev": {
       "cache": false
+    },
+    "test": {
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/vitest.config.ts",
+        "{workspaceRoot}/vitest.setup.ts"
+      ],
+      "cache": true
     }
   },
   "analytics": false
