@@ -1,15 +1,10 @@
 'use client'
 
-import type {
-  DateTimeSpanPickerProps,
-  DateTimeSpanPickerRef,
-  DateTimeSpanPickerTriggerContext,
-  DateTimeSpanPickerValue,
-} from './types'
 import { isSameDay } from 'date-fns'
 import { useLatestCallback } from 'hooks'
 import { forwardRef, memo } from 'react'
-import { cn, formatDatePickerDate, formatDatePickerDateTime, formatDatePickerDateTimeRange, formatDatePickerTimeParts } from 'utils'
+import { cn, formatDatePickerDate, formatDatePickerDateRange, formatDatePickerDateTime, formatDatePickerDateTimeRange, formatDatePickerTimeParts } from 'utils'
+import type { DatePickerRangeFormatter } from 'utils'
 import { useT } from '../../i18n'
 import { useFormField } from '../Form'
 import { SpanPickerInput } from './components'
@@ -18,6 +13,7 @@ import { DateTimeSpanCalendar } from './DateTimeSpanCalendar'
 import { useDateRangePickerSession } from './hooks/useDateRangePickerSession'
 import { useDateTimeSpanSelection } from './hooks/useDateTimeSpanSelection'
 import { usePickerState } from './hooks/usePickerState'
+import type { DateTimeSpanPickerProps, DateTimeSpanPickerRef, DateTimeSpanPickerTriggerContext, DateTimeSpanPickerValue } from './types'
 import { getFormatByPrecision, isDateRangeEqual } from './utils'
 
 const EMPTY_DATE_TIME_SPAN: DateTimeSpanPickerValue = {
@@ -49,6 +45,7 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
   placeholder: propsPlaceholder,
   separator = ' ~ ',
   sameDaySeparator,
+  rangeFormatter,
   disabled = false,
   disabledDate,
   minDate,
@@ -66,13 +63,17 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
   errorMessage,
   showClear = false,
   weekStartsOn = 1,
+  enableRangeHoverPreview = true,
   precision = 'minute',
   syncEndTimeWithStart = false,
+  defaultEndTimeOffsetMinutes: configuredDefaultEndTimeOffsetMinutes,
   use12Hours = false,
   minuteStep = 1,
   quickTimeStep,
   enableTimeKeyboardInput = true,
   enableTimeUnitPopover = true,
+  enableTimeUnitScrollAnimation = true,
+  enableHeaderScrollAnimation = true,
   enableTimeInputWheel = true,
   icon,
   prevIcon,
@@ -85,8 +86,10 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
   renderCell,
   clearIcon,
   yearRange,
+  getTimeFieldErrors,
 }, ref) => {
   const t = useT()
+  const defaultEndTimeOffsetMinutes = configuredDefaultEndTimeOffsetMinutes ?? minuteStep
   const placeholder = propsPlaceholder ?? t('datePicker.placeholder')
   const startPlaceholder = t('datePicker.startPlaceholder')
   const endPlaceholder = t('datePicker.endPlaceholder')
@@ -134,13 +137,15 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
     initialValue: actualValue ?? defaultValue ?? EMPTY_DATE_TIME_SPAN,
     precision,
     syncEndTimeWithStart,
-    onChange: nextValue => handleChangeVal(nextValue, undefined as any),
+    defaultEndTimeOffsetMinutes,
+    onChange: (nextValue) => handleChangeVal(nextValue, undefined as any),
     onDraftChange: () => resetRejection(),
   })
 
   const {
     confirming,
     confirmRejected,
+    validationMessage,
     resetRejection,
     cancel: handleCancel,
     confirm: confirmSession,
@@ -190,6 +195,7 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
     : { timeValue: '', period: '' }
   const hasInvalidEndTime = !!(internalValue.hasTime && internalValue.start && internalValue.end
     && internalValue.end.getTime() < internalValue.start.getTime())
+  const timeFieldErrors = getTimeFieldErrors?.(internalValue)
   const canShowClear = showClear && (internalValue.start || internalValue.end) && !disabled
   const displayValue = formatDateTimeSpanValue(internalValue, {
     dateFormat: dateFormat || baseDateFormat,
@@ -200,6 +206,7 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
     periodPosition,
     separator,
     sameDaySeparator,
+    rangeFormatter,
   })
 
   const triggerContext: DateTimeSpanPickerTriggerContext = {
@@ -235,29 +242,30 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
   }
 
   const handleConfirm = useLatestCallback(() => {
-    if (hasInvalidEndTime)
-      return
+    if (hasInvalidEndTime) return
     return void confirmSession()
   })
 
   const triggerContent = renderTrigger
     ? renderTrigger(triggerContext)
     : trigger
-      ? <div onClick={ handleToggle }>{ trigger }</div>
-      : <SpanPickerInput
-          displayValue={ displayValue }
-          placeholder={ placeholder }
-          disabled={ disabled }
-          showClear={ showClear }
-          error={ !!actualError || confirmRejected }
-          canShowClear={ !!canShowClear }
-          onClear={ handleClear }
-          onClick={ handleToggle }
-          inputClassName={ inputClassName }
-          icon={ icon }
-          clearIcon={ clearIcon }
-          triggerVariant={ triggerVariant }
-        />
+    ? <div onClick={ handleToggle }>{ trigger }</div>
+    : (
+      <SpanPickerInput
+        displayValue={ displayValue }
+        placeholder={ placeholder }
+        disabled={ disabled }
+        showClear={ showClear }
+        error={ !!actualError || confirmRejected }
+        canShowClear={ !!canShowClear }
+        onClear={ handleClear }
+        onClick={ handleToggle }
+        inputClassName={ inputClassName }
+        icon={ icon }
+        clearIcon={ clearIcon }
+        triggerVariant={ triggerVariant }
+      />
+    )
 
   return (
     <PickerBase
@@ -275,7 +283,7 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
       dropdownZIndex={ dropdownZIndex }
       error={ !!actualError }
       errorMessage={ actualErrorMessage }
-      dropdown={
+      dropdown={ 
         <DateTimeSpanCalendar
           currentMonth={ currentMonth }
           onCurrentMonthChange={ setCurrentMonth }
@@ -288,25 +296,34 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
           onAddTime={ addTime }
           onClearTime={ clearTime }
           onAddEndTime={ addEndTime }
+          startTimeError={ Boolean(timeFieldErrors?.start) }
+          endTimeError={ hasInvalidEndTime || Boolean(timeFieldErrors?.end) }
           disabledDate={ disabledDate }
           minDate={ minDate }
           maxDate={ maxDate }
           className={ calendarClassName }
           weekStartsOn={ weekStartsOn }
           precision={ precision }
+          enableRangeHoverPreview={ enableRangeHoverPreview }
           use12Hours={ use12Hours }
           minuteStep={ minuteStep }
           quickTimeStep={ quickTimeStep }
           enableTimeKeyboardInput={ enableTimeKeyboardInput }
           enableTimeUnitPopover={ enableTimeUnitPopover }
+          enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
+          enableHeaderScrollAnimation={ enableHeaderScrollAnimation }
           enableTimeInputWheel={ enableTimeInputWheel }
           timeIcon={ timeIcon }
           addEndTimeIcon={ addEndTimeIcon }
           timeDropdownClassName={ timeDropdownClassName }
           timeDropdownZIndex={ timeDropdownZIndex }
+          dropdownZIndex={ dropdownZIndex }
           onMouseLeave={ () => setTempDate(null) }
           onConfirm={ handleConfirm }
           confirmLoading={ confirming }
+          validationMessage={ confirmRejected
+            ? validationMessage
+            : undefined }
           yearRange={ yearRange }
           prevIcon={ prevIcon }
           nextIcon={ nextIcon }
@@ -315,7 +332,7 @@ const InnerDateTimeSpanPicker = forwardRef<DateTimeSpanPickerRef, DateTimeSpanPi
           extraFooter={ extraFooter }
           renderCell={ renderCell }
         />
-      }
+       }
     />
   )
 })
@@ -339,17 +356,19 @@ function formatDateTimeSpanValue(
     periodPosition: 'left' | 'right'
     separator: string
     sameDaySeparator?: string
+    rangeFormatter?: DatePickerRangeFormatter
   },
 ): string {
-  if (!value.start)
-    return ''
+  if (!value.start) return ''
 
   if (!value.hasTime) {
-    const start = formatDatePickerDate(value.start, { dateFormat: options.dateFormat })
-    const end = value.end && formatDatePickerDate(value.end, { dateFormat: options.dateFormat })
-    return end
-      ? `${start}${options.separator}${end}`
-      : start
+    return value.end
+      ? formatDatePickerDateRange(value.start, value.end, {
+        dateFormat: options.dateFormat,
+        rangeSeparator: options.separator,
+        rangeFormatter: options.rangeFormatter,
+      })
+      : formatDatePickerDate(value.start, { dateFormat: options.dateFormat })
   }
 
   const formatOptions = {
@@ -362,6 +381,7 @@ function formatDateTimeSpanValue(
     rangeSeparator: value.end && isSameDay(value.start, value.end)
       ? options.sameDaySeparator ?? options.separator
       : options.separator,
+    rangeFormatter: options.rangeFormatter,
   }
   return value.end
     ? formatDatePickerDateTimeRange(value.start, value.end, formatOptions)

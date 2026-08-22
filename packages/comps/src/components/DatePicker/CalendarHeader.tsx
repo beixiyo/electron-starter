@@ -1,7 +1,5 @@
 'use client'
 
-import type { CascaderOption } from '../Cascader'
-import type { CalendarHeaderProps } from './types'
 import { getMonth, getYear, setMonth, setYear, startOfMonth } from 'date-fns'
 import { useLatestCallback } from 'hooks'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -9,7 +7,9 @@ import { memo, useMemo } from 'react'
 import { cn } from 'utils'
 import { useT } from '../../i18n'
 import { Button } from '../Button'
+import type { CascaderOption } from '../Cascader'
 import { CalendarHeaderSelect } from './components/CalendarHeaderSelect'
+import type { CalendarHeaderProps } from './types'
 import { addMonth, isAfter, isBefore, isMonthAvailable, subtractMonth } from './utils'
 
 export const CalendarHeader = memo<CalendarHeaderProps>(({
@@ -23,6 +23,8 @@ export const CalendarHeader = memo<CalendarHeaderProps>(({
   nextIcon,
   superPrevIcon,
   superNextIcon,
+  dropdownZIndex,
+  enableScrollAnimation = true,
 }) => {
   const t = useT()
   const headerOrder = t('datePicker.headerOrder') || 'ym'
@@ -103,29 +105,25 @@ export const CalendarHeader = memo<CalendarHeaderProps>(({
 
   const handlePrevMonth = useLatestCallback(() => {
     const prevMonth = subtractMonth(currentMonth, 1)
-    if (!isMonthAvailable(prevMonth, minDate, maxDate))
-      return
+    if (!isMonthAvailable(prevMonth, minDate, maxDate)) return
     onMonthChange(prevMonth)
   })
 
   const handleNextMonth = useLatestCallback(() => {
     const nextMonth = addMonth(currentMonth, 1)
-    if (!isMonthAvailable(nextMonth, minDate, maxDate))
-      return
+    if (!isMonthAvailable(nextMonth, minDate, maxDate)) return
     onMonthChange(nextMonth)
   })
 
   const handleSuperPrevMonth = useLatestCallback(() => {
     const previousYear = subtractMonth(currentMonth, 12)
-    if (!isMonthAvailable(previousYear, minDate, maxDate))
-      return
+    if (!isMonthAvailable(previousYear, minDate, maxDate)) return
     onMonthChange(previousYear)
   })
 
   const handleSuperNextMonth = useLatestCallback(() => {
     const nextYear = addMonth(currentMonth, 12)
-    if (!isMonthAvailable(nextYear, minDate, maxDate))
-      return
+    if (!isMonthAvailable(nextYear, minDate, maxDate)) return
     onMonthChange(nextYear)
   })
 
@@ -142,6 +140,8 @@ export const CalendarHeader = memo<CalendarHeaderProps>(({
       suffix={ headerOrder === 'ym'
         ? t('datePicker.yearSuffix') || '年'
         : undefined }
+      dropdownZIndex={ dropdownZIndex }
+      enableScrollAnimation={ enableScrollAnimation }
     />
   )
   const monthSelect = (
@@ -155,6 +155,8 @@ export const CalendarHeader = memo<CalendarHeaderProps>(({
       suffix={ headerOrder === 'ym'
         ? t('datePicker.monthSuffix') || '月'
         : undefined }
+      dropdownZIndex={ dropdownZIndex }
+      enableScrollAnimation={ enableScrollAnimation }
     />
   )
 
@@ -182,14 +184,18 @@ export const CalendarHeader = memo<CalendarHeaderProps>(({
 
       <div className="flex items-center flex-1 justify-center">
         { headerOrder === 'my'
-          ? <>
+          ? (
+            <>
               { monthSelect }
               { yearSelect }
             </>
-          : <>
+          )
+          : (
+            <>
               { yearSelect }
               { monthSelect }
-            </> }
+            </>
+          ) }
       </div>
 
       <Button

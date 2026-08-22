@@ -49,8 +49,32 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.mouseEnter(await screen.findByRole('button', { name: '2026-07-17' }))
+
+    expect(screen.getByRole('button', { name: '2026-07-17' }).dataset.rangePosition).toBe('start')
+    expect(screen.getByRole('button', { name: '2026-07-19' }).dataset.rangePosition).toBe('end')
+  })
+
+  it('关闭范围 hover 预览时，悬停第二个日期不会生成临时区间', async () => {
+    renderWithI18n(
+      <DateRangePicker
+        defaultValue={ {
+          start: DATE_2026_07_19,
+          end: null,
+        } }
+        closeOnSelect={ false }
+        enableRangeHoverPreview={ false }
+      />,
+    )
+
+    fireEvent.click(screen.getByText('添加结束日期'))
+    fireEvent.mouseEnter(await screen.findByRole('button', { name: '2026-07-17' }))
+
+    expect(screen.getByRole('button', { name: '2026-07-17' }).dataset.rangePosition).toBeUndefined()
+    expect(screen.getByRole('button', { name: '2026-07-19' }).dataset.rangePosition).toBe('start')
+
+    fireEvent.click(screen.getByRole('button', { name: '2026-07-17' }))
 
     expect(screen.getByRole('button', { name: '2026-07-17' }).dataset.rangePosition).toBe('start')
     expect(screen.getByRole('button', { name: '2026-07-19' }).dataset.rangePosition).toBe('end')
@@ -64,8 +88,8 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '结束日期' }))
-    expect(await screen.findByRole('button', { name: '确认' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '添加结束日期' }))
+    expect(await screen.findByRole('button', { name: '完成' })).toBeTruthy()
   })
 
   it('在非受控模式使用 defaultValue 并在打开时记录快照', () => {
@@ -103,7 +127,7 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.click(await screen.findByRole('button', { name: '2026-07-10' }))
 
     expect(onChange).toHaveBeenCalledTimes(1)
@@ -128,12 +152,12 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.click(await screen.findByRole('button', { name: '2026-07-10' }))
 
     expect(onConfirm).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expectDate(onConfirm.mock.calls[0][0].end, 2026, 6, 10)
@@ -158,7 +182,7 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.click(await screen.findByRole('button', { name: '2026-07-10' }))
     fireEvent.keyDown(document, { key: 'Escape' })
 
@@ -168,7 +192,7 @@ describe('dateRangePicker', () => {
     expect(onCancel.mock.calls[0][1].reason).toBe('escape')
     expectDate(onCancel.mock.calls[0][1].initialValue.start, 2026, 6, 4)
     expectDate(onCancel.mock.calls[0][1].draftValue.end, 2026, 6, 10)
-    expect(screen.getByText('结束日期')).toBeTruthy()
+    expect(screen.getByText('添加结束日期')).toBeTruthy()
   })
 
   it('再次点击当前触发器时取消并恢复草稿', async () => {
@@ -186,7 +210,7 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.click(await screen.findByRole('button', { name: '2026-07-10' }))
     fireEvent.click(screen.getByText('2026 年 07 月 10 日'))
 
@@ -194,7 +218,7 @@ describe('dateRangePicker', () => {
     expect(onCancel.mock.calls[0][1].reason).toBe('trigger')
     expect(onChange).toHaveBeenCalledTimes(2)
     expect(onChange.mock.calls[1][0].end).toBeNull()
-    expect(screen.getByText('结束日期')).toBeTruthy()
+    expect(screen.getByText('添加结束日期')).toBeTruthy()
   })
 
   it('允许自定义触发器切换和取消且不阻止事件传播', () => {
@@ -260,7 +284,7 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.click(await screen.findByRole('button', { name: '2026-07-10' }))
 
     expect(calls).toEqual(['change', 'confirm'])
@@ -289,15 +313,38 @@ describe('dateRangePicker', () => {
     )
 
     fireEvent.click(screen.getByText('打开日期范围'))
-    fireEvent.click(await screen.findByRole('button', { name: '确认' }))
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))
     expect(screen.getByText('确认被拒绝')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '完成' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: '确认' }))
+    fireEvent.click(screen.getByRole('button', { name: '完成' }))
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(2))
+  })
+
+  it('确认校验失败时展示自定义内容并保持打开', async () => {
+    const onConfirm = vi.fn(() => ({
+      valid: false as const,
+      message: <span data-testid="business-error">结束时间不符合业务规则</span>,
+    }))
+    renderWithI18n(
+      <DateRangePicker
+        defaultValue={ {
+          start: DATE_2026_07_04,
+          end: DATE_2026_07_10,
+        } }
+        onConfirm={ onConfirm }
+        closeOnSelect={ false }
+      />,
+    )
+
+    fireEvent.click(screen.getByText('2026 年 07 月 10 日'))
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
+
+    expect((await screen.findByTestId('business-error')).textContent).toBe('结束时间不符合业务规则')
+    expect(screen.getByRole('button', { name: '完成' })).toBeTruthy()
   })
 
   it('异步结果等待期间禁用重复确认', async () => {
@@ -317,7 +364,7 @@ describe('dateRangePicker', () => {
     )
 
     fireEvent.click(screen.getByText('2026 年 07 月 10 日'))
-    const confirmButton = await screen.findByRole('button', { name: '确认' })
+    const confirmButton = await screen.findByRole('button', { name: '完成' })
     fireEvent.click(confirmButton)
 
     await waitFor(() => expect(confirmButton).toHaveProperty('disabled', true))
@@ -392,20 +439,20 @@ describe('dateRangePicker', () => {
     )
 
     fireEvent.click(screen.getByText('2026 年 07 月 10 日'))
-    fireEvent.click(await screen.findByRole('button', { name: '确认' }))
+    fireEvent.click(await screen.findByRole('button', { name: '完成' }))
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(onCancel).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByText('2026 年 07 月 10 日'))
-    const nextSessionConfirm = await screen.findByRole('button', { name: '确认' })
+    const nextSessionConfirm = await screen.findByRole('button', { name: '完成' })
     await act(async () => {
       resolveConfirm?.(true)
       await Promise.resolve()
     })
 
     expect(nextSessionConfirm).toBeTruthy()
-    expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '完成' })).toBeTruthy()
   })
 
   it('受控所有者尚未关闭时仅处理一次取消', () => {
@@ -444,7 +491,7 @@ describe('dateRangePicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('结束日期'))
+    fireEvent.click(screen.getByText('添加结束日期'))
     fireEvent.keyDown(document, { key: 'Escape' })
 
     expect(onCancel).toHaveBeenCalledTimes(1)

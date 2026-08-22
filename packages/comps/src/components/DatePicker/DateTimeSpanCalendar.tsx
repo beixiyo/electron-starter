@@ -1,9 +1,9 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import type { DatePrecision, DateTimeSpanPickerValue, SharedUIProps } from './types'
 import { useLatestCallback } from 'hooks'
 import { Plus } from 'lucide-react'
+import { motion } from 'motion/react'
+import type { ReactNode } from 'react'
 import { memo, useMemo } from 'react'
 import { cn } from 'utils'
 import { useT } from '../../i18n'
@@ -13,6 +13,7 @@ import { CalendarHeader } from './CalendarHeader'
 import { DATA_DATE_PICKER_IGNORE } from './constants'
 import { DateSpanCalendarGrid } from './DateSpanCalendarGrid'
 import { TimePicker } from './TimePicker'
+import type { DatePrecision, DateTimeSpanPickerValue, SharedUIProps } from './types'
 import { isSameDate } from './utils'
 
 /** DateTimeSpanPicker 的二合一日期网格与独立时刻编辑区 */
@@ -28,23 +29,30 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
   onAddTime,
   onClearTime,
   onAddEndTime,
+  startTimeError = false,
+  endTimeError = false,
   disabledDate,
   minDate,
   maxDate,
   className,
   weekStartsOn = 1,
+  enableRangeHoverPreview = true,
   precision,
   use12Hours,
   minuteStep,
   quickTimeStep,
   enableTimeKeyboardInput,
   enableTimeUnitPopover,
+  enableTimeUnitScrollAnimation,
+  enableHeaderScrollAnimation,
   enableTimeInputWheel,
   timeIcon,
   addEndTimeIcon,
   timeDropdownClassName,
   timeDropdownZIndex,
+  dropdownZIndex,
   confirmLoading = false,
+  validationMessage,
   onConfirm,
   onMouseLeave,
   yearRange,
@@ -65,14 +73,22 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
   }), [value])
   const hasInvalidEndTime = !!(value.hasTime && value.start && value.end && value.end.getTime() < value.start.getTime())
   const handleConfirm = useLatestCallback(() => {
-    if (hasInvalidEndTime)
-      return
+    if (hasInvalidEndTime) return
 
     onConfirm()
   })
 
   return (
-    <div className={ cn('w-full flex flex-col', className) }>
+    <motion.div
+      layout
+      transition={ {
+        layout: {
+          duration: 0.2,
+          ease: 'easeOut',
+        },
+      } }
+      className={ cn('w-full flex flex-col', className) }
+    >
       <div className="flex flex-1 flex-col gap-4">
         <CalendarHeader
           currentMonth={ currentMonth }
@@ -84,6 +100,8 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
           nextIcon={ nextIcon }
           superPrevIcon={ superPrevIcon }
           superNextIcon={ superNextIcon }
+          dropdownZIndex={ dropdownZIndex }
+          enableScrollAnimation={ enableHeaderScrollAnimation }
         />
         <DateSpanCalendarGrid
           currentMonth={ currentMonth }
@@ -96,6 +114,7 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
           maxDate={ maxDate }
           weekStartsOn={ weekStartsOn }
           renderCell={ renderCell }
+          enableRangeHoverPreview={ enableRangeHoverPreview }
           onMouseLeave={ onMouseLeave }
         />
 
@@ -108,9 +127,10 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
           </span>
           <Switch
             checked={ value.hasTime }
-            onChange={ checked => checked
-              ? onAddTime()
-              : onClearTime() }
+            onChange={ (checked) =>
+              checked
+                ? onAddTime()
+                : onClearTime() }
             ariaLabel={ t('datePicker.addTime') || 'Add Time' }
             background="rgb(var(--brand) / 1)"
             trackWidth={ 36 }
@@ -142,19 +162,22 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
                 quickTimeStep={ quickTimeStep }
                 enableTimeKeyboardInput={ enableTimeKeyboardInput }
                 enableTimeUnitPopover={ enableTimeUnitPopover }
+                enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
                 enableTimeInputWheel={ enableTimeInputWheel }
                 timeIcon={ timeIcon }
                 timeDropdownClassName={ timeDropdownClassName }
                 timeDropdownZIndex={ timeDropdownZIndex }
                 showConfirm={ false }
                 layout="combined"
+                error={ startTimeError }
                 className={ value.end
                   ? 'w-full'
                   : undefined }
               />
             </TimeField>
             { value.end
-              ? <TimeField label={ t('datePicker.rangeEnd') || 'End' } className="flex-1">
+              ? (
+                <TimeField label={ t('datePicker.rangeEnd') || 'End' } className="flex-1">
                   <TimePicker
                     value={ value.end }
                     onChange={ onEndTimeChange }
@@ -164,30 +187,36 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
                     quickTimeStep={ quickTimeStep }
                     enableTimeKeyboardInput={ enableTimeKeyboardInput }
                     enableTimeUnitPopover={ enableTimeUnitPopover }
+                    enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
                     enableTimeInputWheel={ enableTimeInputWheel }
                     timeIcon={ timeIcon }
                     timeDropdownClassName={ timeDropdownClassName }
                     timeDropdownZIndex={ timeDropdownZIndex }
                     showConfirm={ false }
                     layout="combined"
-                    error={ hasInvalidEndTime }
+                    error={ endTimeError }
                     className="w-full"
                   />
                 </TimeField>
-              : <Button
+              )
+              : (
+                <Button
                   variant="secondary"
                   iconOnly
                   leftIcon={ addEndTimeIcon ?? <Plus className="size-4" /> }
                   onClick={ onAddEndTime }
                   className="shrink-0 rounded-full border-none bg-brand/10 text-brand hover:bg-brand/15"
                   aria-label={ t('datePicker.addEndTime') }
-                /> }
+                />
+              ) }
           </div>
         ) }
 
-        { hasInvalidEndTime && (
+        { (hasInvalidEndTime || validationMessage) && (
           <p role="alert" className="text-center text-xs leading-4 text-systemRed">
-            { t('datePicker.endBeforeStart') }
+            { hasInvalidEndTime
+              ? t('datePicker.endBeforeStart')
+              : validationMessage }
           </p>
         ) }
 
@@ -203,13 +232,13 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
         </Button>
         { extraFooter }
       </div>
-    </div>
+    </motion.div>
   )
 })
 
 DateTimeSpanCalendar.displayName = 'DateTimeSpanCalendar'
 
-function TimeField({ label, className, children }: { label: string, className: string, children: ReactNode }) {
+function TimeField({ label, className, children }: { label: string; className: string; children: ReactNode }) {
   return (
     <div className={ cn('min-w-0', className) }>
       <span className="mb-1 block text-xs leading-4 text-text3">{ label }</span>
@@ -230,6 +259,8 @@ type DateTimeSpanCalendarProps = SharedUIProps & {
   onAddTime: () => void
   onClearTime: () => void
   onAddEndTime: () => void
+  startTimeError?: boolean
+  endTimeError?: boolean
   disabledDate?: (date: Date) => boolean
   minDate?: Date
   maxDate?: Date
@@ -237,16 +268,22 @@ type DateTimeSpanCalendarProps = SharedUIProps & {
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
   precision: DatePrecision
   use12Hours: boolean
+  enableRangeHoverPreview?: boolean
   minuteStep: number
   quickTimeStep?: number
   enableTimeKeyboardInput?: boolean
   enableTimeUnitPopover?: boolean
+  enableTimeUnitScrollAnimation?: boolean
+  enableHeaderScrollAnimation?: boolean
   enableTimeInputWheel?: boolean
   timeIcon?: ReactNode
   addEndTimeIcon?: ReactNode
   timeDropdownClassName?: string
   timeDropdownZIndex?: number
+  dropdownZIndex?: number
   confirmLoading?: boolean
+  /** 业务确认被拒绝时在确认按钮上方展示的错误内容 */
+  validationMessage?: ReactNode
   onConfirm: () => void
   onMouseLeave: () => void
   yearRange?: number

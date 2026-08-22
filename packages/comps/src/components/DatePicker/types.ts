@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { DatePickerRangeFormatter } from 'utils'
 
 /** 日期精度类型（DatePicker 只支持日期+时间精度，选择年月请使用 MonthPicker/YearPicker） */
 export type DatePrecision = 'day' | 'hour' | 'minute' | 'second'
@@ -86,7 +87,7 @@ export interface DatePickerTriggerContext extends BasePickerTriggerContext {
 /** DateRangePicker 自定义 trigger 渲染的上下文 */
 export interface DateRangePickerTriggerContext extends BasePickerTriggerContext {
   /** 当前选中的范围 */
-  value: { start: Date | null, end: Date | null }
+  value: { start: Date | null; end: Date | null }
   /** 开始日期格式化显示 */
   startValue: string
   /** 结束日期格式化显示 */
@@ -257,7 +258,7 @@ export interface RangeSelectionProps {
   /** 日期范围选择模式 */
   rangeMode?: boolean
   /** 选中的日期范围 */
-  selectedRange?: { start: Date | null, end: Date | null }
+  selectedRange?: { start: Date | null; end: Date | null }
   /** 当前正在编辑的范围类型 */
   selectingType?: 'start' | 'end'
   /** 正在编辑的类型变更回调 */
@@ -288,6 +289,13 @@ export interface DatePickerProps extends PickerProps<Date> {
    */
   enableTimeUnitPopover?: boolean
   /**
+   * 自动定位已选中时、分、秒选项时是否使用平滑滚动
+   *
+   * 关闭后仍会立即将目标选项滚动到可视区域
+   * @default true
+   */
+  enableTimeUnitScrollAnimation?: boolean
+  /**
    * 聚焦分段时、分、秒输入框时，允许鼠标滚轮调整当前字段
    * @default true
    */
@@ -314,12 +322,16 @@ export interface CalendarProps extends BaseCalendarProps, RangeSelectionProps, S
   disabledDate?: (date: Date) => boolean
   /** 周起始日 */
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  /** 范围选择中是否根据悬停日期预览区间 @default true */
+  enableRangeHoverPreview?: boolean
   /** 日期精度 */
   precision?: DatePrecision
   /** 是否允许键盘直接编辑时、分、秒 */
   enableTimeKeyboardInput?: boolean
   /** 是否允许通过数字浮层选择时、分、秒 */
   enableTimeUnitPopover?: boolean
+  /** 自动定位已选中时、分、秒选项时是否使用平滑滚动 @default true */
+  enableTimeUnitScrollAnimation?: boolean
   /**
    * 聚焦分段时、分、秒输入框时，允许鼠标滚轮调整当前字段
    * @default true
@@ -354,6 +366,10 @@ export interface CalendarProps extends BaseCalendarProps, RangeSelectionProps, S
 export interface CalendarHeaderProps extends BaseCalendarProps, SharedUIProps {
   /** 月份变更回调 */
   onMonthChange: (date: Date) => void
+  /** Header 年月下拉的浮层层级 */
+  dropdownZIndex?: number
+  /** 年月下拉自动定位当前选项时是否使用平滑滚动 @default true */
+  enableScrollAnimation?: boolean
   /**
    * 年份范围
    * @default 20
@@ -370,6 +386,8 @@ export interface CalendarGridProps extends BaseCalendarProps, RangeSelectionProp
   disabledDate?: (date: Date) => boolean
   /** 周起始日 */
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  /** 范围选择中是否根据悬停日期预览区间 @default true */
+  enableRangeHoverPreview?: boolean
 }
 
 export interface CalendarCellProps extends SharedUIProps {
@@ -464,6 +482,8 @@ export interface DateRangePickerProps extends Omit<PickerProps<DateRangePickerVa
   calendarClassName?: string
   /** 周起始日（0 = 周日, 1 = 周一） */
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  /** 范围选择中是否根据悬停日期预览区间 @default true */
+  enableRangeHoverPreview?: boolean
   /** 开始日期占位符 */
   startPlaceholder?: string
   /** 结束日期占位符 */
@@ -482,6 +502,11 @@ export interface DateRangePickerProps extends Omit<PickerProps<DateRangePickerVa
    * @default true
    */
   enableTimeUnitPopover?: boolean
+  /**
+   * 自动定位已选中时、分、秒选项时是否使用平滑滚动
+   * @default true
+   */
+  enableTimeUnitScrollAnimation?: boolean
   /**
    * 聚焦分段时、分、秒输入框时，允许鼠标滚轮调整当前字段
    * @default true
@@ -515,8 +540,8 @@ export interface DateRangePickerProps extends Omit<PickerProps<DateRangePickerVa
  *
  * 点选规则固定为：空 → 单日 → 区间 → 新单日；再次点击当前单日则清空
  */
-export interface DateSpanPickerProps extends Omit<BasePickerProps, 'closeOnSelect' | 'minuteStep' | 'use12Hours' | 'placeholder'
-  | 'timeDropdownClassName' | 'timeDropdownZIndex'> {
+export interface DateSpanPickerProps
+  extends Omit<BasePickerProps, 'closeOnSelect' | 'minuteStep' | 'use12Hours' | 'placeholder' | 'timeDropdownClassName' | 'timeDropdownZIndex'> {
   /** 当前选择；`end: null` 表示单日 */
   value?: DateSpanPickerValue
   /** 非受控模式的初始选择 */
@@ -533,6 +558,8 @@ export interface DateSpanPickerProps extends Omit<BasePickerProps, 'closeOnSelec
   calendarClassName?: string
   /** 周起始日 */
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
+  /** 范围选择中是否根据悬停日期预览区间 @default true */
+  enableRangeHoverPreview?: boolean
   /** 触发器无值时的提示文本 */
   placeholder?: string
   /** 范围分隔符 */
@@ -550,7 +577,8 @@ export interface DateSpanPickerProps extends Omit<BasePickerProps, 'closeOnSelec
  *
  * 默认只编辑日期；点击面板底部 Add time 后才显示时刻块
  */
-export interface DateTimeSpanPickerProps extends Omit<DateSpanPickerProps, 'value' | 'defaultValue' | 'onChange' | 'onConfirm' | 'onCancel' | 'renderTrigger' | 'onAddTime'> {
+export interface DateTimeSpanPickerProps
+  extends Omit<DateSpanPickerProps, 'value' | 'defaultValue' | 'onChange' | 'onConfirm' | 'onCancel' | 'renderTrigger' | 'onAddTime'> {
   /** 当前选择；hasTime 表示是否显示并保存时刻 */
   value?: DateTimeSpanPickerValue
   /** 非受控模式的初始选择 */
@@ -565,16 +593,33 @@ export interface DateTimeSpanPickerProps extends Omit<DateSpanPickerProps, 'valu
   precision?: Exclude<DatePrecision, 'day'>
   /** 同日含起止时刻时使用的分隔符；未传时沿用 separator */
   sameDaySeparator?: string
+  /** 自定义日期范围展示文本；未传时使用 DatePicker 默认格式 */
+  rangeFormatter?: DatePickerRangeFormatter
   /**
    * 同时存在 Start / End 时，修改 Start 后是否按原完整时长同步 End
    * 同步可能自然跨日
    * @default false
    */
   syncEndTimeWithStart?: boolean
+  /**
+   * 默认生成 End 时刻时，相对 Start 增加的分钟数
+   * 未传时沿用 minuteStep
+   * @default minuteStep
+   */
+  defaultEndTimeOffsetMinutes?: number
   /** 是否允许键盘直接编辑时、分、秒 */
   enableTimeKeyboardInput?: boolean
   /** 是否允许通过数字浮层选择时、分、秒 */
   enableTimeUnitPopover?: boolean
+  /** 自动定位已选中时、分、秒选项时是否使用平滑滚动 @default true */
+  enableTimeUnitScrollAnimation?: boolean
+  /**
+   * 自动定位当前年份或月份选项时是否使用平滑滚动
+   *
+   * 关闭后仍会立即将目标选项滚动到可视区域
+   * @default true
+   */
+  enableHeaderScrollAnimation?: boolean
   /**
    * 聚焦分段时、分、秒输入框时，允许鼠标滚轮调整当前字段
    * @default true
@@ -596,6 +641,8 @@ export interface DateTimeSpanPickerProps extends Omit<DateSpanPickerProps, 'valu
   addEndTimeIcon?: ReactNode
   /** 自定义渲染 trigger */
   renderTrigger?: (context: DateTimeSpanPickerTriggerContext) => ReactNode
+  /** 根据当前草稿为 Start / End 时刻字段提供调用方定义的错误状态，不改变确认策略 */
+  getTimeFieldErrors?: (value: DateTimeSpanPickerValue) => DateTimeSpanPickerTimeFieldErrors | null | undefined
 }
 
 /** 单日或连续日期段值；单日使用 `end: null` 表示 */
@@ -607,6 +654,12 @@ export interface DateSpanPickerValue {
 /** 日历日期段及其是否已添加时刻的明确状态 */
 export interface DateTimeSpanPickerValue extends DateSpanPickerValue {
   hasTime: boolean
+}
+
+/** DateTimeSpanPicker 内部 Start / End 时刻字段的调用方校验状态 */
+export interface DateTimeSpanPickerTimeFieldErrors {
+  start?: boolean
+  end?: boolean
 }
 
 export interface DateRangePickerValue {
@@ -625,7 +678,19 @@ export interface DateRangePickerConfirmContext extends DateRangePickerActionCont
   reason: 'confirm'
 }
 
-export type DateRangePickerConfirmResult = boolean | void | Promise<boolean | void>
+/** 选择器确认被拒绝时的错误内容 */
+export interface PickerValidationFailure {
+  valid: false
+  /** 展示在触发器下方的校验错误内容 */
+  message?: ReactNode
+}
+
+/** 确认成功、拒绝或异步确认结果 */
+export type DateRangePickerConfirmResult =
+  | boolean
+  | void
+  | PickerValidationFailure
+  | Promise<boolean | void | PickerValidationFailure>
 
 export interface DateRangePickerCancelContext extends DateRangePickerActionContext {
   reason: 'outside' | 'escape' | 'trigger' | 'programmatic'
@@ -640,7 +705,8 @@ export interface DateTimeSpanPickerCancelContext extends DateRangePickerActionCo
 }
 
 /** 时间选择器属性 */
-export interface TimePickerProps extends Pick<BasePickerProps, 'disabled' | 'className' | 'use12Hours' | 'timeIcon' | 'timeDropdownClassName' | 'timeDropdownZIndex'> {
+export interface TimePickerProps
+  extends Pick<BasePickerProps, 'disabled' | 'className' | 'use12Hours' | 'timeIcon' | 'timeDropdownClassName' | 'timeDropdownZIndex'> {
   /** 当前时间（Date 对象） */
   value: Date
   /** 是否以错误样式展示时刻块 */
@@ -659,6 +725,11 @@ export interface TimePickerProps extends Pick<BasePickerProps, 'disabled' | 'cla
    * @default true
    */
   enableTimeUnitPopover?: boolean
+  /**
+   * 自动定位已选中时、分、秒选项时是否使用平滑滚动
+   * @default true
+   */
+  enableTimeUnitScrollAnimation?: boolean
   /**
    * 聚焦分段时、分、秒输入框时，允许鼠标滚轮调整当前字段
    * @default true

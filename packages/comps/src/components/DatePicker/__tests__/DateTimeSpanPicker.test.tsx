@@ -1,22 +1,15 @@
-import type { DateTimeSpanPickerTriggerContext, DateTimeSpanPickerValue } from '../types'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { addDays, addMinutes, format, parseISO, startOfMonth } from 'date-fns'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { DateTimeSpanPicker } from '../DateTimeSpanPicker'
+import type { DateTimeSpanPickerTriggerContext, DateTimeSpanPickerValue } from '../types'
 import { DATE_2026_07_04 } from './fixtures'
-import {
-  ControlledDateTimeSpanPicker,
-  expectDate,
-  LinkedDateTimeSpanPicker,
-  renderWithI18n,
-} from './test-utils'
+import { ControlledDateTimeSpanPicker, expectDate, LinkedDateTimeSpanPicker, renderWithI18n } from './test-utils'
 
 describe('dateTimeSpanPicker', () => {
   it('为自定义 trigger 提供单日、同日时段和跨日时段的统一展示值', () => {
-    const renderValue = (label: string) => (context: DateTimeSpanPickerTriggerContext) => (
-      <span>{ `${label}: ${context.displayValue}` }</span>
-    )
+    const renderValue = (label: string) => (context: DateTimeSpanPickerTriggerContext) => <span>{ `${label}: ${context.displayValue}` }</span>
 
     renderWithI18n(
       <>
@@ -38,18 +31,35 @@ describe('dateTimeSpanPicker', () => {
           sameDaySeparator="-"
           renderTrigger={ renderValue('cross-day') }
         />
+        <DateTimeSpanPicker
+          value={ { start: parseISO('2026-07-04T10:00:00'), end: parseISO('2026-07-06T11:30:00'), hasTime: false } }
+          separator=" - "
+          renderTrigger={ renderValue('same-year-all-day') }
+        />
+        <DateTimeSpanPicker
+          value={ { start: parseISO('2026-12-31T23:00:00'), end: parseISO('2027-01-01T01:30:00'), hasTime: true } }
+          separator=" - "
+          renderTrigger={ renderValue('cross-year') }
+        />
+        <DateTimeSpanPicker
+          value={ { start: parseISO('2026-07-04T10:00:00'), end: parseISO('2026-07-06T11:30:00'), hasTime: true } }
+          separator=" - "
+          rangeFormatter={ ({ startText, endText, separator }) => startText + separator + endText }
+          renderTrigger={ renderValue('custom-range') }
+        />
       </>,
     )
 
     expect(screen.getByText('single: 2026 年 07 月 04 日 10:00')).toBeTruthy()
     expect(screen.getByText('same-day: 2026 年 07 月 04 日 10:00-11:30')).toBeTruthy()
-    expect(screen.getByText('cross-day: 2026 年 07 月 04 日 10:00 - 2026 年 07 月 06 日 11:30')).toBeTruthy()
+    expect(screen.getByText('cross-day: 2026 年 07 月 04 日 10:00 - 07 月 06 日 11:30')).toBeTruthy()
+    expect(screen.getByText('same-year-all-day: 2026 年 07 月 04 日 - 07 月 06 日')).toBeTruthy()
+    expect(screen.getByText('cross-year: 2026 年 12 月 31 日 23:00 - 2027 年 01 月 01 日 01:30')).toBeTruthy()
+    expect(screen.getByText('custom-range: 2026 年 07 月 04 日 10:00 - 2026 年 07 月 06 日 11:30')).toBeTruthy()
   })
 
   it('format 直接作用于默认 trigger 与 renderTrigger 的 displayValue', () => {
-    const renderValue = (label: string) => (context: DateTimeSpanPickerTriggerContext) => (
-      <span>{ `${label}: ${context.displayValue}` }</span>
-    )
+    const renderValue = (label: string) => (context: DateTimeSpanPickerTriggerContext) => <span>{ `${label}: ${context.displayValue}` }</span>
 
     renderWithI18n(
       <>
@@ -64,11 +74,18 @@ describe('dateTimeSpanPicker', () => {
           format="dd/MM/yyyy"
           renderTrigger={ renderValue('custom') }
         />
+        <DateTimeSpanPicker
+          value={ { start: parseISO('2026-07-04T10:00:00'), end: parseISO('2026-07-06T11:30:00'), hasTime: true } }
+          separator=" ~ "
+          format="yyyy-MM-dd"
+          renderTrigger={ renderValue('same-year-custom') }
+        />
       </>,
     )
 
     expect(screen.getByText('04/07/2026 10:00 ~ 11:30')).toBeTruthy()
     expect(screen.getByText('custom: 04/07/2026 10:00 ~ 11:30')).toBeTruthy()
+    expect(screen.getByText('same-year-custom: 2026-07-04 10:00 ~ 07-06 11:30')).toBeTruthy()
   })
 
   it('日期先保持全天，开启 Add time 后才进入时刻编辑', async () => {
@@ -90,7 +107,7 @@ describe('dateTimeSpanPicker', () => {
     expect(timeValue.hasTime).toBe(true)
     expect(timeValue.end).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '添加结束时刻' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加结束时间' }))
 
     const rangedValue = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
     const expectedEnd = addMinutes(rangedValue.start!, 15)
@@ -113,7 +130,7 @@ describe('dateTimeSpanPicker', () => {
     expect(clearedTimeValue.end).toBeNull()
   })
 
-  it('日期段开启 Add time 后保留日期，并为起止日创建独立且相同的当前时刻', async () => {
+  it('日期段开启 Add time 后保留日期，并按外部配置生成结束时刻', async () => {
     const onChange = vi.fn()
     const startDate = addDays(startOfMonth(new Date()), 9)
     const endDate = addDays(startDate, 2)
@@ -128,8 +145,61 @@ describe('dateTimeSpanPicker', () => {
     expect(value.hasTime).toBe(true)
     expectDate(value.start, startDate.getFullYear(), startDate.getMonth(), startDate.getDate())
     expectDate(value.end, endDate.getFullYear(), endDate.getMonth(), endDate.getDate())
-    expect(value.start?.getHours()).toBe(value.end?.getHours())
-    expect(value.start?.getMinutes()).toBe(value.end?.getMinutes())
+    const expectedEndTime = addMinutes(value.start!, 15)
+    expect(value.end?.getHours()).toBe(expectedEndTime.getHours())
+    expect(value.end?.getMinutes()).toBe(expectedEndTime.getMinutes())
+  })
+
+  it('已有单日开始时刻时，点击其他日期按外部配置生成区间结束时刻', async () => {
+    const onChange = vi.fn()
+    renderWithI18n(
+      <DateTimeSpanPicker
+        defaultValue={ {
+          start: parseISO('2026-07-04T16:49:00'),
+          end: null,
+          hasTime: true,
+        } }
+        defaultEndTimeOffsetMinutes={ 15 }
+        onChange={ onChange }
+      />,
+    )
+
+    fireEvent.click(screen.getByText('2026 年 07 月 04 日 16:49'))
+    fireEvent.click(await screen.findByRole('button', { name: '2026-07-06' }))
+
+    const value = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
+    expect(value.start?.getTime()).toBe(parseISO('2026-07-04T16:49:00').getTime())
+    expect(value.end?.getTime()).toBe(parseISO('2026-07-06T17:04:00').getTime())
+  })
+
+  it('跨午夜时把偏移后的时分保留在已选结束日', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(parseISO('2026-07-04T23:50:00'))
+
+    try {
+      const onChange = vi.fn()
+      renderWithI18n(
+        <DateTimeSpanPicker
+          defaultValue={ {
+            start: parseISO('2026-07-04T00:00:00'),
+            end: parseISO('2026-07-05T00:00:00'),
+            hasTime: false,
+          } }
+          defaultEndTimeOffsetMinutes={ 15 }
+          onChange={ onChange }
+          open
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('checkbox', { name: '添加时间', hidden: true }))
+
+      const value = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
+      expect(value.start?.getTime()).toBe(parseISO('2026-07-04T23:50:00').getTime())
+      expect(value.end?.getTime()).toBe(parseISO('2026-07-05T00:05:00').getTime())
+    }
+    finally {
+      vi.useRealTimers()
+    }
   })
 
   it('可选地在开始时间变化时保持同日时长', async () => {
@@ -158,7 +228,7 @@ describe('dateTimeSpanPicker', () => {
       />,
     )
 
-    fireEvent.click(screen.getByText('2026 年 07 月 04 日 10:00 ~ 2026 年 07 月 06 日 11:30'))
+    fireEvent.click(screen.getByText('2026 年 07 月 04 日 10:00 ~ 07 月 06 日 11:30'))
     const startHour = (await screen.findAllByRole('textbox', { name: '时' }))[0]
     fireEvent.change(startHour, { target: { value: '12' } })
 
@@ -213,13 +283,33 @@ describe('dateTimeSpanPicker', () => {
 
     expect(screen.getByRole('alert').textContent).toBe('结束时间不得早于开始时间')
 
-    const confirmButton = screen.getByRole('button', { name: '确认' })
+    const confirmButton = screen.getByRole('button', { name: '完成' })
     expect(confirmButton).toHaveProperty('disabled', true)
     fireEvent.click(confirmButton)
     fireEvent.keyDown(document, { key: 'Enter' })
 
     expect(onConfirm).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '完成' })).toBeTruthy()
+  })
+
+  it('将调用方的 Start / End 业务校验映射到对应时刻字段', async () => {
+    renderWithI18n(
+      <DateTimeSpanPicker
+        value={ {
+          start: parseISO('2026-07-04T10:00:00'),
+          end: parseISO('2026-07-04T11:30:00'),
+          hasTime: true,
+        } }
+        open
+        precision="minute"
+        getTimeFieldErrors={ () => ({ start: true, end: false }) }
+      />,
+    )
+
+    const [startHour, endHour] = await screen.findAllByRole('textbox', { name: '时' })
+
+    expect(startHour.closest('[aria-invalid="true"]')).toBeTruthy()
+    expect(endHour.closest('[aria-invalid="true"]')).toBeNull()
   })
 
   it('透传 enableTimeKeyboardInput 与 enableTimeUnitPopover 到内部 TimePicker', async () => {
@@ -238,5 +328,28 @@ describe('dateTimeSpanPicker', () => {
 
     expect(screen.queryByRole('textbox', { name: '时' })).toBeNull()
     expect(screen.queryByRole('button', { name: '时' })).toBeNull()
+  })
+
+  it('关闭年月下拉滚动动画后仍立即定位当前选项', async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    renderWithI18n(
+      <DateTimeSpanPicker
+        defaultValue={ { start: DATE_2026_07_04, end: null, hasTime: false } }
+        open
+        enableHeaderScrollAnimation={ false }
+      />,
+    )
+
+    fireEvent.click((await screen.findAllByRole('combobox'))[0])
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'instant',
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    })
   })
 })

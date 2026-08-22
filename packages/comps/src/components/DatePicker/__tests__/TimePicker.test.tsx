@@ -88,6 +88,31 @@ describe('timePicker', () => {
     })
   })
 
+  it('关闭数字浮层滚动动画后仍立即定位已选选项', async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+
+    renderWithI18n(
+      <TimePicker
+        value={ DATE_TIME_2026_07_04_10_15 }
+        onChange={ vi.fn() }
+        precision="minute"
+        enableTimeUnitScrollAnimation={ false }
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('textbox', { name: '时' }))
+    const selectedHour = await screen.findByRole('button', { name: '10' })
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'instant',
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    })
+    expect(scrollIntoView.mock.contexts).toContain(selectedHour)
+  })
+
   it('允许键盘输入但不打开数字弹出层', () => {
     const onChange = vi.fn()
     renderWithI18n(
@@ -137,7 +162,7 @@ describe('timePicker', () => {
     expect(screen.getByRole('textbox', { name: '秒' })).toBeTruthy()
   })
 
-  it('提交完整的键盘片段、移动焦点并拒绝无效值', () => {
+  it('提交完整的键盘片段、移动焦点并无错误态地恢复无效值', () => {
     const onChange = vi.fn()
     renderWithI18n(
       <TimePicker
@@ -160,7 +185,7 @@ describe('timePicker', () => {
 
     expect(onChange).toHaveBeenCalledTimes(1)
     expect((minuteInput as HTMLInputElement).value).toBe('15')
-    expect(minuteInput.getAttribute('aria-invalid')).toBe('true')
+    expect(minuteInput.getAttribute('aria-invalid')).toBe('false')
   })
 
   it('移动焦点到下一个输入时保留已完成的 24 小时制片段', async () => {

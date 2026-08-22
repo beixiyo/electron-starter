@@ -1,6 +1,5 @@
 'use client'
 
-import type { CalendarProps } from './types'
 import { useLatestCallback } from 'hooks'
 import { Clock } from 'lucide-react'
 import { memo, useMemo } from 'react'
@@ -11,6 +10,7 @@ import { CalendarGrid } from './CalendarGrid'
 import { CalendarHeader } from './CalendarHeader'
 import { DATA_DATE_PICKER_IGNORE } from './constants'
 import { TimePicker } from './TimePicker'
+import type { CalendarProps } from './types'
 
 export const Calendar = memo<CalendarProps>(({
   currentMonth: externalCurrentMonth,
@@ -22,6 +22,7 @@ export const Calendar = memo<CalendarProps>(({
   maxDate,
   className,
   weekStartsOn = 1,
+  enableRangeHoverPreview = true,
   rangeMode = false,
   selectedRange,
   tempDate,
@@ -49,6 +50,7 @@ export const Calendar = memo<CalendarProps>(({
   quickTimeStep,
   enableTimeKeyboardInput = true,
   enableTimeUnitPopover = true,
+  enableTimeUnitScrollAnimation = true,
   enableTimeInputWheel = true,
 }) => {
   const t = useT()
@@ -61,7 +63,7 @@ export const Calendar = memo<CalendarProps>(({
     || selectedRange?.start
     || new Date()
 
-  // CalendarHeader 会调用 onMonthChange，通过 onCurrentMonthChange 回调给父组件
+  /** CalendarHeader 会调用 onMonthChange，通过 onCurrentMonthChange 回调给父组件 */
   const handleMonthChange = useLatestCallback((date: Date) => {
     onCurrentMonthChange?.(date)
   })
@@ -84,20 +86,15 @@ export const Calendar = memo<CalendarProps>(({
    * 仅在显示时间选择器时才计算（含 new Date() 兜底），避免每次渲染都创建新 Date 引用
    */
   const timeValue = useMemo(() => {
-    if (!showTimePicker)
-      return null
+    if (!showTimePicker) return null
 
     if (rangeMode) {
       /** 范围模式：优先使用正在编辑的一侧的时间 */
-      if (selectingType === 'start' && selectedRange?.start)
-        return selectedRange.start
-      if (selectingType === 'end' && selectedRange?.end)
-        return selectedRange.end
+      if (selectingType === 'start' && selectedRange?.start) return selectedRange.start
+      if (selectingType === 'end' && selectedRange?.end) return selectedRange.end
       /** 降级逻辑 */
-      if (selectedRange?.end)
-        return selectedRange.end
-      if (selectedRange?.start)
-        return selectedRange.start
+      if (selectedRange?.end) return selectedRange.end
+      if (selectedRange?.start) return selectedRange.start
       return new Date()
     }
 
@@ -132,6 +129,7 @@ export const Calendar = memo<CalendarProps>(({
           selectedDate={ selectedDate }
           onSelect={ onSelect }
           disabledDate={ disabledDate }
+          enableRangeHoverPreview={ enableRangeHoverPreview }
           minDate={ minDate }
           maxDate={ maxDate }
           weekStartsOn={ weekStartsOn }
@@ -159,6 +157,7 @@ export const Calendar = memo<CalendarProps>(({
             quickTimeStep={ quickTimeStep }
             enableTimeKeyboardInput={ enableTimeKeyboardInput }
             enableTimeUnitPopover={ enableTimeUnitPopover }
+            enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
             enableTimeInputWheel={ enableTimeInputWheel }
           />
         ) }
@@ -168,14 +167,16 @@ export const Calendar = memo<CalendarProps>(({
             className="flex items-center justify-between"
             { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
           >
-            { onAddTime && <Button
-              variant="secondary"
-              className="border-none text-text3"
-              onClick={ () => onAddTime?.() }
-              leftIcon={ TimeIcon }
-            >
-              { t('datePicker.addTime') || 'Add Time' }
-            </Button>}
+            { onAddTime && (
+              <Button
+                variant="secondary"
+                className="border-none text-text3"
+                onClick={ () => onAddTime?.() }
+                leftIcon={ TimeIcon }
+              >
+                { t('datePicker.addTime') || 'Add Time' }
+              </Button>
+            ) }
 
             <Button variant="primary" onClick={ onConfirm } loading={ confirmLoading }>
               { t('datePicker.confirm') || '确认' }

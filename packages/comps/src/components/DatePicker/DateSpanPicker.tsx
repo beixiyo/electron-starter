@@ -53,6 +53,7 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
   errorMessage,
   showClear = false,
   weekStartsOn = 1,
+  enableRangeHoverPreview = true,
   yearRange,
   icon,
   prevIcon,
@@ -114,6 +115,7 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
   const {
     confirming,
     confirmRejected,
+    validationMessage,
     resetRejection,
     cancel: handleCancel,
     confirm: handleConfirm,
@@ -204,8 +206,10 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
       className={ className }
       dropdownClassName={ dropdownClassName }
       dropdownZIndex={ dropdownZIndex }
-      error={ !!actualError }
-      errorMessage={ actualErrorMessage }
+      error={ !!actualError || confirmRejected }
+      errorMessage={ actualError
+        ? actualErrorMessage
+        : validationMessage }
       dropdown={
         <DateSpanCalendar
           currentMonth={ currentMonth }
@@ -219,6 +223,7 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
           maxDate={ maxDate }
           className={ calendarClassName }
           weekStartsOn={ weekStartsOn }
+          enableRangeHoverPreview={ enableRangeHoverPreview }
           onMouseLeave={ () => setTempDate(null) }
           onConfirm={ () => { void handleConfirm() } }
           confirmLoading={ confirming }

@@ -3,24 +3,27 @@
 import type { DatePickerRef, DateRangePickerValue, DateSpanPickerValue, DateTimeSpanPickerValue } from './types'
 import { addMonths, subMonths } from 'date-fns'
 import { useRef, useState } from 'react'
+import { cn } from 'utils'
 import { Button } from '../Button'
 import { GithubSourceLink } from '../GithubSourceLink'
 import { ThemeToggle } from '../ThemeToggle'
 import { DatePicker, DateRangePicker, DateSpanPicker, DateTimeSpanPicker, MonthPicker, YearPicker } from './index'
 
-const cardClass = 'rounded-xl border border-border bg-background3 p-4 flex flex-col gap-3 min-w-0'
+const cardClass = 'rounded-xl border border-border bg-background2 p-4 flex flex-col gap-3 min-w-0'
 
 function DemoCard({
   title,
   children,
   valueText,
+  className,
 }: {
   title: string
   children: React.ReactNode
   valueText?: React.ReactNode
+  className?: string
 }) {
   return (
-    <div className={ cardClass }>
+    <div className={ cn(cardClass, className) }>
       <p className="text-sm font-medium text-text shrink-0">{ title }</p>
       <div className="min-h-9 flex items-center">{ children }</div>
       { valueText != null && <p className="text-xs text-text2 mt-auto">{ valueText }</p> }
@@ -30,6 +33,7 @@ function DemoCard({
 
 function DatePickerTest() {
   const [value1, setValue1] = useState<Date | null>(null)
+  const [rangeHoverPreviewValue, setRangeHoverPreviewValue] = useState<DateRangePickerValue>({ start: null, end: null })
   const [value3, setValue3] = useState<Date | null>(null)
   const [value4, setValue4] = useState<Date | null>(null)
   const [customRenderValue, setCustomRenderValue] = useState<Date | null>(null)
@@ -54,6 +58,7 @@ function DatePickerTest() {
     end: null,
   })
   const [spanValue, setSpanValue] = useState<DateSpanPickerValue>({ start: null, end: null })
+  const [spanHoverPreviewValue, setSpanHoverPreviewValue] = useState<DateSpanPickerValue>({ start: null, end: null })
   const [spanStatus, setSpanStatus] = useState('未确认')
   const [dateTimeSpanValue, setDateTimeSpanValue] = useState<DateTimeSpanPickerValue>({
     start: null,
@@ -69,6 +74,11 @@ function DatePickerTest() {
     start: null,
     end: null,
     hasTime: false,
+  })
+  const [dateTimeSpanNoScrollAnimationValue, setDateTimeSpanNoScrollAnimationValue] = useState<DateTimeSpanPickerValue>({
+    start: new Date(2026, 7, 21, 20, 45),
+    end: null,
+    hasTime: true,
   })
 
   const [rangePrecisionMinute, setRangePrecisionMinute] = useState<{
@@ -313,6 +323,13 @@ function DatePickerTest() {
                 showClear
               />
             </DemoCard>
+            <DemoCard title="关闭区间 hover 预览" valueText="单日后悬停不预览；点击第二日仍展示区间">
+              <DateSpanPicker
+                value={ spanHoverPreviewValue }
+                onChange={ setSpanHoverPreviewValue }
+                enableRangeHoverPreview={ false }
+              />
+            </DemoCard>
           </div>
         </section>
 
@@ -346,6 +363,15 @@ function DatePickerTest() {
                 enableTimeKeyboardInput={ false }
               />
             </DemoCard>
+            <DemoCard title="年月与数字列表 · 关闭滚动动画" valueText={ formatDateTimeSpan(dateTimeSpanNoScrollAnimationValue) }>
+              <DateTimeSpanPicker
+                value={ dateTimeSpanNoScrollAnimationValue }
+                onChange={ setDateTimeSpanNoScrollAnimationValue }
+                precision="second"
+                enableTimeUnitScrollAnimation={ false }
+                enableHeaderScrollAnimation={ false }
+              />
+            </DemoCard>
           </div>
         </section>
 
@@ -362,6 +388,13 @@ function DatePickerTest() {
                 : '未选择' }
             >
               <DateRangePicker value={ rangeValue1 } onChange={ setRangeValue1 } />
+            </DemoCard>
+            <DemoCard title="关闭区间 hover 预览" valueText="选择起点后，悬停其他日期不预览区间">
+              <DateRangePicker
+                value={ rangeHoverPreviewValue }
+                onChange={ setRangeHoverPreviewValue }
+                enableRangeHoverPreview={ false }
+              />
             </DemoCard>
             <DemoCard
               title="日期范围限制"
@@ -458,29 +491,44 @@ function DatePickerTest() {
               />
             </DemoCard>
             <DemoCard
-              title="快捷时刻与异步确认"
+              title="自定义业务校验与错误内容"
               valueText={ `${formatDateTime(quickTimeRange.start)} ~ ${formatDateTime(quickTimeRange.end)} · ${quickTimeStatus}` }
+              className="sm:col-span-2 xl:col-span-2"
             >
-              <DateRangePicker
-                value={ quickTimeRange }
-                onChange={ setQuickTimeRange }
-                onConfirm={ async (range) => {
-                  setQuickTimeStatus('确认中…')
-                  await wait(800)
+              <div className="w-full space-y-3">
+                <p className="text-xs leading-5 text-text2">
+                  业务规则：时段至少持续 60 分钟。默认值为 30 分钟，首次确认会展示自定义错误内容并保持面板打开。
+                </p>
+                <DateRangePicker
+                  value={ quickTimeRange }
+                  onChange={ setQuickTimeRange }
+                  onConfirm={ async (range) => {
+                    setQuickTimeStatus('校验中…')
+                    await wait(500)
 
-                  if (range.start && range.end && range.end < range.start) {
-                    setQuickTimeStatus('已拒绝：结束时间早于开始时间')
-                    return false
-                  }
+                    const duration = getRangeDurationMinutes(range)
+                    if (duration === null || duration < 60) {
+                      setQuickTimeStatus('业务校验未通过')
+                      return {
+                        valid: false,
+                        message: (
+                          <span className="flex flex-col gap-0.5">
+                            <span className="font-medium">预约时段不能少于 60 分钟</span>
+                            <span className="text-text2">请调整结束时间后再次确认</span>
+                          </span>
+                        ),
+                      }
+                    }
 
-                  setQuickTimeStatus('已确认')
-                } }
-                onCancel={ () => setQuickTimeStatus('已取消并恢复') }
-                precision="minute"
-                minuteStep={ 30 }
-                quickTimeStep={ 30 }
-                closeOnSelect={ false }
-              />
+                    setQuickTimeStatus(`已确认 · 共 ${duration} 分钟`)
+                  } }
+                  onCancel={ () => setQuickTimeStatus('已取消并恢复') }
+                  precision="minute"
+                  minuteStep={ 30 }
+                  quickTimeStep={ 30 }
+                  closeOnSelect={ false }
+                />
+              </div>
             </DemoCard>
           </div>
         </section>
@@ -584,6 +632,13 @@ function formatDateTimeSpan(value: DateTimeSpanPickerValue): string {
   return value.hasTime
     ? `${dateText} · 已添加时刻`
     : `${dateText} · 全天`
+}
+
+function getRangeDurationMinutes(value: DateRangePickerValue): number | null {
+  if (!value.start || !value.end)
+    return null
+
+  return Math.round((value.end.getTime() - value.start.getTime()) / 60_000)
 }
 
 function wait(ms: number): Promise<void> {

@@ -1,8 +1,8 @@
-import type { CascaderOption, CascaderRef } from '../types'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { Cascader } from '../Cascader'
+import type { CascaderOption, CascaderRef } from '../types'
 
 const options: CascaderOption[] = Array.from({ length: 10 }, (_, index) => ({
   value: `option-${index}`,
@@ -84,6 +84,47 @@ describe('cascader', () => {
     expect(onChange.mock.calls[0]?.[0]).toBe('custom-value')
   })
 
+  it('可在选项前显示分隔线且不影响选择', () => {
+    const onChange = vi.fn()
+    render(
+      <Cascader
+        options={ [
+          { value: 'preset', label: 'Preset' },
+          { value: 'custom', label: 'Custom', separatorBefore: <div data-testid="custom-separator" /> },
+        ] }
+        onChange={ onChange }
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('combobox'))
+
+    expect(screen.getByTestId('custom-separator')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('option', { name: 'Custom' }))
+    expect(onChange.mock.calls[0]?.[0]).toBe('custom')
+  })
+
+  it('受控值未被外部接受时不保留临时选中态', () => {
+    const onChange = vi.fn()
+    render(
+      <Cascader
+        options={ [
+          { value: 'preset', label: 'Preset' },
+          { value: 'custom', label: 'Custom' },
+        ] }
+        value=""
+        onChange={ onChange }
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('option', { name: 'Custom' }))
+    expect(onChange).toHaveBeenCalledWith('custom', expect.anything())
+
+    fireEvent.click(screen.getByRole('combobox'))
+    expect(screen.getByRole('option', { name: 'Custom' }).getAttribute('aria-selected')).toBe('false')
+  })
+
   it('打开菜单时滚动到当前已渲染的选项', async () => {
     const ref = createRef<CascaderRef>()
     const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
@@ -107,6 +148,32 @@ describe('cascader', () => {
     await waitFor(() => {
       expect(scrollIntoView).toHaveBeenCalledWith({
         behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    })
+    expect(scrollIntoView.mock.contexts).toContain(selectedOption)
+  })
+
+  it('关闭滚动动画后仍立即定位当前选项', async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+
+    render(
+      <Cascader
+        options={ options }
+        value="option-9"
+        dropdownHeight={ 100 }
+        enableScrollAnimation={ false }
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('combobox'))
+    const selectedOption = await screen.findByRole('option', { name: 'Option 9' })
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'instant',
         block: 'nearest',
         inline: 'nearest',
       })

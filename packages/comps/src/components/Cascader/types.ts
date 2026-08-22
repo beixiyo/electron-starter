@@ -15,6 +15,8 @@ export interface CascaderOption {
    * 例如快捷时间项写回后的具体时刻。不参与搜索匹配
    */
   extra?: ReactNode
+  /** 本选项前的自定义分隔内容，由调用方决定节点与样式 */
+  separatorBefore?: ReactNode
   disabled?: boolean
   children?: CascaderOption[]
 }
@@ -125,6 +127,13 @@ export interface CascaderProps extends CascaderOptionClassNamesFromParent {
    * @default false
    */
   searchable?: boolean
+  /**
+   * 自动定位已选中或键盘高亮选项时是否使用平滑滚动
+   *
+   * 关闭后仍会立即将目标选项滚动到可视区域
+   * @default true
+   */
+  enableScrollAnimation?: boolean
   /**
    * 是否可编辑（允许手动输入自定义值，同时可从选项中选择）
    * @default false

@@ -31,15 +31,15 @@ export interface PromptTemplate {
 /**
  * 提示词分类
  */
-export type PromptCategory
-  = | 'code'
-    | 'debug'
-    | 'document'
-    | 'explain'
-    | 'optimize'
-    | 'test'
-    | 'translate'
-    | 'custom'
+export type PromptCategory =
+  | 'code'
+  | 'debug'
+  | 'document'
+  | 'explain'
+  | 'optimize'
+  | 'test'
+  | 'translate'
+  | 'custom'
 
 /**
  * 提示词分类配置
@@ -80,23 +80,23 @@ export interface AutoCompleteSuggestion {
   score?: number
 }
 
-export type ChatInputShortcut
-  = | 'Enter'
-    | 'Shift+Enter'
-    | 'Mod+Enter'
-    | 'Ctrl+Enter'
-    | 'Meta+Enter'
-    | 'Alt+Enter'
-    | 'Mod+Shift+Enter'
-    | 'Ctrl+Shift+Enter'
-    | 'Meta+Shift+Enter'
-    | 'Alt+Shift+Enter'
-    | 'Mod+/'
-    | 'Ctrl+/'
-    | 'Meta+/'
-    | 'Mod+H'
-    | 'Ctrl+H'
-    | 'Meta+H'
+export type ChatInputShortcut =
+  | 'Enter'
+  | 'Shift+Enter'
+  | 'Mod+Enter'
+  | 'Ctrl+Enter'
+  | 'Meta+Enter'
+  | 'Alt+Enter'
+  | 'Mod+Shift+Enter'
+  | 'Ctrl+Shift+Enter'
+  | 'Meta+Shift+Enter'
+  | 'Alt+Shift+Enter'
+  | 'Mod+/'
+  | 'Ctrl+/'
+  | 'Meta+/'
+  | 'Mod+H'
+  | 'Ctrl+H'
+  | 'Meta+H'
 
 export type ChatInputShortcutList = ChatInputShortcut | readonly ChatInputShortcut[]
 
@@ -104,9 +104,15 @@ export type ChatInputShortcutAction = 'send' | 'wrap' | 'openPrompt' | 'openHist
 
 export type ResolvedChatInputShortcuts = Record<ChatInputShortcutAction, ChatInputShortcut[]>
 
+/**
+ * 各动作的按键绑定
+ *
+ * 每个字段三档语义：不填取默认值，空数组是**显式解绑**（该动作不绑任何键），
+ * 其余按给定列表去重后使用
+ */
 export interface ChatInputShortcuts {
   /**
-   * 发送消息的快捷键
+   * 发送消息的快捷键；传 `[]` 解绑（表单类输入常用，配合 `wrap: ['Enter']` 让回车换行）
    *
    * @default 'Enter'
    */
@@ -296,7 +302,9 @@ export interface ChatInputFeatures {
 }
 
 export interface ResolvedChatInputFeatures {
-  promptTemplates: Required<Pick<ChatInputPromptTemplatesFeature, 'enabled' | 'includeDefaults'>> & Omit<ChatInputPromptTemplatesFeature, 'enabled' | 'includeDefaults'>
+  promptTemplates:
+    & Required<Pick<ChatInputPromptTemplatesFeature, 'enabled' | 'includeDefaults'>>
+    & Omit<ChatInputPromptTemplatesFeature, 'enabled' | 'includeDefaults'>
   history: Required<Pick<ChatInputHistoryFeature, 'enabled' | 'maxCount'>> & Omit<ChatInputHistoryFeature, 'enabled' | 'maxCount'>
   autocomplete: Required<Pick<ChatInputAutocompleteFeature, 'enabled'>> & Omit<ChatInputAutocompleteFeature, 'enabled'>
 }
@@ -586,13 +594,36 @@ export interface ChatInputProps {
   /** 单张图片最大体积（字节），超出弹出提示 */
   maxSize?: number
   /** 图片最大像素（宽高），超出弹出提示 */
-  maxPixels?: { width: number, height: number }
+  maxPixels?: { width: number; height: number }
 
   /**
    * 是否启用语音录制功能
    * @default false
    */
   enableVoiceRecorder?: boolean
+  /**
+   * 是否渲染底部控制栏
+   *
+   * 关掉后整行消失（含发送、语音等所有按钮）。表单里的多行输入不需要发送按钮，
+   * 而这行是固定高度，留着就是一条空白；关掉后语音控件由宿主自己安排位置
+   *
+   * @default true
+   */
+  enableBottomBar?: boolean
+  /**
+   * 文本域自身的类名，叠在内置样式之后
+   *
+   * 内置写死了 `px-4 text-base`，嵌进表单或紧凑面板时字号与内边距都要改，
+   * 而 `className` 只作用于输入区容器、够不到文本域
+   */
+  inputClassName?: string
+  /**
+   * 文本域外层容器的类名，叠在内置样式之后
+   *
+   * 内置带 `bg-background/90` 底色，放进有自己底色的卡片里会露出一块不同的背景，
+   * 传 `bg-transparent` 即可
+   */
+  inputContainerClassName?: string
   /**
    * 语音模式切换回调
    */
@@ -631,6 +662,18 @@ export interface ChatInputProps {
    * 不同于 onSubmit（输入框发送按钮），这个专门处理语音数据的提交
    */
   onVoiceSubmit?: (voice: VoiceRecordingResult) => void
+  /**
+   * 取得语音录制的命令式句柄，用于外部事件驱动录制
+   *
+   * 与 `ref`（指向 textarea）互不影响
+   */
+  voiceControllerRef?: Ref<ChatInputVoiceController>
+  /**
+   * 语音状态变化时回调
+   *
+   * 宿主把语音控件画在组件外（如 `renderActions`）时靠它切换自己的界面
+   */
+  onVoiceStatusChange?: (status: VoiceControlStatus) => void
 }
 
 /**
@@ -667,9 +710,30 @@ export type ChatInputAreaProps = {
   onFocus?: () => void
   onBlur?: () => void
   onPressEnter: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
+  /** 见 {@link ChatInputProps.inputClassName} */
+  inputClassName?: string
+  /** 见 {@link ChatInputProps.inputContainerClassName} */
+  inputContainerClassName?: string
 }
 
 export type VoiceControlStatus = 'idle' | 'recording' | 'processing' | 'review'
+
+/**
+ * 语音录制的命令式句柄，经 {@link ChatInputProps.voiceControllerRef} 取得
+ *
+ * 给「录制由外部事件驱动」的场景用：全局快捷键、主进程指令、语音会话管理器等。
+ * 三个动作都走组件内部同一套流程，不会绕开面板状态或 ASR 回调
+ */
+export type ChatInputVoiceController = {
+  /** 当前语音状态 */
+  getStatus: () => VoiceControlStatus
+  /** 开始本轮录制；非空闲态时无操作 */
+  start: () => Promise<void>
+  /** 结束采集并进入转写；非采集态时无操作 */
+  stop: () => Promise<void>
+  /** 取消本轮并关闭面板，音频不转写 */
+  cancel: () => void
+}
 
 export type VoiceControlButtonProps = {
   status: VoiceControlStatus
