@@ -1,6 +1,9 @@
+import type { HandleImgReturn, TransferType } from '@jl-org/tool'
 import type { ScreenshotFallbackTarget, ScreenshotOkPayload, ScreenshotStartOptions } from '@shared'
+import { blobToBase64 } from '@jl-org/tool'
 import { useLatestCallback } from 'hooks'
 import { useEffect, useRef } from 'react'
+import { SCREENSHOT_MIME_TYPE } from '@shared'
 import { isElectron } from '@/utils/env'
 
 /**
@@ -18,14 +21,25 @@ import { isElectron } from '@/utils/env'
  * 上携带 `fallback` 角色；声明了对应 `fallbackRole` 且当前没有自有会话的消费者负责
  * 接收。**同一窗口同一角色只允许一个挂载实例**
  *
+ * 结果形态由 `options.resType` 决定并反映到 `onCaptured` 的入参类型上：
+ * IPC 送来的是 PNG 二进制，`'blob'` 零转换直接交付，`'base64'` 才就地编码
+ *
  * Web 环境下 `available` 为 false，不订阅也不触发，调用方据此隐藏截图按钮
+ *
+ * @example
+ * ```ts
+ * // 落盘 / 上传：拿 Blob，不经 base64
+ * useScreenshotSession(blob => void persist(blob), { resType: 'blob' })
+ * // 直接塞 <img src> 或跨窗口传字符串：拿 dataURL
+ * useScreenshotSession(dataUrl => setPreview(dataUrl))
+ * ```
  */
-export function useScreenshotSession(
-  onCaptured: (dataUrl: string) => void,
-  options?: UseScreenshotSessionOptions,
+export function useScreenshotSession<T extends TransferType = 'base64'>(
+  onCaptured: (result: HandleImgReturn<T>) => void,
+  options?: UseScreenshotSessionOptions<T>,
 ) {
   const handleCaptured = useLatestCallback(onCaptured)
-  const { fallbackRole, requester } = options ?? {}
+  const { fallbackRole, requester, resType } = options ?? {}
 
   /** 当前持有的会话 id；null 表示没有进行中的截图申请 */
   const captureIdRef = useRef<string | null>(null)
@@ -45,6 +59,16 @@ export function useScreenshotSession(
       && payload.fallback === fallbackRole
   })
 
+  /** 按 `resType` 交付结果；base64 编码是异步的，会话 id 已在调用前清掉 */
+  const deliverCapture = useLatestCallback(async (bytes: ArrayBuffer) => {
+    const blob = new Blob([bytes], { type: SCREENSHOT_MIME_TYPE })
+    const result = resType === 'blob'
+      ? blob
+      : await blobToBase64(blob)
+
+    handleCaptured(result as HandleImgReturn<T>)
+  })
+
   useEffect(() => {
     if (!isElectron())
       return
@@ -54,8 +78,13 @@ export function useScreenshotSession(
         return
 
       captureIdRef.current = null
-      if (payload.base64)
-        handleCaptured(composeBase64(payload.base64))
+      if (!payload.bytes?.byteLength)
+        return
+
+      /** 交付失败不重试：用户可以直接重新截图，卡住一个空会话反而更糟 */
+      void deliverCapture(payload.bytes).catch((error) => {
+        console.error('failed to deliver screenshot result', error)
+      })
     })
 
     /** 用户取消 / 新会话作废旧会话：清掉本地持有的会话 id */
@@ -89,14 +118,16 @@ export function useScreenshotSession(
   }
 }
 
-/** 主进程下发的是裸 base64，拼成可直接用于 <img src> 的 data URL */
-function composeBase64(base64: string): string {
-  if (base64.startsWith('http') || base64.startsWith('data:image'))
-    return base64
-  return `data:image/png;base64,${base64}`
-}
-
-export type UseScreenshotSessionOptions = {
+export type UseScreenshotSessionOptions<T extends TransferType = 'base64'> = {
+  /**
+   * 截图结果交付给 `onCaptured` 的形态
+   *
+   * - `'blob'`：直接给 PNG Blob，落盘 / 上传路径零转换
+   * - `'base64'`：编码成 dataURL，供要直接塞 `<img src>` 或跨窗口传字符串的消费方
+   *
+   * @default 'base64'
+   */
+  resType?: T
   /**
    * 全局快捷键截图的兜底消费角色：主进程裁决的 `fallback` 与之匹配、
    * 且本消费者当前没有自有会话时才接收。同一窗口同一角色只允许一个挂载实例

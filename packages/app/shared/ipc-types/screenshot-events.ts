@@ -24,12 +24,28 @@ export type ScreenshotInitPayload = {
 export type ScreenshotFallbackTarget = 'main'
 
 /**
+ * 截图产物的 MIME 类型
+ *
+ * 整条链路固定 PNG（主进程 `nativeImage.toPNG()`），渲染端据此组装 Blob，
+ * 不从 payload 现猜类型
+ */
+export const SCREENSHOT_MIME_TYPE = 'image/png'
+
+/**
  * 截图完成事件 payload，仅定向发给本次会话的发起方 webContents
  */
 export type ScreenshotOkPayload = {
   /** 本次截图会话 id，消费方需校验等于自己申请到的 id 才消费 */
   captureId: string
-  base64: string
+  /**
+   * 裁剪后的 PNG 二进制
+   *
+   * 不发 base64：主进程裁出来的本就是 PNG Buffer，编码成 base64 过 IPC 要膨胀 33%，
+   * 渲染端为了落盘 / 上传再解回 Blob 又是一次全量拷贝，两头都白付。需要 dataURL 的
+   * 消费方由 `useScreenshotSession` 的 `resType: 'base64'` 就地编码，
+   * 成本落在真正需要它的那一侧
+   */
+  bytes: ArrayBuffer
   bounds: ScreenshotBounds
   /**
    * 仅全局快捷键发起的会话携带：标记兜底消费方角色，

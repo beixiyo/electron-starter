@@ -19,6 +19,7 @@ import {
   screen,
   webContents,
 } from 'electron'
+import { toIpcArrayBuffer } from './utils/ipc-buffer'
 import { windowManager } from './window-manager'
 
 type CaptureStore = {
@@ -273,7 +274,7 @@ async function emitCaptureResult(
   const service = await getScreenshotService()
   service.emit('ok', {
     captureId: session.captureId,
-    base64: cropped.toString('base64'),
+    bytes: toIpcArrayBuffer(cropped),
     bounds: rect,
     fallback: session.fallback,
   } satisfies ScreenshotOkPayload, target)
