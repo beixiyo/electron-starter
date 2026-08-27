@@ -142,7 +142,7 @@ export type RecordingControls = {
    * 获取当前录制的音频
    * @returns 如果正在录制或录制完成，返回音频 URL 和 Blob，否则返回 null
    */
-  getRecording: () => { audioUrl: string, audioBlob: Blob, chunks: Blob[] } | null
+  getRecording: () => { audioUrl: string; audioBlob: Blob; chunks: Blob[] } | null
   /**
    * 检查是否正在录制
    */
@@ -156,4 +156,8 @@ export type RecordingControls = {
    * @returns 当前 Recorder 实例，如果未初始化则返回 null
    */
   getRecorder: () => Recorder | null
+  /**
+   * 读取当前 analyser 的归一化音量；尚未建立音频链路时返回 0
+   */
+  getAudioLevel: () => number
 }

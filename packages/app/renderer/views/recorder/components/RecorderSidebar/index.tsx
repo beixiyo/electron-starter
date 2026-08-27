@@ -62,11 +62,12 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
               { actions.stopLabel }
             </Button>
             <Button
-              variant="danger"
+              variant="ghost"
               size="sm"
               block
               onClick={ actions.onCancel }
               disabled={ !actions.isBusy }
+              className="text-text3 enabled:hover:text-danger"
             >
               { actions.cancelLabel }
             </Button>

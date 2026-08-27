@@ -1,6 +1,6 @@
 import type { CaptureKind, RecorderState } from '@jl-org/tool'
 import { Button, Select } from 'comps'
-import { Pause, Play } from 'lucide-react'
+import { CircleStop, Pause, Play, Trash2 } from 'lucide-react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -23,7 +23,7 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
 
   const kindOptions = [
     { value: 'audio', label: t('options.audioOnly') },
-    { value: 'video', label: t('options.audioVideo'), disabled: true },
+    { value: 'video', label: t('options.audioVideo') },
   ]
 
   const actionButtonConfig = (() => {
@@ -60,13 +60,19 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
   })()
 
   return (
-    <div className="space-y-4 rounded-2xl bg-background2 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
+    <div className="space-y-5 rounded-3xl bg-background2 p-5 shadow-[0_14px_45px_rgba(15,23,42,0.08)]">
+      <div>
+        <p className="text-sm font-medium text-text">{ t('options.title') }</p>
+        <p className="mt-1 text-xs leading-5 text-text3">{ t('options.description') }</p>
+      </div>
+
       <div>
         <label className="mb-1 block text-sm text-text2">{ t('options.recordType') }</label>
         <Select
           options={ kindOptions }
           value={ captureKind }
           onChange={ (v) => onChangeCaptureKind(v) }
+          disabled={ isStarting || recState === 'recording' || recState === 'paused' }
           dropdownHeight={ 140 }
         />
       </div>
@@ -106,33 +112,39 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
       </div> */
       }
 
-      <div className="flex flex-wrap gap-2 pt-2">
+      <div className="space-y-2 pt-1">
         <Button
           onClick={ actionButtonConfig.onClick }
           disabled={ actionButtonConfig.disabled }
           loading={ actionButtonConfig.loading }
           variant={ actionButtonConfig.variant }
           leftIcon={ actionButtonConfig.icon }
-          size="sm"
+          size="md"
+          block
         >
           { actionButtonConfig.label }
         </Button>
-        <Button
-          onClick={ onStop }
-          disabled={ recState !== 'recording' && recState !== 'paused' }
-          variant="success"
-          size="sm"
-        >
-          { t('options.save') }
-        </Button>
-        <Button
-          onClick={ onCancel }
-          disabled={ recState !== 'recording' && recState !== 'paused' }
-          variant="danger"
-          size="sm"
-        >
-          { t('options.cancel') }
-        </Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            onClick={ onStop }
+            disabled={ recState !== 'recording' && recState !== 'paused' }
+            variant="secondary"
+            size="md"
+            leftIcon={ <CircleStop size={ 15 } /> }
+          >
+            { t('options.save') }
+          </Button>
+          <Button
+            onClick={ onCancel }
+            disabled={ recState !== 'recording' && recState !== 'paused' }
+            variant="ghost"
+            size="md"
+            leftIcon={ <Trash2 size={ 15 } /> }
+            className="text-text3 enabled:hover:text-danger"
+          >
+            { t('options.cancel') }
+          </Button>
+        </div>
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
-import type { PreviewPanelProps } from './types'
 import { memo } from 'react'
+import { VideoPreviewFrame } from '../../shared/components/VideoPreviewFrame'
+import type { PreviewPanelProps } from './types'
 
 export const PreviewPanel = memo<PreviewPanelProps>((props) => {
   const {
@@ -66,17 +67,11 @@ export const PreviewPanel = memo<PreviewPanelProps>((props) => {
       ) }
 
       { videoPreview && (
-        <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-backgroundSubtle text-textPrimary">
-          <video
-            ref={ videoPreview.ref }
-            className="h-full w-full object-contain"
-            playsInline
-            autoPlay={ videoPreview.isLive }
-            muted={ videoPreview.isLive }
-            controls={ Boolean(videoPreview.recordedSrc) }
-            src={ videoPreview.recordedSrc }
-          />
-        </div>
+        <VideoPreviewFrame
+          videoRef={ videoPreview.ref }
+          src={ videoPreview.recordedSrc }
+          isLive={ videoPreview.isLive }
+        />
       ) }
     </div>
   )

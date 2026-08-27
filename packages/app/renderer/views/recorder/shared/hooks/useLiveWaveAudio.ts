@@ -1,3 +1,4 @@
+// oxlint-disable react-hooks/exhaustive-deps
 import type { RecordingControls } from 'comps'
 import { useEffect, useMemo, useRef } from 'react'
 
@@ -42,8 +43,8 @@ export function useLiveWaveAudio(options: UseLiveWaveAudioOptions) {
   const liveWaveState: 'recording' | 'stop' | 'idle' = isRecording
     ? 'recording'
     : isPaused
-      ? 'stop'
-      : 'idle'
+    ? 'stop'
+    : 'idle'
 
   /** 计算是否应该捕获音频 */
   const liveWaveCapture = shouldShow && isRecording
@@ -79,7 +80,7 @@ export function useLiveWaveAudio(options: UseLiveWaveAudioOptions) {
 
     return () => {
       cancelled = true
-      controller.stop().catch(() => { })
+      controller.stop().catch(() => {})
     }
   }, [liveWaveCapture, shouldShow, onError, useInternalRecorder])
 
@@ -88,12 +89,13 @@ export function useLiveWaveAudio(options: UseLiveWaveAudioOptions) {
     if (shouldShow) {
       return
     }
-    liveWaveControlsRef.current?.stop().catch(() => { })
+    liveWaveControlsRef.current?.stop().catch(() => {})
   }, [shouldShow])
 
   /** 组件卸载时清理 */
   useEffect(() => {
     return () => {
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       liveWaveControlsRef.current?.destroy()
     }
   }, [])

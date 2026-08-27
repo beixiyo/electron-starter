@@ -1,10 +1,10 @@
 import { useLatestCallback } from 'hooks'
 import { useEffect } from 'react'
-import { recorderStorage } from '../utils/storage'
+import { recorderStorage } from '../../utils/storage'
 
 /**
- * 监听会议录制完成事件，自动保存到 RecorderStorage（IndexedDB）。
- * 在 recorder 页面挂载此 hook。
+ * 监听会议录制完成事件，自动保存到 RecorderStorage（IndexedDB）
+ * 在 recorder 页面挂载此 hook
  */
 export function useMeetingRecordingSaver(onSaved?: () => void) {
   const handleSaved = useLatestCallback(() => {

@@ -1,7 +1,3 @@
-import { Button, Message, Modal } from 'comps'
-import { useLatestCallback } from 'hooks'
-import { createElement, useEffect } from 'react'
-import { useTranslation } from 'react-i18next'
 import {
   disposeRecordingStore,
   ensureSystemAudioSupportChecked,
@@ -14,7 +10,11 @@ import {
   stopNativeRecording,
   useRecordingSourceState,
 } from '@/store/recordingStore'
-import { recorderStorage } from '../utils/storage'
+import { Button, Message, Modal } from 'comps'
+import { useLatestCallback } from 'hooks'
+import { createElement, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
+import { recorderStorage } from '../../utils/storage'
 
 /**
  * 手动 native tap 录音控制器（macOS 14.2+ 混入系统音频）
@@ -65,9 +65,11 @@ export function useNativeManualRecording(onSaved?: () => void) {
     })
 
     const unsubError = $ipc.recording.on('manualRecordingError', ({ detail, message }) => {
-      console.warn(`[manual-recording] error: ${detail ?? 'unknown'}${message
-        ? ` (${message})`
-        : ''}`)
+      console.warn(`[manual-recording] error: ${detail ?? 'unknown'}${
+        message
+          ? ` (${message})`
+          : ''
+      }`)
 
       /** 采集中断走挽救链路：主进程随后经 complete 交付中断前音频，提示而非报错 */
       if (detail === 'audio_sample_timeout') {
@@ -84,8 +86,8 @@ export function useNativeManualRecording(onSaved?: () => void) {
       const key = detail === 'empty_recording' || detail === 'no_audio_samples'
         ? 'recordError.emptyAudio'
         : detail === 'writer_failed'
-          ? 'recordError.unreadableAudio'
-          : 'audioSource.recordFailed'
+        ? 'recordError.unreadableAudio'
+        : 'audioSource.recordFailed'
       Message.danger(t(key))
     })
 
@@ -107,33 +109,41 @@ export function useNativeManualRecording(onSaved?: () => void) {
         footer: createElement(
           'div',
           { className: 'flex justify-end gap-2' },
-          createElement(Button, {
-            variant: 'secondary',
-            size: 'md',
-            onClick: () => {
-              if (isRecording) {
-                void $ipc.recording.openStorageSettings()
-                return
-              }
-              controller?.close()
-            },
-          }, isRecording
-            ? t('storageInsufficient.openSettings')
-            : t('storageInsufficient.close')),
-          createElement(Button, {
-            variant: 'primary',
-            size: 'md',
-            onClick: () => {
-              if (isRecording) {
+          createElement(
+            Button,
+            {
+              variant: 'secondary',
+              size: 'md',
+              onClick: () => {
+                if (isRecording) {
+                  void $ipc.recording.openStorageSettings()
+                  return
+                }
                 controller?.close()
-                void stopNativeRecording()
-                return
-              }
-              void $ipc.recording.openStorageSettings()
+              },
             },
-          }, isRecording
-            ? t('storageInsufficient.endAndSave')
-            : t('storageInsufficient.openSettings')),
+            isRecording
+              ? t('storageInsufficient.openSettings')
+              : t('storageInsufficient.close'),
+          ),
+          createElement(
+            Button,
+            {
+              variant: 'primary',
+              size: 'md',
+              onClick: () => {
+                if (isRecording) {
+                  controller?.close()
+                  void stopNativeRecording()
+                  return
+                }
+                void $ipc.recording.openStorageSettings()
+              },
+            },
+            isRecording
+              ? t('storageInsufficient.endAndSave')
+              : t('storageInsufficient.openSettings'),
+          ),
         ),
       })
     })
@@ -152,10 +162,18 @@ export function useNativeManualRecording(onSaved?: () => void) {
   const isBusy = isStarting || isRecording || isPaused
 
   const start = useLatestCallback(() => startNativeRecording())
-  const pause = useLatestCallback(() => { void pauseNativeRecording() })
-  const resume = useLatestCallback(() => { void resumeNativeRecording() })
-  const stop = useLatestCallback(() => { void stopNativeRecording() })
-  const cancel = useLatestCallback(() => { void resetNativeRecording() })
+  const pause = useLatestCallback(() => {
+    void pauseNativeRecording()
+  })
+  const resume = useLatestCallback(() => {
+    void resumeNativeRecording()
+  })
+  const stop = useLatestCallback(() => {
+    void stopNativeRecording()
+  })
+  const cancel = useLatestCallback(() => {
+    void resetNativeRecording()
+  })
 
   return {
     phase,

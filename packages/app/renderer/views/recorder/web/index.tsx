@@ -1,10 +1,12 @@
+// oxlint-disable react-hooks/exhaustive-deps
 import type { CaptureKind, RecorderState } from '@jl-org/tool'
 import { formatDate, ScreenRecorder } from '@jl-org/tool'
 import type { RecordingControls } from 'comps'
 import { Input, LiveWaveAudio, Message, Modal } from 'comps'
-import { useConst } from 'hooks'
+import { useConst, useLatestCallback } from 'hooks'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { RecorderPageLayout } from '../shared/components/RecorderPageLayout'
 import { recorderStorage } from '../utils/storage'
 import { RecorderDetail } from './RecorderDetail'
 import { RecorderList } from './RecorderList'
@@ -71,6 +73,8 @@ export default function WebRecorderPage() {
   const waveformRef = useRef<RecordingControls | null>(null)
   const discardRecordingRef = useRef(false)
   const isAudioMode = captureKind === 'audio'
+  const captureKindRef = useRef(captureKind)
+  captureKindRef.current = captureKind
 
   const createDefaultName = (kind: CaptureKind) =>
     `${
@@ -94,7 +98,7 @@ export default function WebRecorderPage() {
       },
       onStart: () => {
         setIsStarting(false)
-        if (captureKind === 'video') {
+        if (captureKindRef.current === 'video') {
           /** 绑定视频预览 */
           const stream = recorder.getMediaStream()
           if (videoRef.current && stream) {
@@ -118,12 +122,13 @@ export default function WebRecorderPage() {
         setCurrentBlob(finalBlob)
 
         /** 生成默认名称 */
-        setSaveName(createDefaultName(captureKind))
+        const completedKind = captureKindRef.current
+        setSaveName(createDefaultName(completedKind))
 
         /** 显示保存对话框 */
         setShowSaveModal(true)
 
-        if (captureKind === 'video' && videoRef.current) {
+        if (completedKind === 'video' && videoRef.current) {
           videoRef.current.srcObject = null
           videoRef.current!.src = url
           videoRef.current!.controls = true
@@ -133,8 +138,9 @@ export default function WebRecorderPage() {
   )
 
   useEffect(() => {
-    if (captureKind === 'audio') return
     recorder.updateConfig({
+      audioOnly: captureKind === 'audio',
+      video: captureKind === 'video',
       systemAudio,
       micAudio,
       timesliceMs: typeof timeslice === 'number'
@@ -142,6 +148,15 @@ export default function WebRecorderPage() {
         : undefined,
     })
   }, [captureKind, systemAudio, micAudio, timeslice, recorder])
+
+  const getAudioLevel = useLatestCallback(
+    () => {
+      const getLevel = waveformRef.current?.getAudioLevel
+      return typeof getLevel === 'function'
+        ? getLevel()
+        : 0
+    },
+  )
 
   const revokeUrl = () => {
     if (blobUrl) {
@@ -158,14 +173,19 @@ export default function WebRecorderPage() {
         recorder.dispose()
       }
       catch {}
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       if (waveformRef.current) {
+        // oxlint-disable-next-line react-hooks/exhaustive-deps
         waveformRef.current.destroy()
       }
       revokeUrl()
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       if (videoRef.current) {
+        // oxlint-disable-next-line react-hooks/exhaustive-deps
         videoRef.current.srcObject = null
       }
     }
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -199,6 +219,8 @@ export default function WebRecorderPage() {
 
   const handleStart = async () => {
     revokeUrl()
+    setLastBlobType(null)
+    setCurrentBlob(null)
     if (isAudioMode) {
       if (!micAudio) {
         Message.warning(t('messages.micRequired'))
@@ -237,7 +259,7 @@ export default function WebRecorderPage() {
     try {
       await recorder.start()
     }
-    catch (e) {
+    catch {
       /** 已在内部处理错误状态 */
       setIsStarting(false)
     }
@@ -375,98 +397,107 @@ export default function WebRecorderPage() {
     setCurrentBlob(null)
   }
 
+  const sidebar = (
+    <RecorderOptions
+      recState={ recState }
+      systemAudio={ systemAudio }
+      micAudio={ micAudio }
+      captureKind={ captureKind }
+      timeslice={ timeslice }
+      isStarting={ isStarting }
+      onChangeSystemAudio={ setSystemAudio }
+      onChangeMicAudio={ setMicAudio }
+      onChangeCaptureKind={ setCaptureKind }
+      onChangeTimeslice={ setTimeslice }
+      onStart={ handleStart }
+      onPause={ handlePause }
+      onResume={ handleResume }
+      onStop={ handleStop }
+      onCancel={ handleDiscardRecording }
+    />
+  )
+
   return (
-    <div className="h-full overflow-y-auto px-8 py-8 lg:px-13 lg:py-10">
-      <div className="w-full max-w-240">
-        <h2 className="text-[22px] font-medium leading-8 text-text">{ t('title') }</h2>
-
-        <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
-          <RecorderOptions
-            recState={ recState }
-            systemAudio={ systemAudio }
-            micAudio={ micAudio }
-            captureKind={ captureKind }
-            timeslice={ timeslice }
-            isStarting={ isStarting }
-            onChangeSystemAudio={ setSystemAudio }
-            onChangeMicAudio={ setMicAudio }
-            onChangeCaptureKind={ setCaptureKind }
-            onChangeTimeslice={ setTimeslice }
-            onStart={ handleStart }
-            onPause={ handlePause }
-            onResume={ handleResume }
-            onStop={ handleStop }
-            onCancel={ handleDiscardRecording }
-          />
-          <RecorderPreview
-            videoRef={ videoRef as React.RefObject<HTMLVideoElement> }
-            blobUrl={ blobUrl }
-            isAudio={ lastBlobType
-              ? lastBlobType.startsWith('audio')
-              : captureKind === 'audio' }
-            audioRecorder={ isAudioMode
-              ? (
-                <LiveWaveAudio
-                  ref={ waveformRef }
-                  className="h-32 rounded-xl bg-background"
-                  height={ 128 }
-                  mode="static"
-                  state={ resolveWaveformState({
-                    recState,
-                    isStarting,
-                    isSaving: saving,
-                  }) }
-                  onError={ (error) => {
-                    console.error('音频录制发生错误:', error)
-                    Message.danger(t('messages.audioError'))
-                  } }
-                  onRecordingFinish={ handleAudioRecordingFinish }
-                />
-              )
-              : null }
-          />
-        </div>
-
-        <Modal
-          isOpen={ showSaveModal }
-          onClose={ handleCancelSave }
-          titleText={ t('saveModal.title') }
-          width={ 500 }
-          clickOutsideClose={ false }
-          onOk={ handleSave }
-        >
-          <div className="space-y-4">
-            <div>
-              <label className="mb-2 block text-sm text-text2">
-                { t('saveModal.nameLabel') }
-              </label>
-              <Input
-                value={ saveName }
-                onChange={ (value) => setSaveName(value) }
-                placeholder={ t('saveModal.namePlaceholder') }
-                onPressEnter={ handleSave }
-                autoFocus
-                disabled={ saving }
+    <>
+      <RecorderPageLayout
+        title={ t('title') }
+        subtitle={ t('pageSubtitle') }
+        sidebar={ sidebar }
+      >
+        <RecorderPreview
+          videoRef={ videoRef }
+          blobUrl={ blobUrl }
+          isAudio={ blobUrl && lastBlobType
+            ? lastBlobType.startsWith('audio')
+            : isAudioMode }
+          isRecording={ recState === 'recording' }
+          isPaused={ recState === 'paused' }
+          isVideoLive={ !isAudioMode && (isStarting || recState === 'recording' || recState === 'paused') }
+          getAudioLevel={ getAudioLevel }
+          audioRecorder={ isAudioMode
+            ? (
+              <LiveWaveAudio
+                ref={ waveformRef }
+                className="h-full"
+                height="100%"
+                mode="static"
+                state={ resolveWaveformState({
+                  recState,
+                  isStarting,
+                  isSaving: saving,
+                }) }
+                onError={ (error) => {
+                  console.error('音频录制发生错误:', error)
+                  Message.danger(t('messages.audioError'))
+                } }
+                onRecordingFinish={ handleAudioRecordingFinish }
               />
-            </div>
-            <p className="text-xs text-text3">
-              { t('saveModal.description') }
-            </p>
+            )
+            : null }
+        />
+
+        <section className="min-w-0 rounded-3xl bg-background2 p-5 shadow-[0_14px_45px_rgba(15,23,42,0.08)]">
+          <RecorderList
+            key={ listRefreshKey }
+            onViewRecord={ setViewingRecordId }
+            className="space-y-6"
+          />
+        </section>
+      </RecorderPageLayout>
+
+      <Modal
+        isOpen={ showSaveModal }
+        onClose={ handleCancelSave }
+        titleText={ t('saveModal.title') }
+        width={ 500 }
+        clickOutsideClose={ false }
+        onOk={ handleSave }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-2 block text-sm text-text2">
+              { t('saveModal.nameLabel') }
+            </label>
+            <Input
+              value={ saveName }
+              onChange={ (value) => setSaveName(value) }
+              placeholder={ t('saveModal.namePlaceholder') }
+              onPressEnter={ handleSave }
+              autoFocus
+              disabled={ saving }
+            />
           </div>
-        </Modal>
+          <p className="text-xs text-text3">
+            { t('saveModal.description') }
+          </p>
+        </div>
+      </Modal>
 
-        <RecorderList
-          key={ listRefreshKey }
-          onViewRecord={ setViewingRecordId }
-          className="mt-8 space-y-6"
-        />
-
-        <RecorderDetail
-          recordId={ viewingRecordId }
-          isOpen={ viewingRecordId !== null }
-          onClose={ () => setViewingRecordId(null) }
-        />
-      </div>
-    </div>
+      <RecorderDetail
+        recordId={ viewingRecordId }
+        isOpen={ viewingRecordId !== null }
+        onClose={ () => setViewingRecordId(null) }
+      />
+    </>
   )
 }

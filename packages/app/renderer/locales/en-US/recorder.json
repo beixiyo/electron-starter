@@ -1,5 +1,6 @@
 {
   "title": "Record Together",
+  "pageSubtitle": "Choose a recording type and audio sources, then record, preview, and manage everything in one place.",
   "audio": "Audio",
   "video": "Video",
   "saveModal": {
@@ -24,6 +25,8 @@
     "loadFailedRetry": "Loading failed, please retry"
   },
   "options": {
+    "title": "Recording setup",
+    "description": "Your desktop browser will ask which screen or window to share when recording starts.",
     "recordType": "Recording Type",
     "audioOnly": "Audio Only",
     "audioVideo": "Audio & Video",
@@ -72,7 +75,10 @@
   },
   "preview": {
     "audioModeDesc": "Real-time waveform reflects current recording amplitude",
-    "videoModeDesc": "Currently in audio-only mode, no video preview",
+    "audioIdle": "Ready to record audio",
+    "audioRecording": "Recording audio",
+    "audioPaused": "Recording paused",
+    "videoModeDesc": "The entire capture stays visible at its original content ratio",
     "downloadAudio": "Download Audio",
     "downloadVideo": "Download Video",
     "recordingDesc": "Real-time preview during recording"

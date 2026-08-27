@@ -1,10 +1,11 @@
+// oxlint-disable react-hooks/exhaustive-deps
 import type { RecorderState } from '@jl-org/tool'
-import type { DesktopSourceInfo } from '../utils/fetchDesktopSources'
 import { ScreenRecorder } from '@jl-org/tool'
 import { Message } from 'comps'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { sanitizeFileName } from '../utils/file'
-import { recorderStorage } from '../utils/storage'
+import type { DesktopSourceInfo } from '../../utils/fetchDesktopSources'
+import { sanitizeFileName } from '../../utils/file'
+import { recorderStorage } from '../../utils/storage'
 
 type UseRecorderControllerOptions = {
   /**
@@ -67,7 +68,9 @@ export function useRecorderController({
         ? 'audio'
         : 'video'
       const now = new Date()
-      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${
+        String(now.getHours()).padStart(2, '0')
+      }-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`
       const defaultName = `${captureKind}_${dateStr}`
       setSaveName(defaultName)
       setShowSaveModal(true)
@@ -88,16 +91,15 @@ export function useRecorderController({
   }, [reportError, updatePreview])
 
   const syncRecorderConfig = useCallback(() => {
-    if (!recorderRef.current)
-      return
+    if (!recorderRef.current) return
     recorderRef.current.updateConfig({
       systemAudio,
       micAudio: micAudio
         ? {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          }
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        }
         : false,
       audioOnly,
       video: !audioOnly,
@@ -118,8 +120,7 @@ export function useRecorderController({
   }, [audioOnly, selectedSource])
 
   const start = useCallback(async () => {
-    if (!recorderRef.current)
-      return
+    if (!recorderRef.current) return
     if (!audioOnly && !selectedSource) {
       reportError('请先选择需要录制的屏幕或窗口')
       return
@@ -155,8 +156,7 @@ export function useRecorderController({
 
   const cancel = useCallback(async () => {
     const isBusy = recorderState === 'recording' || recorderState === 'paused'
-    if (!recorderRef.current || !isBusy)
-      return
+    if (!recorderRef.current || !isBusy) return
     discardRecordingRef.current = true
     try {
       await recorderRef.current.stop()
@@ -223,8 +223,8 @@ export function useRecorderController({
       const extension = recordedBlob.type.includes('webm')
         ? 'webm'
         : recordedBlob.type.includes('video')
-          ? 'mp4'
-          : 'm4a'
+        ? 'mp4'
+        : 'm4a'
       await $ipc.media.saveBuffer({
         buffer,
         mimeType: recordedBlob.type,
@@ -260,10 +260,12 @@ export function useRecorderController({
 
   useEffect(() => {
     return () => {
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       const videoEl = liveVideoRef.current
       if (videoEl?.srcObject) {
         videoEl.srcObject = null
       }
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       const audioEl = liveAudioRef.current
       if (audioEl?.srcObject) {
         audioEl.srcObject = null

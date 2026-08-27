@@ -1,5 +1,6 @@
 {
   "title": "一起录",
+  "pageSubtitle": "选择录制类型与音源，在同一处完成录制、预览和管理。",
   "audio": "音频",
   "video": "视频",
   "saveModal": {
@@ -24,6 +25,8 @@
     "loadFailedRetry": "加载失败，请重试"
   },
   "options": {
+    "title": "录制设置",
+    "description": "桌面浏览器会在开始时让你选择要共享的屏幕或窗口。",
     "recordType": "录制类型",
     "audioOnly": "仅音频",
     "audioVideo": "音视频",
@@ -72,7 +75,10 @@
   },
   "preview": {
     "audioModeDesc": "实时波形反映当前录音幅度，停止后可回放文件",
-    "videoModeDesc": "当前为仅音频模式，无视频预览",
+    "audioIdle": "准备录制音频",
+    "audioRecording": "正在录制音频",
+    "audioPaused": "录制已暂停",
+    "videoModeDesc": "画面将完整显示，并保持原始内容比例",
     "downloadAudio": "下载音频",
     "downloadVideo": "下载视频",
     "recordingDesc": "录制中将展示实时预览，停止后展示最终回放"

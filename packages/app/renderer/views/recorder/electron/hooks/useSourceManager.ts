@@ -1,6 +1,6 @@
-import type { DesktopSourceFetchResult, DesktopSourceInfo } from '../utils/fetchDesktopSources'
 import { useCallback, useMemo, useState } from 'react'
-import { fetchDesktopSources } from '../utils/fetchDesktopSources'
+import type { DesktopSourceFetchResult, DesktopSourceInfo } from '../../utils/fetchDesktopSources'
+import { fetchDesktopSources } from '../../utils/fetchDesktopSources'
 
 export function useSourceManager() {
   const [sources, setSources] = useState<DesktopSourceInfo[]>([])
@@ -9,7 +9,7 @@ export function useSourceManager() {
   const [sessionSystemAudio, setSessionSystemAudio] = useState<boolean | null>(null)
 
   const selectedSource = useMemo(
-    () => sources.find(item => item.id === selectedSourceId) ?? null,
+    () => sources.find((item) => item.id === selectedSourceId) ?? null,
     [selectedSourceId, sources],
   )
 
@@ -24,7 +24,7 @@ export function useSourceManager() {
       })
       setSources(result.sources)
       setSelectedSourceId((prev) => {
-        if (prev && result.sources.some(source => source.id === prev)) {
+        if (prev && result.sources.some((source) => source.id === prev)) {
           return prev
         }
         return result.sources[0]?.id

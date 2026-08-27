@@ -2,7 +2,7 @@ import { Message } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { recorderStorage } from '../utils/storage'
+import { recorderStorage } from '../../utils/storage'
 
 /**
  * 启动录音页时把 main 恢复目录中的崩溃残留安全导入 IndexedDB
@@ -19,8 +19,7 @@ export function useRecoverableRecordings(onRecovered?: (count: number) => void):
       let recoveredCount = 0
 
       for (const recording of recordings) {
-        if (disposed)
-          return
+        if (disposed) return
 
         try {
           const buffer = await $ipc.recording.readRecordingFile(recording.taskId)
