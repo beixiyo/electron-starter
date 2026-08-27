@@ -2,6 +2,7 @@ import type { NativeRecordingSource, RecordingPhase } from '@shared'
 import type { NativeRecordingSession } from './session'
 import { stat, unlink } from 'node:fs/promises'
 import { onRecorderEvent, pauseRecording, probeMicCaptureStrategy, resumeRecording, startRecorder, stopRecorder, stopRecording } from '@main/audio-recorder'
+import { showPermissionRequired } from '@main/permission-required'
 import { getPermissionStatus } from '@main/permissions'
 import { deleteRecoveryRecording } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
@@ -127,7 +128,7 @@ export function initNativeRecordingPipeline(): void {
      * 本轮实际走的采集路线
      *
      * strategy 是主字段：正式录音多数会命中预检留下的缓存路线，此时 voiceProcessing
-     * 只会是 skipped-cached-route，真正的失败原因在启动预检那条日志里。
+     * 只会是 skipped-cached-route，真正的失败原因在启动预检那条日志里
      * outputTransport 一并记：builtin 扬声器 + 无 AEC 才存在外放回声路径，耳机不存在
      */
     console.log('[native-recording] recording started', {
@@ -257,6 +258,18 @@ export function initNativeRecordingPipeline(): void {
       return
     }
 
+    /**
+     * Swift helper 位于真实的麦克风采集边界，它的实时 TCC 结果优先于 Electron
+     * 可能过期的 getMediaAccessStatus。权限被系统设置撤销后不再重弹系统授权框，
+     * 因此这里明确引导用户重新开启权限并按 macOS 要求重启 App
+     */
+    if (code.startsWith('microphone_permission_')) {
+      showPermissionRequired({
+        kinds: ['microphone'],
+        reason: 'recording',
+      })
+    }
+
     if (recordingState.snapshot.phase === 'starting' && activeSession) {
       failNativeRecordingStart(activeSession, code, detail)
       return
@@ -296,7 +309,7 @@ export function initNativeRecordingPipeline(): void {
     /**
      * 请求了系统音却一个样本都没写入 = 整条系统音轨丢失，用户毫无察觉
      *
-     * 必须单独 warn 而不是只留统计字段：那是一场正常结束的录音，不 warn 就没人会去看。
+     * 必须单独 warn 而不是只留统计字段：那是一场正常结束的录音，不 warn 就没人会去看
      * callbacks 一并带上以区分「内核侧没出数据」和「出了数据但全被丢弃」
      */
     if (systemAudioRequested && systemAudioAppends === 0) {

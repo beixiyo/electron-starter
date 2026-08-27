@@ -37,6 +37,15 @@ final class RecorderCoordinator {
       return
     }
 
+    let permission = currentMicrophonePermissionSnapshot()
+    guard permission.errorCode == nil else {
+      emitDiagnostic(
+        "mic_probe_skipped",
+        detail: "\(permission.errorCode ?? "microphone_permission_unavailable") \(permission.detail)"
+      )
+      return
+    }
+
     await tapRecorder().probeMic(aec: options.micAec)
   }
 
@@ -68,6 +77,15 @@ final class RecorderCoordinator {
       guard #available(macOS 14.2, *) else {
         emitError("tap_requires_macos_14_2")
         return
+      }
+
+      if tapOptions.mic {
+        let permission = currentMicrophonePermissionSnapshot()
+        if let errorCode = permission.errorCode {
+          log("tap: microphone permission blocked start: \(errorCode) \(permission.detail)")
+          emitError(errorCode, detail: permission.detail)
+          return
+        }
       }
 
       activeEngine = .tap

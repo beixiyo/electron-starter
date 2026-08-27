@@ -12,6 +12,7 @@ const harness = vi.hoisted(() => ({
   deleteRecoveryRecording: vi.fn(() => Promise.resolve()),
   stopRecording: vi.fn(),
   forceRestartRecorder: vi.fn(() => Promise.resolve()),
+  showPermissionRequired: vi.fn(),
 }))
 
 vi.mock('@main/audio-recorder', () => ({
@@ -31,6 +32,10 @@ vi.mock('@main/audio-recorder', () => ({
 
 vi.mock('@main/recording-recovery', () => ({
   deleteRecoveryRecording: harness.deleteRecoveryRecording,
+}))
+
+vi.mock('@main/permission-required', () => ({
+  showPermissionRequired: harness.showPermissionRequired,
 }))
 
 /**
@@ -95,6 +100,35 @@ describe('native 录音启动代际', () => {
 
     harness.listeners.recording?.({ path: session.outputPath })
     expect(recordingState.snapshot.phase).toBe('recording')
+  })
+
+  it('Swift 在采集边界发现麦克风权限已撤销时展示权限说明并结束 starting 会话', async () => {
+    const onError = vi.fn()
+    registerNativeRecordingHandlers('manual', {
+      onComplete: vi.fn(),
+      onError,
+    })
+    const session = createSession('microphone-permission-revoked.m4a')
+    setNativeRecordingSession(session)
+    recordingState.startManualNative()
+
+    harness.listeners.error?.({
+      code: 'microphone_permission_denied',
+      detail: 'audioApplication=denied captureDevice=denied inputMuted=false',
+    })
+
+    expect(harness.showPermissionRequired).toHaveBeenCalledWith({
+      kinds: ['microphone'],
+      reason: 'recording',
+    })
+    expect(recordingState.snapshot.phase).toBe('idle')
+    expect(peekNativeRecordingSession()).toBeNull()
+    expect(harness.stopRecording).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledWith(
+      'microphone_permission_denied',
+      'audioApplication=denied captureDevice=denied inputMuted=false',
+    )
+    await vi.waitFor(() => expect(harness.deleteRecoveryRecording).toHaveBeenCalledWith(session.taskId))
   })
 
   it('启动期取消不会因非终态错误提前删除仍可能写入的恢复资产', async () => {
