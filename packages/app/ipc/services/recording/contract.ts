@@ -54,6 +54,13 @@ export type RecordingContract = IpcContract<{
     }
     /** 麦克风自愈失败，录音仍以剩余音源继续 */
     micDegraded: MicDegradedPayload
+    /**
+     * 归一化麦克风音量（0-1），native 录音期间约 15Hz
+     *
+     * 只有麦克风轨参与：系统音轨是别人的声音，画进「说话的声浪」里会让用户
+     * 对着静音的自己看到满格。仅录系统音时恒为 0
+     */
+    audioLevelChanged: { level: number }
     /** 正在输出音频的软件列表发生变化 */
     audioAppsChanged: AudioAppItem[]
   }

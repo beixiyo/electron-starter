@@ -112,6 +112,17 @@ const bridge = new NativeBridge<RecorderEvents>({
         handoffCoordinator.handleRecycleRequired(msg.handoffId)
         nativeLog.debug('process.recycle-required', 'audio recorder requested process recycle after recording stop')
       }
+      else if (msg.status === 'audio_level') {
+        /**
+         * 高频事件，先自证合法再转发
+         *
+         * 这条按 15Hz 持续到达，是所有 helper 消息里唯一一条「坏一次就会一直坏」的：
+         * 非数字或越界值直接进渲染层会让光效停在 NaN 上，而日志里不会有任何异常
+         */
+        if (Number.isFinite(msg.level)) {
+          bus.emit('audio_level', { level: Math.min(1, Math.max(0, msg.level)) })
+        }
+      }
       else if (msg.status === 'mic_degraded') {
         /** 当前路线已无法持续出样；下次正式录音从完整降级链重新判断 */
         preferredMicStrategyHint = null

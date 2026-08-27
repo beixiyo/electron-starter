@@ -1,5 +1,6 @@
 import type { AudioAppItem, ManualRecordingErrorPayload, RecordingContract } from './contract'
 import { createIpcService } from '@ipc/core'
+import { onRecorderEvent } from '@main/audio-recorder'
 import { getAudioProcessSnapshot, onAudioProcessChange, startAudioMonitor } from '@main/meeting-detection/audio-monitor-bridge'
 import { registerNativeRecordingHandlers } from '@main/native-recording'
 import {
@@ -105,6 +106,23 @@ onAudioProcessChange(() => {
   const mainWin = windowManager.get(WindowType.MAIN)
   if (mainWin && !mainWin.isDestroyed())
     recordingService.emit('audioAppsChanged', listAudioApps(), mainWin)
+})
+
+/**
+ * 归一化麦克风音量推给主窗，供渲染层画声浪 / 光效
+ *
+ * 订阅口放在这里而不是 `main/native-recording`：那边反过来被本文件 import，
+ * 从它去调本文件的发射器会成环，把整条 renderer 侧的 ipc client 拖进主进程测试环境
+ *
+ * 主窗缺席直接丢弃、不做任何兜底：这是每秒 15 条的纯装饰信号，迟到一帧毫无意义，
+ * 攒下来只会在窗口出现时糊一串过期电平。也不落诊断日志，否则会把日志冲爆
+ */
+onRecorderEvent('audio_level', ({ level }) => {
+  const mainWin = windowManager.get(WindowType.MAIN)
+  if (!mainWin || mainWin.isDestroyed())
+    return
+
+  recordingService.emit('audioLevelChanged', { level }, mainWin)
 })
 
 recordingState.setBroadcast((snapshot) => {

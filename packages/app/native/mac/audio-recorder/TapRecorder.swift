@@ -895,6 +895,8 @@ class TapRecorder: NSObject {
   /** start 与 recovery claim 共用同一录音代际，物理 callback 代际由 TapMicCapture 独立校验 */
   private func beginRecordingGeneration(micRequested: Bool, tapRequested: Bool) {
     micCapture.resetStatistics()
+    /** 电平是进程级单例，不清的话上一场的末帧会被当成本场首帧，光效开录瞬间先亮一下 */
+    AudioLevelMeter.shared.reset()
     micRecoveryLock.lock()
     micRecoveryWorkItem?.cancel()
     micRecoveryWorkItem = nil

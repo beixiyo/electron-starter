@@ -141,6 +141,17 @@ func emitTapAttachFailed(phase: String, detail: String) {
   fflush(stdout)
 }
 
+/**
+ * 输出归一化麦克风音量（0~1），供渲染层画光效
+ *
+ * 单独一条消息而不是塞进 `emitDiagnostic`：这条按 15Hz 持续发送，
+ * 混进诊断流会把真正的降级信号淹掉，日志侧也没法分开采样
+ */
+func emitAudioLevel(_ level: Double) {
+  print("{\"status\":\"audio_level\",\"level\":\(String(format: "%.2f", level))}")
+  fflush(stdout)
+}
+
 /** 输出尚未绑定到具体录音产物的错误 */
 func emitError(_ error: String, detail: String? = nil) {
   var json = "{\"error\":\"\(escapeJSON(error))\""

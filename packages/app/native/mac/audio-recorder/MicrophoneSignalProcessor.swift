@@ -131,6 +131,8 @@ final class MicrophoneSignalProcessor {
 
     let sampleCount = max(1, frameCount * channelCount)
     let rms = Float(sqrt(squareSum / Double(sampleCount)))
+    /** 只读不改：渲染层要的是增益之前的电平，理由见 `AudioLevelMeter` */
+    AudioLevelMeter.shared.submit(inputRMS: rms)
     let containsSignal = rms >= signalRMSFloor && peak >= signalPeakFloor
     let bufferDuration = Double(frameCount) / max(1, buffer.format.sampleRate)
     switchModeIfNeeded(mode)

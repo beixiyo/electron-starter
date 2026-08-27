@@ -19,6 +19,7 @@ let package = Package(
       sources: [
         "AudioAssetInspector.swift",
         "AudioDeviceDiagnostics.swift",
+        "AudioLevelMeter.swift",
         "AudioMixPlan.swift",
         "AudioPeakLimiter.swift",
         "AudioQualityTuning.swift",

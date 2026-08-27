@@ -17,6 +17,8 @@ export type RecorderEvents = {
   tap_attach_failed: { phase: TapAttachPhase, detail: string }
   mic_probe_complete: { strategy: MicCaptureStrategy, deviceKey: string } & MicVoiceProcessingInfo
   mic_probe_failed: { detail?: string }
+  /** 归一化麦克风音量（0-1），录音期间约 15Hz */
+  audio_level: { level: number }
   exited: { code: number | null, signal: NodeJS.Signals | null }
 }
 
@@ -58,6 +60,7 @@ export type RecorderMessage
     duration?: never
   }
   | { status: 'mic_degraded', detail?: string, path?: never, duration?: never }
+  | { status: 'audio_level', level: number, path?: never, duration?: never, detail?: never }
   | {
     status: 'mic_probe_complete'
     micStrategy: MicCaptureStrategy
