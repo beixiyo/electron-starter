@@ -1,10 +1,10 @@
-import { Outlet, RouterProvider } from '@jl-org/react-router'
-import { useTheme } from 'hooks'
-import { AnimatePresence } from 'motion/react'
 import { UpdaterModal } from '@/components/updater'
 import { router } from '@/router'
 import { useShortcutRuntime } from '@/shortcuts'
 import { initUpdaterStore } from '@/store/updaterStore'
+import { Outlet, RouterProvider } from '@jl-org/react-router'
+import { useTheme } from 'hooks'
+import { AnimatePresence } from 'motion/react'
 
 function App() {
   useTheme()
@@ -15,20 +15,22 @@ function App() {
     initUpdaterStore()
   }, [])
 
-  return <AnimatePresence>
-    <div className="min-h-full bg-background text-textPrimary">
-      <RouterProvider router={ router }>
-        <GlobalDebugRouter />
-        <Outlet />
+  return (
+    <AnimatePresence>
+      <div className="min-h-full bg-background3 text-text">
+        <RouterProvider router={ router }>
+          <GlobalDebugRouter />
+          <Outlet />
 
-        <UpdaterModal />
-      </RouterProvider>
-    </div>
-  </AnimatePresence>
+          <UpdaterModal />
+        </RouterProvider>
+      </div>
+    </AnimatePresence>
+  )
 }
 
 function GlobalDebugRouter() {
-  (window as any).$router = router
+  ;(window as any).$router = router
   return null
 }
 

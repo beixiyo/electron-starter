@@ -1,16 +1,6 @@
-import type { NotifyLog } from './useNotifyDemo'
 import { Button } from 'comps'
-import {
-  BadgeCheck,
-  Bell,
-  ListChecks,
-  MessageSquareReply,
-  Pin,
-  Repeat2,
-  ShieldCheck,
-  Trash2,
-  X,
-} from 'lucide-react'
+import { BadgeCheck, Bell, ListChecks, MessageSquareReply, Pin, Repeat2, ShieldCheck, Trash2, X } from 'lucide-react'
+import type { NotifyLog } from './useNotifyDemo'
 import { useNotifyDemo } from './useNotifyDemo'
 
 /**
@@ -35,21 +25,20 @@ export default function NotifyTestPage() {
   } = useNotifyDemo()
 
   return (
-    <div className="min-h-full bg-zinc-50 px-8 py-10 dark:bg-zinc-950">
-      <div className="mx-auto max-w-3xl space-y-8">
-
-        {/* 标题 */}
+    <div className="h-full overflow-y-auto px-8 py-8 lg:px-13 lg:py-10">
+      <div className="max-w-180 space-y-8">
+        { /* 标题 */ }
         <header className="space-y-1">
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <h1 className="text-[22px] font-medium leading-8 text-text">
             通知测试
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="text-sm text-text3">
             点击按钮发送通知，下方实时记录各回调事件
           </p>
         </header>
 
-        {/* 环境信息 */}
-        <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 sm:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-800">
+        { /* 环境信息 */ }
+        <section className="grid grid-cols-2 gap-2 rounded-2xl bg-background2 p-2 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:grid-cols-4">
           <EnvCell label="运行环境" value={ env.runtime } />
           <EnvCell label="平台" value={ env.platform } />
           <EnvCell label="通知权限" value={ env.permission } />
@@ -58,12 +47,12 @@ export default function NotifyTestPage() {
             value={ env.supported === null
               ? '未检测'
               : env.supported
-                ? '支持'
-                : '不支持' }
+              ? '支持'
+              : '不支持' }
           />
         </section>
 
-        {/* 发送动作 */}
+        { /* 发送动作 */ }
         <section className="space-y-3">
           <SectionTitle>发送</SectionTitle>
           <div className="flex flex-wrap gap-3">
@@ -88,7 +77,7 @@ export default function NotifyTestPage() {
           </div>
         </section>
 
-        {/* 权限 / 支持 */}
+        { /* 权限 / 支持 */ }
         <section className="space-y-3">
           <SectionTitle>权限与能力</SectionTitle>
           <div className="flex flex-wrap gap-3">
@@ -101,7 +90,7 @@ export default function NotifyTestPage() {
           </div>
         </section>
 
-        {/* 事件日志 */}
+        { /* 事件日志 */ }
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <SectionTitle>事件日志</SectionTitle>
@@ -110,33 +99,30 @@ export default function NotifyTestPage() {
             </Button>
           </div>
 
-          <div className="max-h-80 overflow-y-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="max-h-80 overflow-y-auto rounded-2xl bg-background2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
             { logs.length === 0
               ? (
-                  <p className="px-4 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
-                    暂无事件，点击上方按钮试试
-                  </p>
-                )
+                <p className="px-4 py-8 text-center text-sm text-text3">
+                  暂无事件，点击上方按钮试试
+                </p>
+              )
               : (
-                  <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                    { logs.map(log => (
-                      <LogRow key={ log.id } log={ log } />
-                    )) }
-                  </ul>
-                ) }
+                <ul className="divide-y divide-border/60">
+                  { logs.map((log) => <LogRow key={ log.id } log={ log } />) }
+                </ul>
+              ) }
           </div>
         </section>
-
       </div>
     </div>
   )
 }
 
-function EnvCell({ label, value }: { label: string, value: string }) {
+function EnvCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-zinc-50 px-4 py-3 dark:bg-zinc-950">
-      <div className="text-xs text-zinc-400 dark:text-zinc-500">{ label }</div>
-      <div className="mt-0.5 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
+    <div className="rounded-xl bg-background px-4 py-3">
+      <div className="text-xs text-text3">{ label }</div>
+      <div className="mt-0.5 truncate text-sm font-medium text-text">
         { value }
       </div>
     </div>
@@ -145,7 +131,7 @@ function EnvCell({ label, value }: { label: string, value: string }) {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+    <h2 className="text-sm font-medium text-text3">
       { children }
     </h2>
   )
@@ -154,26 +140,25 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function LogRow({ log }: { log: NotifyLog }) {
   return (
     <li className="flex items-center gap-3 px-4 py-2.5 text-sm">
-      <span className="shrink-0 font-mono text-xs text-zinc-400 dark:text-zinc-500">
+      <span className="shrink-0 font-mono text-xs text-text3">
         { log.time }
       </span>
-      <span className={ [
-        'shrink-0 rounded-md px-2 py-0.5 text-xs font-medium',
-        KIND_STYLE[log.kind],
-      ].join(' ') }
+      <span
+        className={ [
+          'shrink-0 rounded-md px-2 py-0.5 text-xs font-medium',
+          KIND_STYLE[log.kind],
+        ].join(' ') }
       >
         { log.type }
       </span>
-      { log.detail && (
-        <span className="truncate text-zinc-600 dark:text-zinc-300">{ log.detail }</span>
-      ) }
+      { log.detail && <span className="truncate text-text2">{ log.detail }</span> }
     </li>
   )
 }
 
 const KIND_STYLE: Record<NotifyLog['kind'], string> = {
-  send: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300',
-  event: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300',
-  action: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-200',
-  error: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300',
+  send: 'bg-infoBg text-info',
+  event: 'bg-successBg text-success',
+  action: 'bg-background3 text-text2',
+  error: 'bg-dangerBg text-danger',
 }

@@ -1,6 +1,6 @@
 import type { CaptureKind, RecorderState } from '@jl-org/tool'
-import type { RecordingControls } from 'comps'
 import { formatDate, ScreenRecorder } from '@jl-org/tool'
+import type { RecordingControls } from 'comps'
 import { Input, LiveWaveAudio, Message, Modal } from 'comps'
 import { useConst } from 'hooks'
 import { useEffect, useRef, useState } from 'react'
@@ -72,64 +72,68 @@ export default function WebRecorderPage() {
   const discardRecordingRef = useRef(false)
   const isAudioMode = captureKind === 'audio'
 
-  const createDefaultName = (kind: CaptureKind) => `${kind === 'audio'
-    ? t('audio')
-    : t('video')}_${formatDate('yyyy-MM-dd HH-mm-ss', new Date())}`
+  const createDefaultName = (kind: CaptureKind) =>
+    `${
+      kind === 'audio'
+        ? t('audio')
+        : t('video')
+    }_${formatDate('yyyy-MM-dd HH-mm-ss', new Date())}`
 
-  const recorder = useConst(new ScreenRecorder({
-    audioOnly: captureKind === 'audio',
-    systemAudio,
-    micAudio,
-    timesliceMs: typeof timeslice === 'number'
-      ? timeslice
-      : undefined,
-    onStateChange: s => setRecState(s),
-    onError: (e) => {
-      console.error(e)
-      setIsStarting(false)
-    },
-    onStart: () => {
-      setIsStarting(false)
-      if (captureKind === 'video') {
-        /** 绑定视频预览 */
-        const stream = recorder.getMediaStream()
-        if (videoRef.current && stream) {
-          videoRef.current.srcObject = stream
-          videoRef.current.controls = false
-          videoRef.current.play().catch(() => { })
+  const recorder = useConst(
+    new ScreenRecorder({
+      audioOnly: captureKind === 'audio',
+      systemAudio,
+      micAudio,
+      timesliceMs: typeof timeslice === 'number'
+        ? timeslice
+        : undefined,
+      onStateChange: (s) => setRecState(s),
+      onError: (e) => {
+        console.error(e)
+        setIsStarting(false)
+      },
+      onStart: () => {
+        setIsStarting(false)
+        if (captureKind === 'video') {
+          /** 绑定视频预览 */
+          const stream = recorder.getMediaStream()
+          if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream
+            videoRef.current.controls = false
+            videoRef.current.play().catch(() => {})
+          }
         }
-      }
-    },
-    onStop: (finalBlob) => {
-      const shouldDiscard = discardRecordingRef.current
-      discardRecordingRef.current = false
+      },
+      onStop: (finalBlob) => {
+        const shouldDiscard = discardRecordingRef.current
+        discardRecordingRef.current = false
 
-      if (!finalBlob || shouldDiscard) {
-        return
-      }
+        if (!finalBlob || shouldDiscard) {
+          return
+        }
 
-      const url = URL.createObjectURL(finalBlob)
-      setBlobUrl(url)
-      setLastBlobType(finalBlob.type || null)
-      setCurrentBlob(finalBlob)
+        const url = URL.createObjectURL(finalBlob)
+        setBlobUrl(url)
+        setLastBlobType(finalBlob.type || null)
+        setCurrentBlob(finalBlob)
 
-      /** 生成默认名称 */
-      setSaveName(createDefaultName(captureKind))
+        /** 生成默认名称 */
+        setSaveName(createDefaultName(captureKind))
 
-      /** 显示保存对话框 */
-      setShowSaveModal(true)
+        /** 显示保存对话框 */
+        setShowSaveModal(true)
 
-      if (captureKind === 'video' && videoRef.current) {
-        videoRef.current.srcObject = null
-        videoRef.current!.src = url
-        videoRef.current!.controls = true
-      }
-    },
-  }))
+        if (captureKind === 'video' && videoRef.current) {
+          videoRef.current.srcObject = null
+          videoRef.current!.src = url
+          videoRef.current!.controls = true
+        }
+      },
+    }),
+  )
 
   useEffect(() => {
-    if (captureKind === 'audio')
-      return
+    if (captureKind === 'audio') return
     recorder.updateConfig({
       systemAudio,
       micAudio,
@@ -153,7 +157,7 @@ export default function WebRecorderPage() {
       try {
         recorder.dispose()
       }
-      catch { }
+      catch {}
       if (waveformRef.current) {
         waveformRef.current.destroy()
       }
@@ -227,7 +231,7 @@ export default function WebRecorderPage() {
     try {
       recorder.dispose()
     }
-    catch { }
+    catch {}
 
     setIsStarting(true)
     try {
@@ -354,7 +358,7 @@ export default function WebRecorderPage() {
       setSaveName('')
       setCurrentBlob(null)
       /** 刷新列表 */
-      setListRefreshKey(prev => prev + 1)
+      setListRefreshKey((prev) => prev + 1)
     }
     catch (error) {
       console.error('保存录屏失败:', error)
@@ -372,38 +376,39 @@ export default function WebRecorderPage() {
   }
 
   return (
-    <div className="max-w-7xl w-7/12 mx-auto mt-8">
-      <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{ t('title') }</h2>
+    <div className="h-full overflow-y-auto px-8 py-8 lg:px-13 lg:py-10">
+      <div className="w-full max-w-240">
+        <h2 className="text-[22px] font-medium leading-8 text-text">{ t('title') }</h2>
 
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <RecorderOptions
-          recState={ recState }
-          systemAudio={ systemAudio }
-          micAudio={ micAudio }
-          captureKind={ captureKind }
-          timeslice={ timeslice }
-          isStarting={ isStarting }
-          onChangeSystemAudio={ setSystemAudio }
-          onChangeMicAudio={ setMicAudio }
-          onChangeCaptureKind={ setCaptureKind }
-          onChangeTimeslice={ setTimeslice }
-          onStart={ handleStart }
-          onPause={ handlePause }
-          onResume={ handleResume }
-          onStop={ handleStop }
-          onCancel={ handleDiscardRecording }
-        />
-        <RecorderPreview
-          videoRef={ videoRef as React.RefObject<HTMLVideoElement> }
-          blobUrl={ blobUrl }
-          isAudio={ lastBlobType
-            ? lastBlobType.startsWith('audio')
-            : captureKind === 'audio' }
-          audioRecorder={ isAudioMode
-            ? (
+        <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[240px_minmax(0,1fr)]">
+          <RecorderOptions
+            recState={ recState }
+            systemAudio={ systemAudio }
+            micAudio={ micAudio }
+            captureKind={ captureKind }
+            timeslice={ timeslice }
+            isStarting={ isStarting }
+            onChangeSystemAudio={ setSystemAudio }
+            onChangeMicAudio={ setMicAudio }
+            onChangeCaptureKind={ setCaptureKind }
+            onChangeTimeslice={ setTimeslice }
+            onStart={ handleStart }
+            onPause={ handlePause }
+            onResume={ handleResume }
+            onStop={ handleStop }
+            onCancel={ handleDiscardRecording }
+          />
+          <RecorderPreview
+            videoRef={ videoRef as React.RefObject<HTMLVideoElement> }
+            blobUrl={ blobUrl }
+            isAudio={ lastBlobType
+              ? lastBlobType.startsWith('audio')
+              : captureKind === 'audio' }
+            audioRecorder={ isAudioMode
+              ? (
                 <LiveWaveAudio
                   ref={ waveformRef }
-                  className="h-32 rounded-lg bg-white/80 dark:bg-zinc-900/60"
+                  className="h-32 rounded-xl bg-background"
                   height={ 128 }
                   mode="static"
                   state={ resolveWaveformState({
@@ -418,49 +423,50 @@ export default function WebRecorderPage() {
                   onRecordingFinish={ handleAudioRecordingFinish }
                 />
               )
-            : null }
+              : null }
+          />
+        </div>
+
+        <Modal
+          isOpen={ showSaveModal }
+          onClose={ handleCancelSave }
+          titleText={ t('saveModal.title') }
+          width={ 500 }
+          clickOutsideClose={ false }
+          onOk={ handleSave }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-sm text-text2">
+                { t('saveModal.nameLabel') }
+              </label>
+              <Input
+                value={ saveName }
+                onChange={ (value) => setSaveName(value) }
+                placeholder={ t('saveModal.namePlaceholder') }
+                onPressEnter={ handleSave }
+                autoFocus
+                disabled={ saving }
+              />
+            </div>
+            <p className="text-xs text-text3">
+              { t('saveModal.description') }
+            </p>
+          </div>
+        </Modal>
+
+        <RecorderList
+          key={ listRefreshKey }
+          onViewRecord={ setViewingRecordId }
+          className="mt-8 space-y-6"
+        />
+
+        <RecorderDetail
+          recordId={ viewingRecordId }
+          isOpen={ viewingRecordId !== null }
+          onClose={ () => setViewingRecordId(null) }
         />
       </div>
-
-      <Modal
-        isOpen={ showSaveModal }
-        onClose={ handleCancelSave }
-        titleText={ t('saveModal.title') }
-        width={ 500 }
-        clickOutsideClose={ false }
-        onOk={ handleSave }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm text-zinc-700 dark:text-zinc-300 mb-2">
-              { t('saveModal.nameLabel') }
-            </label>
-            <Input
-              value={ saveName }
-              onChange={ value => setSaveName(value) }
-              placeholder={ t('saveModal.namePlaceholder') }
-              onPressEnter={ handleSave }
-              autoFocus
-              disabled={ saving }
-            />
-          </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            { t('saveModal.description') }
-          </p>
-        </div>
-      </Modal>
-
-      <RecorderList
-        key={ listRefreshKey }
-        onViewRecord={ setViewingRecordId }
-        className="mt-8 space-y-6"
-      />
-
-      <RecorderDetail
-        recordId={ viewingRecordId }
-        isOpen={ viewingRecordId !== null }
-        onClose={ () => setViewingRecordId(null) }
-      />
     </div>
   )
 }

@@ -80,16 +80,19 @@ export default {
 
       /** 阴影预设（基于变量） */
       boxShadow: {
-        card: '0px 8px 48px 0px rgb(0 0 0 / 0.1)',
-        button: '0px 4px 20px 0px rgb(0 0 0 / 0.07)',
+        card: '0px 8px 48px 0px rgb(0 0 0 / 0.15)',
+        button: '0px 4px 20px 0px rgb(0 0 0 / 0.1)',
         toast: '0px 8px 20px 0px rgb(0 0 0 / 0.1)',
+      },
+      dropShadow: {
+        card: '0px 8px 48px rgb(0 0 0 / 0.15)',
       },
     },
   },
 
   plugins: [
     /** 自定义工具类 */
-    function ({ addUtilities, addComponents, theme }) {
+    function({ addUtilities, addComponents }) {
       /** 隐藏滚动条 */
       addUtilities({
         /** 为滚动条预留宽度，避免内容变化时布局变形 */
@@ -113,7 +116,7 @@ export default {
           '&::-webkit-scrollbar-thumb': {
             'background-color': 'transparent',
             'border-radius': '6px',
-            'border': '2px solid transparent',
+            border: '2px solid transparent',
             'background-clip': 'padding-box',
           },
           /* 鼠标悬停或聚焦时显示滚动条颜色 */

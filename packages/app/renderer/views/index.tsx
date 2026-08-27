@@ -1,39 +1,21 @@
-import { NavLink, Outlet, useLocation } from '@jl-org/react-router'
-import { CollapsibleSidebar } from 'comps'
-import { Bell, Camera, DownloadCloud, Keyboard } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AppSidebar } from '@/components/layout/AppSidebar'
+import { Outlet } from '@jl-org/react-router'
+import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AccessibilityGate, PermissionModal, usePermissions } from '../components/permission'
 import { isElectron, isMac } from '../utils/env'
-
-const SIDEBAR_LAYOUT = {
-  expandedWidth: 180,
-  collapsedWidth: 64,
-  macCollapsedWidth: 72,
-} as const
 
 /**
  * 主布局组件，包含侧边栏导航
  */
 export default function Layout() {
-  const { t } = useTranslation('layout')
   const { t: tApp } = useTranslation('app')
   const permissionGate = usePermissions()
   const { ensure } = permissionGate
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const location = useLocation()
-  const showMacTrafficLights = isMac()
-
-  const menu = [
-    { key: 'recorder', path: '/recorder', icon: <Camera size={ 18 } />, label: t('menu.recorder') },
-    { key: 'shortcuts', path: '/shortcuts', icon: <Keyboard size={ 18 } />, label: t('menu.shortcuts') },
-    { key: 'notify-test', path: '/notify-test', icon: <Bell size={ 18 } />, label: t('menu.notifyTest') },
-    { key: 'update', path: '/update', icon: <DownloadCloud size={ 18 } />, label: t('menu.update') },
-  ]
+  const showMacTrafficLightBar = isElectron() && isMac()
 
   useEffect(() => {
-    if (!isElectron())
-      return
+    if (!isElectron()) return
 
     return $ipc.permission.on('required', ({ kinds, reason }) => {
       const title = reason === 'voice-ime'
@@ -52,63 +34,20 @@ export default function Layout() {
   }, [ensure, tApp])
 
   return (
-    <main className="h-screen bg-background">
-      <div className="flex h-full">
-        {/* 左侧折叠菜单 */ }
-        <CollapsibleSidebar
-          isCollapsed={ isCollapsed }
-          onToggle={ () => setIsCollapsed(!isCollapsed) }
-          position="left"
-          expandedWidth={ SIDEBAR_LAYOUT.expandedWidth }
-          collapsedWidth={ showMacTrafficLights
-            ? SIDEBAR_LAYOUT.macCollapsedWidth
-            : SIDEBAR_LAYOUT.collapsedWidth }
-          header={ {
-            title: t('title'),
-            className: showMacTrafficLights
-              ? 'pt-10 [-webkit-app-region:drag]'
-              : undefined,
-          } }
-          toggleButtonClassName={ showMacTrafficLights
-            ? '[-webkit-app-region:no-drag]'
-            : undefined }
-          className="border-r border-border"
-          contentClassName="p-2"
-        >
-          <nav className="space-y-1">
-            { menu.map((item) => {
-              const isActive = location.pathname === item.path
-              return (
-                <NavLink
-                  key={ item.key }
-                  to={ item.path }
-                  className={ [
-                    'w-full flex items-center rounded-lg px-3 py-2 transition-colors',
-                    isActive
-                      ? 'bg-background2 text-text'
-                      : 'text-text2 hover:bg-background2 hover:text-text',
-                  ].join(' ') }
-                  aria-current={ isActive
-                    ? 'page'
-                    : undefined }
-                >
-                  <span className="shrink-0">{ item.icon }</span>
-                  { !isCollapsed && (
-                    <span className="ml-3 text-sm">{ item.label }</span>
-                  ) }
-                </NavLink>
-              )
-            }) }
-          </nav>
-        </CollapsibleSidebar>
+    <main className="flex h-screen w-screen flex-col overflow-hidden bg-background3">
+      { showMacTrafficLightBar && <div className="h-10 w-full shrink-0 bg-background3 [-webkit-app-region:drag]" /> }
 
-        {/* 右侧内容区 */ }
-        <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="w-16 shrink-0">
+          <AppSidebar />
+        </div>
+
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-tl-[20px] bg-background shadow-[-8px_8px_30px_rgba(0,0,0,0.04)]">
           <Outlet />
         </div>
       </div>
 
-      {/* 启动时检查辅助功能权限（Fn 长按 / 划词），缺失则引导开启 */ }
+      { /* 启动时检查辅助功能权限（Fn 长按 / 划词），缺失则引导开启 */ }
       <AccessibilityGate />
 
       <PermissionModal

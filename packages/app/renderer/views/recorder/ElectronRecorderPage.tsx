@@ -1,16 +1,15 @@
+import { useRecordingSourceState } from '@/store/recordingStore'
 import type { PermissionKind } from '@shared'
-import type { PreviewSummary } from './components/PreviewPanel/types'
-import type { PrimaryAction } from './types'
 import { Input, LiveWaveAudio, Message, Modal } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
-import { useRecordingSourceState } from '@/store/recordingStore'
 import { PermissionModal, usePermissions } from '../../components/permission'
 import { AudioSourceBar } from './components/AudioSourceBar'
 import { PreviewPanel } from './components/PreviewPanel'
+import type { PreviewSummary } from './components/PreviewPanel/types'
 import { RecorderSidebar } from './components/RecorderSidebar'
 import { SourceGrid } from './components/SourceGrid'
 import { buildRecorderStateMeta } from './constants/state-meta'
@@ -21,6 +20,7 @@ import { useRecorderController } from './hooks/useRecorderController'
 import { useRecordingTimer } from './hooks/useRecordingTimer'
 import { useRecoverableRecordings } from './hooks/useRecoverableRecordings'
 import { useSourceManager } from './hooks/useSourceManager'
+import type { PrimaryAction } from './types'
 import { RecorderDetail } from './web/RecorderDetail'
 import { RecorderList } from './web/RecorderList'
 
@@ -35,7 +35,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const pendingNativeStartRef = useRef<Promise<void> | null>(null)
 
   useMeetingRecordingSaver(() => {
-    setListRefreshKey(prev => prev + 1)
+    setListRefreshKey((prev) => prev + 1)
     Message.success(t('meetingRecording.saved', '会议录音已保存'))
   })
   const {
@@ -100,11 +100,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
    * 引擎选择：Electron + 支持 + 「仅录音」→ 走原生 tap；录视频 / 不支持 → 回退 web ScreenRecorder
    */
   const native = useNativeManualRecording(() => {
-    setListRefreshKey(prev => prev + 1)
+    setListRefreshKey((prev) => prev + 1)
     Message.success(t('meetingRecording.saved', '录音已保存'))
   })
   useRecoverableRecordings(() => {
-    setListRefreshKey(prev => prev + 1)
+    setListRefreshKey((prev) => prev + 1)
   })
   const { micEnabled, systemAudioMixEnabled } = useRecordingSourceState()
 
@@ -123,8 +123,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
   /** 原生录音开录：只申请用户实际选择的音源权限 */
   const handleStartNative = useLatestCallback(async () => {
-    if (pendingNativeStartRef.current)
-      return pendingNativeStartRef.current
+    if (pendingNativeStartRef.current) return pendingNativeStartRef.current
 
     const pending = (async () => {
       if (micEnabled) {
@@ -132,8 +131,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
           title: t('permission.recordingTitle', '允许应用录制你的会议'),
           subtitle: t('permission.recordingSubtitle', '为正常录制，请授予以下权限'),
         })
-        if (!micOk)
-          return
+        if (!micOk) return
       }
 
       if (systemAudioMixEnabled) {
@@ -150,14 +148,9 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       await pending
     }
     finally {
-      if (pendingNativeStartRef.current === pending)
-        pendingNativeStartRef.current = null
+      if (pendingNativeStartRef.current === pending) pendingNativeStartRef.current = null
     }
   })
-
-  const layoutStyle = useMemo(() => ({
-    minHeight: 'calc(100vh - 48px)',
-  }), [])
 
   const refreshSources = useCallback(() => {
     return loadSources().catch(reportError)
@@ -221,7 +214,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const handleSaveToIndexedDB = useCallback(async () => {
     await saveToIndexedDB()
     /** 保存成功后刷新历史记录列表 */
-    setListRefreshKey(prev => prev + 1)
+    setListRefreshKey((prev) => prev + 1)
   }, [saveToIndexedDB])
 
   /**
@@ -244,8 +237,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
   useEffect(() => {
     const videoEl = liveVideoRef.current
-    if (!videoEl)
-      return
+    if (!videoEl) return
 
     if (isLiveVideoPreview) {
       const stream = getMediaStream()
@@ -266,8 +258,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
   useEffect(() => {
     const audioEl = liveAudioRef.current
-    if (!audioEl)
-      return
+    if (!audioEl) return
 
     if (isLiveAudioPreview) {
       const stream = getMediaStream()
@@ -295,9 +286,11 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   }, [getMediaStream, isLiveAudioPreview, liveAudioRef])
 
   const stateMetaMap = useMemo(() => buildRecorderStateMeta(t), [t])
-  const stateMeta = stateMetaMap[nativeMode
-    ? native.phase
-    : recorderState]
+  const stateMeta = stateMetaMap[
+    nativeMode
+      ? native.phase
+      : recorderState
+  ]
 
   const primaryAction = useMemo<PrimaryAction>(() => {
     if (effIsStarting) {
@@ -347,7 +340,22 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       icon: <Play className="size-4" />,
       loading,
     }
-  }, [effIsBusy, effIsPaused, effIsRecording, effIsStarting, nativeMode, native.cancel, native.pause, native.resume, loading, pause, resume, handleStartNative, handleStartRecording, t])
+  }, [
+    effIsBusy,
+    effIsPaused,
+    effIsRecording,
+    effIsStarting,
+    nativeMode,
+    native.cancel,
+    native.pause,
+    native.resume,
+    loading,
+    pause,
+    resume,
+    handleStartNative,
+    handleStartRecording,
+    t,
+  ])
 
   const sidebarActions = {
     stopLabel: t('primaryActions.stop'),
@@ -385,29 +393,28 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     items: nativeMode
       ? [audioOnlyCard]
       : [
-          {
-            title: t('audioSettings.systemAudio.label'),
-            description: t('audioSettings.systemAudio.description'),
-            checked: systemAudio && canControlSystemAudio,
-            disabled: !canControlSystemAudio,
-            onChange: (_checked: boolean) => {
-              if (!canControlSystemAudio)
-                return
-              return toggleSystemAudio()
-            },
+        {
+          title: t('audioSettings.systemAudio.label'),
+          description: t('audioSettings.systemAudio.description'),
+          checked: systemAudio && canControlSystemAudio,
+          disabled: !canControlSystemAudio,
+          onChange: (_checked: boolean) => {
+            if (!canControlSystemAudio) return
+            return toggleSystemAudio()
           },
-          {
-            title: t('audioSettings.microphone.label'),
-            description: t('audioSettings.microphone.description'),
-            checked: micAudio,
-            onChange: setMicAudio,
-          },
-          audioOnlyCard,
-        ],
+        },
+        {
+          title: t('audioSettings.microphone.label'),
+          description: t('audioSettings.microphone.description'),
+          checked: micAudio,
+          onChange: setMicAudio,
+        },
+        audioOnlyCard,
+      ],
   }
 
   const summary: PreviewSummary = {
-    // visible: hasResult,
+    /** visible: hasResult, */
     visible: false, // 暂不显示
     typeLabel: t('preview.type'),
     typeValue: recordedBlob?.type ?? '--',
@@ -424,29 +431,29 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const audioPreview = showAudioPreview
     ? {
       /** 音频模式下不显示实时预览，只在录制完成后显示 */
-        isLive: audioOnly
-          ? false
-          : isLiveAudioPreview,
-        hasResult,
-        emptyText: t('preview.noAudioFile'),
-        liveTitle: t('preview.liveAudioPreview.title'),
-        liveDescription: t('preview.liveAudioPreview.description'),
-        liveBadgeText: t('preview.liveAudioPreview.live'),
-        recordedSrc: recordedAudioSrc,
-        ref: liveAudioRef,
-      }
+      isLive: audioOnly
+        ? false
+        : isLiveAudioPreview,
+      hasResult,
+      emptyText: t('preview.noAudioFile'),
+      liveTitle: t('preview.liveAudioPreview.title'),
+      liveDescription: t('preview.liveAudioPreview.description'),
+      liveBadgeText: t('preview.liveAudioPreview.live'),
+      recordedSrc: recordedAudioSrc,
+      ref: liveAudioRef,
+    }
     : undefined
 
   /** 仅在非音频模式下显示视频预览 */
   const videoPreview = showVideoPreview && !audioOnly
     ? {
-        isLive: isLiveVideoPreview,
-        hasResult,
-        emptyText: t('preview.noRecording'),
-        liveBadgeText: t('preview.realtimePreview'),
-        recordedSrc: recordedVideoSrc,
-        ref: liveVideoRef,
-      }
+      isLive: isLiveVideoPreview,
+      hasResult,
+      emptyText: t('preview.noRecording'),
+      liveBadgeText: t('preview.realtimePreview'),
+      recordedSrc: recordedVideoSrc,
+      ref: liveVideoRef,
+    }
     : undefined
 
   /** Web 录制由 renderer 计时；native 录制直接使用 main 的就绪后时钟 */
@@ -458,7 +465,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     ? native.elapsedSeconds
     : rendererRecordingDuration
 
-  // LiveWaveAudio 错误处理
+  /** LiveWaveAudio 错误处理 */
   const handleLiveWaveError = useCallback((error: Error) => {
     console.error('LiveWaveAudio error', error)
     Message.danger(
@@ -472,7 +479,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   /** 判断是否显示预览面板 */
   const shouldShowPreview = !audioOnly || !shouldShowLiveWave || hasResult
 
-  // LiveWaveAudio 相关逻辑
+  /** LiveWaveAudio 相关逻辑 */
   const {
     controlsRef: liveWaveControlsRef,
     state: liveWaveState,
@@ -488,13 +495,10 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const CARD_HEIGHT = 260
 
   return (
-    <div className="min-h-screen bg-backgroundSubtle px-4 py-6 text-sm text-textPrimary lg:px-8">
-      <div
-        className="mx-auto flex w-full max-w-360 flex-col gap-5"
-        style={ layoutStyle }
-      >
+    <div className="h-full overflow-y-auto bg-background px-6 py-7 text-sm text-text lg:px-8 lg:py-8">
+      <div className="mx-auto flex min-h-full w-full max-w-360 flex-col gap-5">
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold text-textPrimary">{ t('recordingTitle') }</h1>
+          <h1 className="text-[22px] font-medium leading-8 text-text">{ t('recordingTitle') }</h1>
         </header>
 
         <div className="grid gap-5 xl:grid-cols-[280px,1fr] flex-1 min-h-0">
@@ -514,52 +518,51 @@ export default function ElectronRecorderPage(): React.JSX.Element {
 
           <div className="flex h-full flex-col gap-5 min-h-0">
             <div className="grid gap-5 lg:grid-cols-2">
-              <section className="flex flex-col gap-4 rounded-3xl border border-border bg-background shadow-card p-4" style={ { height: CARD_HEIGHT } }>
+              <section className="flex flex-col gap-4 rounded-2xl bg-background2 p-4 shadow-[0_8px_30px_rgba(0,0,0,0.06)]" style={ { height: CARD_HEIGHT } }>
                 { nativeMode
                   ? (
-                      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
-                        <p className="text-sm font-medium text-textPrimary">
-                          { effIsStarting
-                            ? t('nativeRecording.starting', '正在准备麦克风与系统音频…')
-                            : effIsBusy
-                              ? t('nativeRecording.recording', '正在录制（可混入系统音频）…')
-                              : t('nativeRecording.idle', '选择音源后点击开始录制') }
-                        </p>
-                        <p className="text-xs text-textSecondary">
-                          { t('nativeRecording.hint', '录制完成后自动保存到下方列表') }
-                        </p>
-                      </div>
-                    )
+                    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                      <p className="text-sm font-medium text-text">
+                        { effIsStarting
+                          ? t('nativeRecording.starting', '正在准备麦克风与系统音频…')
+                          : effIsBusy
+                          ? t('nativeRecording.recording', '正在录制（可混入系统音频）…')
+                          : t('nativeRecording.idle', '选择音源后点击开始录制') }
+                      </p>
+                      <p className="text-xs text-text3">
+                        { t('nativeRecording.hint', '录制完成后自动保存到下方列表') }
+                      </p>
+                    </div>
+                  )
                   : (
-                      <>
-                        { shouldShowLiveWave && (
-                          <LiveWaveAudio
-                            ref={ liveWaveControlsRef }
-                            state={ liveWaveState }
-                            externalStream={ liveWaveStream }
-                            mode="static"
-                            height={ shouldShowPreview
-                              ? undefined
-                              : '100%' }
-                            className={ cn({ 'flex-1': shouldShowPreview }) }
-                            onError={ handleLiveWaveError }
-                          />
-                        ) }
-                        { shouldShowPreview && (
-                          <PreviewPanel
-                            title={ t('preview.title') }
-                            summary={ summary }
-                            audioPreview={ audioPreview }
-                            videoPreview={ videoPreview }
-                          />
-                        ) }
-                      </>
-                    ) }
+                    <>
+                      { shouldShowLiveWave && (
+                        <LiveWaveAudio
+                          ref={ liveWaveControlsRef }
+                          state={ liveWaveState }
+                          externalStream={ liveWaveStream }
+                          mode="static"
+                          height={ shouldShowPreview
+                            ? undefined
+                            : '100%' }
+                          className={ cn({ 'flex-1': shouldShowPreview }) }
+                          onError={ handleLiveWaveError }
+                        />
+                      ) }
+                      { shouldShowPreview && (
+                        <PreviewPanel
+                          title={ t('preview.title') }
+                          summary={ summary }
+                          audioPreview={ audioPreview }
+                          videoPreview={ videoPreview }
+                        />
+                      ) }
+                    </>
+                  ) }
               </section>
-
             </div>
 
-            <section className="min-h-[480px] rounded-3xl border border-border bg-background p-5 shadow-card overflow-hidden flex flex-col">
+            <section className="flex min-h-120 flex-col overflow-hidden rounded-2xl bg-background2 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
               <RecorderList
                 key={ listRefreshKey }
                 onViewRecord={ setViewingRecordId }
@@ -587,7 +590,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
             </label>
             <Input
               value={ saveName }
-              onChange={ value => setSaveName(value) }
+              onChange={ (value) => setSaveName(value) }
               placeholder={ t('saveModal.namePlaceholder', '请输入文件名称') }
               onPressEnter={ handleSaveToIndexedDB }
               autoFocus
@@ -615,7 +618,7 @@ export default function ElectronRecorderPage(): React.JSX.Element {
           sources={ sources }
           selectedSourceId={ selectedSourceId }
           canSelect={ !isBusy }
-          onSelect={ sourceId => setSelectedSourceId(sourceId) }
+          onSelect={ (sourceId) => setSelectedSourceId(sourceId) }
           emptyState={ {
             loading: t('sourceSelection.loadingSources'),
             empty: t('sourceSelection.noSources'),

@@ -1,11 +1,6 @@
-import type { WindowConfig } from './types'
 import { WindowType } from '../types/window'
-import {
-  FLOATING_STATUS_POOL_WINDOW_SIZE,
-  MENUBAR_WINDOW_SIZE,
-  UTILITY_PANEL_POOL_WINDOW_SIZE,
-  VOICE_IME_WINDOW_SIZE,
-} from './metrics'
+import { FLOATING_STATUS_POOL_WINDOW_SIZE, MENUBAR_WINDOW_SIZE, UTILITY_PANEL_POOL_WINDOW_SIZE, VOICE_IME_WINDOW_SIZE } from './metrics'
+import type { WindowConfig } from './types'
 
 /**
  * 真实 BrowserWindow 配置
@@ -16,8 +11,10 @@ import {
  */
 export const PHYSICAL_WINDOW_CONFIGS = {
   [WindowType.MAIN]: {
-    width: 1440,
-    height: 1080,
+    width: 1200,
+    height: 800,
+    minWidth: 960,
+    minHeight: 680,
     position: 'center',
     title: 'Demo',
     frame: true,
@@ -27,7 +24,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     resizable: true,
     movable: true,
     focusable: true,
-    hasShadow: false,
+    hasShadow: true,
     htmlPath: 'index.html',
     autoHideMenuBar: true,
     show: false,
@@ -140,10 +137,10 @@ export const PHYSICAL_WINDOW_CONFIGS = {
   },
 } as const satisfies Record<PhysicalWindowType, WindowConfig>
 
-export type PhysicalWindowType
-  = | WindowType.MAIN
-    | WindowType.VOICE_IME
-    | WindowType.OAUTH
-    | WindowType.MENUBAR
-    | WindowType.FLOATING_STATUS_POOL
-    | WindowType.UTILITY_PANEL_POOL
+export type PhysicalWindowType =
+  | WindowType.MAIN
+  | WindowType.VOICE_IME
+  | WindowType.OAUTH
+  | WindowType.MENUBAR
+  | WindowType.FLOATING_STATUS_POOL
+  | WindowType.UTILITY_PANEL_POOL

@@ -1,9 +1,9 @@
-import type { RecorderSidebarProps } from './types'
 import { Button, Card } from 'comps'
 import { memo } from 'react'
 import { cn } from 'utils'
 import { AudioToggleCard } from '../AudioToggleCard'
 import { RecordingTimer } from '../RecordingTimer'
+import type { RecorderSidebarProps } from './types'
 
 export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
   const {
@@ -22,9 +22,11 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
     <aside className="space-y-5">
       <Card
         rounded="2xl"
-        shadow="lg"
+        shadow="none"
+        bordered={ false }
+        hoverEffect={ false }
         padding="none"
-        className="shadow-card"
+        className="bg-background2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
         bodyClassName="p-5"
       >
         <div className="flex items-start justify-between gap-4">
@@ -55,7 +57,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
               block
               onClick={ actions.onStop }
               disabled={ !actions.isBusy }
-              className="border border-border text-textSecondary hover:bg-background"
+              className="bg-background3 text-text2 hover:bg-background4"
             >
               { actions.stopLabel }
             </Button>
@@ -77,7 +79,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
               block
               onClick={ actions.onReset }
               disabled={ !actions.hasResult }
-              className="border border-border text-textSecondary hover:bg-background"
+              className="bg-background3 text-text2 hover:bg-background4"
             >
               { actions.resetLabel }
             </Button>
@@ -87,7 +89,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
               block
               onClick={ actions.onDownload }
               disabled={ !actions.hasResult }
-              className="border border-border text-textSecondary hover:bg-background"
+              className="bg-background3 text-text2 hover:bg-background4"
             >
               { actions.downloadLabel }
             </Button>
@@ -97,9 +99,11 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
 
       <Card
         rounded="2xl"
-        shadow="lg"
+        shadow="none"
+        bordered={ false }
+        hoverEffect={ false }
         padding="none"
-        className="shadow-card"
+        className="bg-background2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]"
         bodyClassName="p-5"
       >
         <div className="mb-4">
@@ -111,7 +115,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
           </div>
         ) }
         <div className="space-y-3">
-          { audioCards.items.map(card => (
+          { audioCards.items.map((card) => (
             <AudioToggleCard
               key={ card.title }
               title={ card.title }
@@ -123,7 +127,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
           )) }
         </div>
         { errorMessage && (
-          <div className="mt-4 rounded-xl border border-danger bg-dangerBg/40 p-3 text-sm text-danger">
+          <div className="mt-4 rounded-xl bg-dangerBg/40 p-3 text-sm text-danger">
             { errorMessage }
           </div>
         ) }

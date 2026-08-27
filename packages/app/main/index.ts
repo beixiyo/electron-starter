@@ -3,7 +3,6 @@ import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shar
 import type { ShortcutActionDefinition, ShortcutRuntimeEvent } from '@shared/shortcuts'
 import type { ShortcutRuntimeHandlers } from './shortcuts'
 
-import { join } from 'node:path'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { setIpcServiceErrorLogger } from '@ipc/core/service'
 import { focusService } from '@ipc/services/focus/service'
@@ -12,15 +11,9 @@ import { createShortcutConfigService, notifyShortcutRuntimeChanged } from '@ipc/
 import { startSystemPreferencesListener } from '@ipc/services/system-preferences/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeService } from '@ipc/services/voice-ime/service'
-import {
-  APP_PROTOCOL,
-  FOCUS_NATIVE_WINDOW_SIZE,
-  HOLD_MIN_DURATION_MS,
-  HOLD_SHORT_ERROR_MESSAGE,
-  SHORTCUT_ACTIONS,
-  WindowType,
-} from '@shared'
+import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUT_ACTIONS, WindowType } from '@shared'
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
+import { join } from 'node:path'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { checkFocusedTextInput } from './focus-check'
@@ -34,13 +27,7 @@ import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
 import { startCaptureFromShortcut } from './screenshot'
 import { initSelectionHook } from './selection'
-import {
-  holdStateManager,
-  onShortcutRuntimeSyncRequested,
-  reapplyShortcutRuntime,
-  requestShortcutRuntimeSync,
-  setupFnKeyIpc,
-} from './shortcuts'
+import { holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync, setupFnKeyIpc } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { pasteText } from './utils'
@@ -48,10 +35,10 @@ import { createVoiceImeShortcutController } from './voice-ime-shortcut'
 import { createWindowsSequentially, getShortcutTestWindowBounds, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
-// Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃
+/** Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃 */
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto')
 
-// macOS: 启用系统音频回环（loopback）捕获能力
+/** macOS: 启用系统音频回环（loopback）捕获能力 */
 // - MacSckSystemAudioLoopbackOverride：强制走 ScreenCaptureKit 回环（macOS 15/26 实测可用，需 video 轨）
 // - MacLoopbackAudioForScreenShare：屏幕共享时附带系统音频
 /** 配合 getDisplayMedia handler 的 audio:'loopback' 与 Info.plist 的 NSAudioCaptureUsageDescription 生效 */
@@ -154,8 +141,7 @@ const DEV_PARENT_CHECK_INTERVAL_MS = 2000
  * 与 native helper 清理，避免 helper 子进程反过来变成孤儿
  */
 function setupDevParentExitCleanup(): void {
-  if (!is.dev)
-    return
+  if (!is.dev) return
 
   const quitOnce = (): void => {
     process.exitCode = 0
@@ -168,8 +154,7 @@ function setupDevParentExitCleanup(): void {
 
   const parentPid = process.ppid
   const timer = setInterval(() => {
-    if (process.ppid === parentPid)
-      return
+    if (process.ppid === parentPid) return
 
     clearInterval(timer)
     quitOnce()
@@ -180,7 +165,7 @@ function setupDevParentExitCleanup(): void {
 }
 
 // ─────────────────────────────────────────────
-// Voice IME 共用逻辑
+/** Voice IME 共用逻辑 */
 // ─────────────────────────────────────────────
 
 function sendVoiceImeStatus(payload: VoiceImeRendererStatusPayload): void {
@@ -242,7 +227,7 @@ async function handleVoiceImeRelease(raw: unknown): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
-// Focus Demo / Shortcut Test — 通过 contract service 发送事件
+/** Focus Demo / Shortcut Test — 通过 contract service 发送事件 */
 // ─────────────────────────────────────────────
 
 // ─────────────────────────────────────────────
@@ -253,10 +238,10 @@ function setupBrowserWindowLifecycle(): void {
   app.on('browser-window-created', (_, window) => {
     /**
      * `watchWindowShortcuts` 的 zoom 默认是 false，会在 before-input-event 里对
-     * `Cmd/Ctrl + Minus` 和 `Cmd/Ctrl + Shift + Equal` 调 preventDefault。
+     * `Cmd/Ctrl + Minus` 和 `Cmd/Ctrl + Shift + Equal` 调 preventDefault
      * preventDefault 让 Electron 直接返回 HANDLED，按键既不下发渲染进程也不触发菜单
      * accelerator，表现为「Cmd+= 能放大、Cmd+0 能恢复，唯独 Cmd+- 无法缩小」
-     * （Digit0 和不带 shift 的 Equal 都不在它的拦截列表里）。
+     * （Digit0 和不带 shift 的 Equal 都不在它的拦截列表里）
      * 这里显式放行，把缩放交回 Electron 默认菜单的 zoomIn / zoomOut / resetZoom role
      */
     optimizer.watchWindowShortcuts(window, { zoom: true })
@@ -304,10 +289,15 @@ function showOrCreateMainWindow(): void {
   createMainWindow()
 }
 
+const SPLASH_WINDOW_SIZE = {
+  width: 256,
+  height: 220,
+} as const
+
 function createSplashWindow(): BrowserWindow {
   const splash = new BrowserWindow({
-    width: 308,
-    height: 208,
+    width: SPLASH_WINDOW_SIZE.width,
+    height: SPLASH_WINDOW_SIZE.height,
     frame: false,
     transparent: true,
     hasShadow: false,
@@ -342,8 +332,7 @@ function createMainWindow(): void {
    */
   const destroySplash = (): void => {
     clearTimeout(splashFallbackTimer)
-    if (!splash.isDestroyed())
-      splash.destroy()
+    if (!splash.isDestroyed()) splash.destroy()
   }
 
   /** 渲染进程挂死等一切未覆盖异常路径的最后兜底 */
@@ -352,9 +341,9 @@ function createMainWindow(): void {
   const mainWindow = windowManager.create(WindowType.MAIN, {
     ...(process.platform === 'darwin'
       ? {
-          titleBarStyle: 'hidden' as const,
-          trafficLightPosition: { x: 14, y: 14 },
-        }
+        titleBarStyle: 'hidden' as const,
+        trafficLightPosition: { x: 14, y: 14 },
+      }
       : {}),
     ...(process.platform === 'linux'
       ? { icon }
@@ -370,8 +359,7 @@ function createMainWindow(): void {
 
   /** 主框架加载失败后不再有 ready-to-show；-3（ERR_ABORTED，如导航中断/重试）不算失败，等后续加载 */
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3)
-      destroySplash()
+    if (isMainFrame && errorCode !== -3) destroySplash()
   })
 
   mainWindow.once('ready-to-show', () => {
@@ -379,7 +367,7 @@ function createMainWindow(): void {
     mainWindow.show()
 
     /** 主窗口显示后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
-    // SELECTION / SHORTCUT_TEST 按需懒创建，不在此列
+    /** SELECTION / SHORTCUT_TEST 按需懒创建，不在此列 */
     initTray({ onOpenMain: showOrCreateMainWindow })
     void createWindowsSequentially([
       { type: WindowType.VOICE_IME },
@@ -451,8 +439,7 @@ function handleShortcutAction(event: ShortcutRuntimeEvent): void {
 }
 
 function showShortcutActionTestWindow(label: string, event: ShortcutRuntimeEvent): void {
-  if (event.phase !== 'trigger')
-    return
+  if (event.phase !== 'trigger') return
 
   const { gesture } = event
   showShortcutTestWindow(
@@ -462,8 +449,7 @@ function showShortcutActionTestWindow(label: string, event: ShortcutRuntimeEvent
 }
 
 function handleScreenshotShortcut(event: ShortcutRuntimeEvent): void {
-  if (event.phase !== 'trigger')
-    return
+  if (event.phase !== 'trigger') return
 
   void startCaptureFromShortcut()
 }
@@ -480,30 +466,23 @@ function formatKeyboardGestureLabel(gesture: ShortcutRuntimeEvent['gesture']): s
 }
 
 function getShortcutTestTriggerType(event: ShortcutRuntimeEvent): 'combo' | 'doublePress' | 'hold' | 'hotkey' {
-  if (event.gesture === 'doublePress')
-    return 'doublePress'
-  if (event.gesture === 'hold')
-    return 'hold'
-  if (event.binding.chord.source === 'fn' && event.binding.chord.key !== 'Fn')
-    return 'combo'
+  if (event.gesture === 'doublePress') return 'doublePress'
+  if (event.gesture === 'hold') return 'hold'
+  if (event.binding.chord.source === 'fn' && event.binding.chord.key !== 'Fn') return 'combo'
   return 'hotkey'
 }
 
 function handleVoiceDictationShortcut(event: ShortcutRuntimeEvent): void {
-  const action: ShortcutActionDefinition | undefined = SHORTCUT_ACTIONS.find(item => item.id === 'voiceDictation')
-  if (action?.activation === 'hold' || action?.activation === 'toggle')
-    voiceImeShortcutController.handle(event, action.activation)
+  const action: ShortcutActionDefinition | undefined = SHORTCUT_ACTIONS.find((item) => item.id === 'voiceDictation')
+  if (action?.activation === 'hold' || action?.activation === 'toggle') voiceImeShortcutController.handle(event, action.activation)
 }
 
 async function startVoiceImeFromShortcut(shouldContinue: () => boolean): Promise<void> {
-  if (holdStateManager.isHolding(WindowType.VOICE_IME))
-    return
+  if (holdStateManager.isHolding(WindowType.VOICE_IME)) return
 
-  if (!ensureMicrophonePermissionOrExplain('voice-ime'))
-    return
+  if (!ensureMicrophonePermissionOrExplain('voice-ime')) return
 
-  if (!shouldContinue() || holdStateManager.isHolding(WindowType.VOICE_IME))
-    return
+  if (!shouldContinue() || holdStateManager.isHolding(WindowType.VOICE_IME)) return
 
   holdStateManager.startHold({
     type: WindowType.VOICE_IME,
@@ -526,8 +505,7 @@ async function startVoiceImeFromShortcut(shouldContinue: () => boolean): Promise
 
 function stopVoiceImeFromShortcut(activation: 'hold' | 'toggle'): void {
   const holdState = holdStateManager.getHoldState(WindowType.VOICE_IME)
-  if (!holdState || !holdState.isHolding)
-    return
+  if (!holdState || !holdState.isHolding) return
 
   if (activation === 'hold') {
     const holdDuration = Date.now() - holdState.startTime
@@ -556,8 +534,7 @@ function startFocusCheckPolling(): void {
     const isSelf = result.pid === process.pid
 
     const key = `${result.focused}-${result.bundleId ?? ''}-${result.role ?? ''}-${result.pid}`
-    if (key === prevKey)
-      return
+    if (key === prevKey) return
     prevKey = key
 
     const payload: FocusPayload = {
@@ -596,8 +573,7 @@ function showFocusNativeDemoWindow(): void {
 }
 
 function layoutFocusNativeDemoWindow(focused: boolean, animate = true, resetPosition = false): void {
-  if (!logicalWindowManager.isActive(WindowType.FOCUS_NATIVE))
-    return
+  if (!logicalWindowManager.isActive(WindowType.FOCUS_NATIVE)) return
 
   const win = logicalWindowManager.getTargetWindow(WindowType.FOCUS_NATIVE)
   if (!win || win.isDestroyed()) {

@@ -8,19 +8,19 @@ export default function ShortcutsPage() {
   const { actions, replaceBinding, resetToDefault } = useShortcutsList()
   const recorder = useRecordBinding()
   const session = useShortcutRecordingSession(actions, recorder, replaceBinding)
-  const recordingAction = actions.find(action => action.id === session.recordingId) ?? null
+  const recordingAction = actions.find((action) => action.id === session.recordingId) ?? null
   const captureAllowed = !!recordingAction
     && !!recorder.detected
     && isShortcutGestureBindingSupportedByAction(recordingAction, recorder.detected)
 
   return (
-    <div className="px-6 py-7 md:px-8 md:py-8">
+    <div className="h-full overflow-y-auto px-8 py-8 lg:px-13 lg:py-10">
       <header className="mb-6">
-        <h1 className="text-xl font-semibold leading-7 text-text">快捷键</h1>
+        <h1 className="text-[22px] font-medium leading-8 text-text">快捷键</h1>
         <p className="mt-1 text-sm leading-5 text-text3">管理全局和窗口内快捷键，点击按键区域开始录制</p>
       </header>
 
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-[0_8px_24px_rgba(0,0,0,0.05)]">
+      <div className="max-w-180 overflow-hidden rounded-2xl bg-background2 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
         { actions.map((action, index) => (
           <div key={ action.id }>
             <ShortcutRow
@@ -36,7 +36,7 @@ export default function ShortcutsPage() {
               onCancel={ session.cancel }
               onReset={ () => resetToDefault(action.id) }
             />
-            { index < actions.length - 1 && <div className="mx-5 h-px bg-border" /> }
+            { index < actions.length - 1 && <div className="mx-5 h-px bg-border/60" /> }
           </div>
         )) }
       </div>

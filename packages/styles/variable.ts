@@ -125,8 +125,8 @@ export default {
 
     // 📏 边框 —— 用于组件分界
     border: '38 38 38', // 对齐 Figma Border3(#FFFFFF 8%)叠深色卡的不透明等价色 ≈ #262626
-    border2: '50 50 50',
-    border3: '75 75 75',
+    border2: '63 63 63',
+    border3: '128 128 128',
 
     // 📜 滚动条 —— 轨道与滑块
     scrollbarTrack: 'transparent',

@@ -1,21 +1,30 @@
 /**
  * 登录路由页面：Web 端保留弹窗授权，Electron 端在系统默认浏览器中发起 OAuth 授权
  */
-import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
-import { useNavigate } from '@jl-org/react-router'
-import { Button, Message } from 'comps'
-import { ClientType } from 'http-api'
-import { Chrome, Mail } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { cn } from 'utils'
 import { INDEX_PAGE } from '@/config'
 import { api } from '@/http/httpInstance'
 import { UserActions } from '@/store/user'
 import { isElectron } from '@/utils/env'
+import { applePopupLogin, googlePopupCodeLogin } from '@jl-org/auth'
+import { useNavigate } from '@jl-org/react-router'
+import { Button, Message } from 'comps'
+import { ClientType } from 'http-api'
+import { Chrome, Layers3, Mail } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import AppleIcon from '../../assets/svg/apple.svg?react'
 import { EmailModal } from './components/EmailModal'
-import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI, APPLE_SCOPE, APPLE_STATE, buildAppleAuthorizeUrl, buildClientContext, buildGoogleAuthorizeUrl, GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from './constants'
+import {
+  APPLE_CLIENT_ID,
+  APPLE_REDIRECT_URI,
+  APPLE_SCOPE,
+  APPLE_STATE,
+  buildAppleAuthorizeUrl,
+  buildClientContext,
+  buildGoogleAuthorizeUrl,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_REDIRECT_URI,
+} from './constants'
 import { consumeElectronOAuthCallback } from './electronOAuthCallback'
 import { clearOAuthState, createOAuthState } from './oauthState'
 
@@ -40,8 +49,7 @@ export default function LoginPage() {
       try {
         const googleUrl = buildGoogleAuthorizeUrl(state)
         const result = await $ipc.window.openExternal(googleUrl)
-        if (!result.success)
-          throw new Error(result.error)
+        if (!result.success) throw new Error(result.error)
       }
       catch (error) {
         clearOAuthState('google', localStorage)
@@ -84,8 +92,7 @@ export default function LoginPage() {
       try {
         const appleUrl = buildAppleAuthorizeUrl(state)
         const result = await $ipc.window.openExternal(appleUrl)
-        if (!result.success)
-          throw new Error(result.error)
+        if (!result.success) throw new Error(result.error)
       }
       catch (error) {
         clearOAuthState('apple', localStorage)
@@ -156,16 +163,14 @@ export default function LoginPage() {
     let active = true
     type OAuthCallbackDelivery = Awaited<ReturnType<typeof $ipc.oauth.registerReceiver>>[number]
     const handleOAuthCallback = async (delivery: OAuthCallbackDelivery) => {
-      if (!active)
-        return
+      if (!active) return
 
       const { id, params } = delivery
       const callback = consumeElectronOAuthCallback(params, localStorage)
       await $ipc.oauth.acknowledgeCallback(id).catch(() => {})
 
       if (!callback.ok) {
-        if (callback.reason !== 'unsupported_provider' && callback.reason !== 'access_denied')
-          Message.danger(t('messages.loginFailed'))
+        if (callback.reason !== 'unsupported_provider' && callback.reason !== 'access_denied') Message.danger(t('messages.loginFailed'))
         return
       }
 
@@ -198,8 +203,7 @@ export default function LoginPage() {
 
     const cleanup = $ipc.oauth.on('callbackDelivery', handleOAuthCallback)
     void $ipc.oauth.registerReceiver().then((pendingCallbacks) => {
-      for (const pendingCallback of pendingCallbacks)
-        void handleOAuthCallback(pendingCallback)
+      for (const pendingCallback of pendingCallbacks) void handleOAuthCallback(pendingCallback)
     }).catch(() => {
       Message.danger(t('messages.loginFailed'))
     })
@@ -212,40 +216,41 @@ export default function LoginPage() {
   }, [handleLoginSuccess, t])
 
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-background">
+    <div className="flex min-h-screen overflow-hidden bg-background text-text">
       <EmailModal
         open={ openEmailModal }
         onClose={ () => setOpenEmailModal(false) }
         onSuccess={ handleLoginSuccess }
       />
 
-      {/* 左侧品牌/动效区（接入 Lottie 动效） */ }
-      <div
-        className={ cn(
-          'lg:flex items-center justify-center',
-          'bg-gradient-to-br from-defaultBgColor to-transparent',
-          'border-r border-border',
-        ) }
-      >
-        Lottie 动效
+      { /* 左侧品牌区：实际项目可替换为自己的 logo 或品牌动画 */ }
+      <div className="relative hidden flex-1 items-center justify-center overflow-hidden bg-background3 md:flex">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgb(255_255_255)_0%,rgb(247_240_247)_42%,rgb(var(--background3)/1)_74%)] dark:opacity-10" />
+        <div className="relative flex flex-col items-center gap-5">
+          <div className="flex size-24 items-center justify-center rounded-[28px] bg-button text-button3 shadow-card">
+            <Layers3 size={ 42 } strokeWidth={ 1.5 } aria-hidden />
+          </div>
+          <span className="text-sm font-medium tracking-[0.18em] text-text3">DESKTOP APP</span>
+        </div>
       </div>
 
-      {/* 右侧登录入口 */ }
-      <div className="flex items-center justify-center px-6 py-16">
-        <div className="w-full max-w-md">
-          <div className="mb-10">
-            <h1 className="text-3xl font-bold text-textPrimary">{ t('title') }</h1>
-            <p className="mt-2 text-textSecondary">{ t('subtitle') }</p>
+      { /* 右侧登录入口 */ }
+      <div className="relative flex min-h-screen min-w-0 flex-1 items-center justify-center px-8 py-16">
+        <div className="w-full max-w-85">
+          <div className="mb-8">
+            <h1 className="text-[28px] font-medium leading-9 text-text">{ t('title') }</h1>
+            <p className="mt-2 text-sm text-text3">{ t('subtitle') }</p>
           </div>
 
           <div className="space-y-4">
             <Button
-              variant="default"
+              variant="primary"
               size="lg"
               block
               onClick={ handleAppleLogin }
               leftIcon={ <AppleIcon /> }
-              className="gap-4"
+              className="h-14 justify-start rounded-[10px] px-6 shadow-button"
+              iconClassName="mr-3"
               disabled={ appleLoading }
             >
               { t('appleLogin') }
@@ -257,7 +262,8 @@ export default function LoginPage() {
               block
               onClick={ handleGoogleLogin }
               leftIcon={ <Chrome size={ 22 } /> }
-              className="gap-4"
+              className="h-14 justify-start rounded-[10px] bg-background px-6 shadow-[0_4px_20px_rgba(0,0,0,0.07)] hover:bg-background2"
+              iconClassName="mr-4"
             >
               { t('googleLogin') }
             </Button>
@@ -268,20 +274,20 @@ export default function LoginPage() {
               block
               onClick={ handleEmailLogin }
               leftIcon={ <Mail size={ 22 } /> }
-              className="gap-4"
+              className="h-14 justify-start rounded-[10px] bg-background px-6 shadow-[0_4px_20px_rgba(0,0,0,0.07)] hover:bg-background2"
+              iconClassName="mr-4"
             >
               { t('emailLogin') }
             </Button>
           </div>
 
-          <div className="mt-10 text-center text-sm text-textSecondary">
-            { t('agreement') }
-            { ' ' }
+          <div className="mt-9 text-center text-[11px] leading-4 text-text3">
+            { t('agreement') }{' '}
             <a
               href="https://www.$APP_PROTOCOL.ai/policies/privacy-policy"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-textPrimary hover:underline"
+              className="text-info hover:underline"
             >
               { t('termsOfService') }
             </a>
@@ -290,7 +296,7 @@ export default function LoginPage() {
               href="https://www.$APP_PROTOCOL.ai/policies/privacy-policy"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-textPrimary hover:underline"
+              className="text-info hover:underline"
             >
               { t('privacyPolicy') }
             </a>

@@ -60,17 +60,18 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
   })()
 
   return (
-    <div className="col-span-1 space-y-4">
+    <div className="space-y-4 rounded-2xl bg-background2 p-5 shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
       <div>
-        <label className="block text-sm text-zinc-700 dark:text-zinc-300 mb-1">{ t('options.recordType') }</label>
+        <label className="mb-1 block text-sm text-text2">{ t('options.recordType') }</label>
         <Select
           options={ kindOptions }
           value={ captureKind }
-          onChange={ v => onChangeCaptureKind(v) }
+          onChange={ (v) => onChangeCaptureKind(v) }
           dropdownHeight={ 140 }
         />
       </div>
-      {/* <div>
+      {
+        /* <div>
         <Checkbox
           checked={ systemAudio }
           onChange={ checked => onChangeSystemAudio(checked) }
@@ -85,9 +86,11 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
           label={t('options.microphone')}
           labelClassName="text-sm text-zinc-700 dark:text-zinc-300"
         />
-      </div> */}
+      </div> */
+      }
 
-      {/* <div>
+      {
+        /* <div>
         <label className="block text-sm text-zinc-700 dark:text-zinc-300 mb-1">{t('options.timeslice')}</label>
         <NumberInput
           value={ timeslice === ''
@@ -100,7 +103,8 @@ export const RecorderOptions = memo((props: RecorderOptionsProps) => {
           step={ 100 }
           placeholder={t('options.timeslicePlaceholder')}
         />
-      </div> */}
+      </div> */
+      }
 
       <div className="flex flex-wrap gap-2 pt-2">
         <Button

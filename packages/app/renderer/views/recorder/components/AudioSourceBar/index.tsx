@@ -1,18 +1,12 @@
-import type { AudioAppItem } from '@ipc/services/recording/contract'
 import type { AudioSourceSwitchResult } from '@/store/recordingStore'
+import { ensureSystemAudioSupportChecked, toggleAllAppsSource, toggleAppSource, toggleMicSource, useRecordingSourceState } from '@/store/recordingStore'
+import type { AudioAppItem } from '@ipc/services/recording/contract'
 import { Message } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { Check, Mic, Volume2 } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
-import {
-  ensureSystemAudioSupportChecked,
-  toggleAllAppsSource,
-  toggleAppSource,
-  toggleMicSource,
-  useRecordingSourceState,
-} from '@/store/recordingStore'
 
 /**
  * 手动录音「音源」多选条（麦克风 + 所有软件系统音轨，多选）
@@ -44,23 +38,23 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
   const visible = systemAudioSupport === true && nativeSource !== 'meeting'
 
   useEffect(() => {
-    if (!visible)
-      return
+    if (!visible) return
 
-    void $ipc.recording.getAudioApps().then(setApps).catch(() => { /* 由后续推送兜底 */ })
+    void $ipc.recording.getAudioApps().then(setApps).catch(() => {/* 由后续推送兜底 */})
     return $ipc.recording.on('audioAppsChanged', setApps)
   }, [visible])
 
   const notifyResult = useLatestCallback((result: AudioSourceSwitchResult) => {
     /** switching / not-recording 是无害的忽略态，不提示 */
-    if (result.ok || result.reason === 'switching' || result.reason === 'not-recording')
-      return
+    if (result.ok || result.reason === 'switching' || result.reason === 'not-recording') return
 
-    Message.warning(result.reason === 'need-one-source'
-      ? t('audioSource.needOneSource')
-      : result.reason === 'permission-denied'
+    Message.warning(
+      result.reason === 'need-one-source'
+        ? t('audioSource.needOneSource')
+        : result.reason === 'permission-denied'
         ? t('audioSource.permissionDenied')
-        : t('audioSource.recordFailed'))
+        : t('audioSource.recordFailed'),
+    )
   })
 
   const handleMic = useLatestCallback(async () => {
@@ -75,8 +69,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
     notifyResult(await toggleAppSource(pid))
   })
 
-  if (!visible)
-    return null
+  if (!visible) return null
 
   const allAppsActive = systemAudioMixEnabled && systemAudioSelectedPids.length === 0
   const sourceSwitchDisabled = audioSourceSwitching || phase === 'starting'
@@ -102,7 +95,7 @@ export const AudioSourceBar = memo<AudioSourceBarProps>((props) => {
           onClick={ handleAllApps }
         />
 
-        { apps.map(app => (
+        { apps.map((app) => (
           <SourceChip
             key={ app.pid }
             label={ app.name }
@@ -133,10 +126,10 @@ const SourceChip = memo<SourceChipProps>((props) => {
       disabled={ disabled }
       onClick={ onClick }
       className={ cn(
-        'flex h-7 shrink-0 items-center gap-1 rounded-full border px-2.5 text-xs transition-colors',
+        'flex h-7 shrink-0 items-center gap-1 rounded-full border border-transparent px-2.5 text-xs transition-colors',
         active
-          ? 'border-brand/40 bg-brand/10 text-brand'
-          : 'border-border/80 text-text3 hover:bg-background3 hover:text-text',
+          ? 'bg-brand/10 text-brand'
+          : 'bg-background3 text-text3 hover:bg-background4 hover:text-text',
         disabled && 'opacity-60',
       ) }
     >
