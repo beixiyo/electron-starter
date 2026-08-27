@@ -9,11 +9,12 @@
     "../hooks/src/index.ts",
     "../comps/src/index.ts"
   ],
-  // service 实现是主进程代码（依赖 @main/* 别名），渲染端只消费 contract + client，
+  // service / toRenderer 实现是主进程代码（可能依赖 @main/* 别名），渲染端只消费 contract + client，
   // 不从 web 视角 typecheck，归 tsconfig.node.json 管
   "exclude": [
     "./ipc/services/**/service.ts",
     "./ipc/services/**/service.test.ts",
+    "./ipc/services/**/toRenderer.ts",
     "./ipc/services/index.ts"
   ],
   "compilerOptions": {

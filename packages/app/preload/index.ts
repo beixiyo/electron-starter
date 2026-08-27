@@ -1,7 +1,7 @@
-import type { LogRecordPayload } from '@jl-org/log'
 import { electronAPI } from '@electron-toolkit/preload'
 import { fnClient } from '@ipc/services/fn/client'
 import { focusClient } from '@ipc/services/focus/client'
+import { globalToastClient } from '@ipc/services/global-toast/client'
 import { holdClient } from '@ipc/services/hold/client'
 import { logicalWindowClient } from '@ipc/services/logical-window/client'
 import { mediaClient } from '@ipc/services/media/client'
@@ -17,6 +17,7 @@ import { systemPreferencesClient } from '@ipc/services/system-preferences/client
 import { updateClient } from '@ipc/services/update/client'
 import { voiceImeClient } from '@ipc/services/voice-ime/client'
 import { windowClient } from '@ipc/services/window/client'
+import type { LogRecordPayload } from '@jl-org/log'
 import { exposeLogBridge, JL_LOG_BRIDGE_KEY, JL_LOG_IPC_CHANNEL } from '@jl-org/log'
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -24,6 +25,7 @@ export const ipc = {
   media: mediaClient,
   window: windowClient,
   focus: focusClient,
+  globalToast: globalToastClient,
   hold: holdClient,
   logicalWindow: logicalWindowClient,
   voiceIme: voiceImeClient,

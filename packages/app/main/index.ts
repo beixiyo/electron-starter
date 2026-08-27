@@ -5,12 +5,12 @@ import type { ShortcutRuntimeHandlers } from './shortcuts'
 
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { setIpcServiceErrorLogger } from '@ipc/core/service'
-import { focusService } from '@ipc/services/focus/service'
-import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/service'
+import { focusToRenderer } from '@ipc/services/focus/toRenderer'
+import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/toRenderer'
 import { createShortcutConfigService, notifyShortcutRuntimeChanged } from '@ipc/services/shortcut-config/service'
 import { startSystemPreferencesListener } from '@ipc/services/system-preferences/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
-import { voiceImeService } from '@ipc/services/voice-ime/service'
+import { voiceImeToRenderer } from '@ipc/services/voice-ime/toRenderer'
 import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUT_ACTIONS, WindowType } from '@shared'
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'node:path'
@@ -171,7 +171,7 @@ function setupDevParentExitCleanup(): void {
 function sendVoiceImeStatus(payload: VoiceImeRendererStatusPayload): void {
   const win = windowManager.get(WindowType.VOICE_IME)
   if (win && !win.isDestroyed()) {
-    voiceImeService.emit('status', payload, win)
+    voiceImeToRenderer.emit('status', payload, win)
   }
 }
 
@@ -554,7 +554,7 @@ function emitFocusUpdate(payload: FocusPayload): void {
   for (const type of FOCUS_UPDATE_TARGETS) {
     const win = logicalWindowManager.getTargetWindow(type)
     if (win && !win.isDestroyed()) {
-      focusService.emit('update', payload, win)
+      focusToRenderer.emit('update', payload, win)
     }
   }
 }

@@ -1,5 +1,5 @@
+import { sendFnRawEvent } from '@ipc/services/fn/toRenderer'
 import type { BrowserWindow } from 'electron'
-import { sendFnRawEvent } from '@ipc/services/fn/service'
 import { addFnRawEventListener } from './core'
 
 let removeRawListener: (() => void) | null = null
@@ -8,8 +8,7 @@ let removeRawListener: (() => void) | null = null
 export function setupFnKeyIpc(mainWindow: BrowserWindow): void {
   removeRawListener?.()
   removeRawListener = addFnRawEventListener((event) => {
-    if (!mainWindow.isDestroyed())
-      sendFnRawEvent(mainWindow, event)
+    if (!mainWindow.isDestroyed()) sendFnRawEvent(mainWindow, event)
   })
 }
 

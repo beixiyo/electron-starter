@@ -6,9 +6,9 @@
  * `kind`（单向通道无处回传，漏掉就是静默丢失）
  */
 
-import type { IpcContract } from './contract'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createIpcService, setIpcServiceErrorLogger } from './service'
+import type { IpcContract } from './contract'
+import { createIpcService, createMainToRendererEmitter, setIpcServiceErrorLogger } from './service'
 
 const electron = vi.hoisted(() => {
   const invokeHandlers = new Map<string, (...args: any[]) => any>()
@@ -29,9 +29,15 @@ const electron = vi.hoisted(() => {
     webContents = makeWebContents()
     private destroyed = false
     static instances: FakeBrowserWindow[] = []
-    static getAllWindows() { return FakeBrowserWindow.instances }
-    destroy() { this.destroyed = true }
-    isDestroyed() { return this.destroyed }
+    static getAllWindows() {
+      return FakeBrowserWindow.instances
+    }
+    destroy() {
+      this.destroyed = true
+    }
+    isDestroyed() {
+      return this.destroyed
+    }
   }
 
   return { invokeHandlers, onListeners, makeWebContents, FakeBrowserWindow }
@@ -69,13 +75,12 @@ type OnlyHandleContract = IpcContract<{
 /** 模拟 renderer 侧 `ipcRenderer.send` 送达主进程 */
 function emulateSend(channel: string, ...args: unknown[]): void {
   const listener = electron.onListeners.get(channel)
-  if (!listener)
-    throw new Error(`no ipcMain.on listener for ${channel}`)
+  if (!listener) throw new Error(`no ipcMain.on listener for ${channel}`)
   listener({ sender: { id: 42 } }, ...args)
 }
 
 describe('createIpcService mainOn 通道', () => {
-  let errors: { error: unknown, meta: any }[]
+  let errors: { error: unknown; meta: any }[]
 
   beforeEach(() => {
     electron.invokeHandlers.clear()
@@ -88,7 +93,11 @@ describe('createIpcService mainOn 通道', () => {
   it('把 mainOn 注册到 ipcMain.on，并透传参数', () => {
     const seen = vi.fn()
     createIpcService<DemoContract>('demo', {
-      mainHandle: { async getValue() { return 'v' } },
+      mainHandle: {
+        async getValue() {
+          return 'v'
+        },
+      },
       mainOn: {
         seen,
         boom() {},
@@ -108,10 +117,16 @@ describe('createIpcService mainOn 通道', () => {
 
   it('同步抛错被兜住，不冒泡回 ipcMain，并标记 kind=mainOn', () => {
     createIpcService<DemoContract>('demo', {
-      mainHandle: { async getValue() { return 'v' } },
+      mainHandle: {
+        async getValue() {
+          return 'v'
+        },
+      },
       mainOn: {
         seen() {},
-        boom() { throw new Error('sync-boom') },
+        boom() {
+          throw new Error('sync-boom')
+        },
         boomAsync() {},
       },
     })
@@ -131,7 +146,11 @@ describe('createIpcService mainOn 通道', () => {
 
   it('async handler 的 rejection 同样被捕获，不漏成 unhandledRejection', async () => {
     createIpcService<DemoContract>('demo', {
-      mainHandle: { async getValue() { return 'v' } },
+      mainHandle: {
+        async getValue() {
+          return 'v'
+        },
+      },
       mainOn: {
         seen() {},
         boom() {},
@@ -152,7 +171,9 @@ describe('createIpcService mainOn 通道', () => {
   it('mainHandle 出错标记 kind=mainHandle，并仍抛回 renderer', async () => {
     createIpcService<OnlyHandleContract>('demo', {
       mainHandle: {
-        async getValue() { throw new Error('invoke-boom') },
+        async getValue() {
+          throw new Error('invoke-boom')
+        },
       },
     })
 
@@ -165,7 +186,11 @@ describe('createIpcService mainOn 通道', () => {
 
   it('契约无 mainOn 时不注册任何 on 监听（既有服务零影响）', () => {
     createIpcService<OnlyHandleContract>('demo', {
-      mainHandle: { async getValue() { return 'v' } },
+      mainHandle: {
+        async getValue() {
+          return 'v'
+        },
+      },
     })
 
     expect(electron.onListeners.size).toBe(0)
@@ -189,7 +214,11 @@ describe('createIpcService emit 投递', () => {
 
   it('channel 为 `namespace:event`，与手写常量一致', () => {
     const svc = createIpcService<DemoContract>('screenshot', {
-      mainHandle: { async getValue() { return 'v' } },
+      mainHandle: {
+        async getValue() {
+          return 'v'
+        },
+      },
       mainOn: { seen() {}, boom() {}, boomAsync() {} },
     })
     const wc = electron.makeWebContents()
@@ -237,6 +266,25 @@ describe('createIpcService emit 投递', () => {
 
     expect(alive.webContents.sent).toEqual([['demo:changed', undefined]])
     expect(dead.webContents.sent).toHaveLength(0)
+  })
+})
+
+describe('createMainToRendererEmitter 纯推送面', () => {
+  beforeEach(() => {
+    electron.invokeHandlers.clear()
+    electron.onListeners.clear()
+    electron.FakeBrowserWindow.instances = []
+  })
+
+  it('可投递 rendererOn 事件且不注册任何 main handler', () => {
+    const emitter = createMainToRendererEmitter<OnlyEventsContract>('focus')
+    const wc = electron.makeWebContents()
+
+    emitter.emit('changed', undefined, wc as any)
+
+    expect(wc.sent).toEqual([['focus:changed', undefined]])
+    expect(electron.invokeHandlers.size).toBe(0)
+    expect(electron.onListeners.size).toBe(0)
   })
 })
 

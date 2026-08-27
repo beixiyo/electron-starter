@@ -1,5 +1,5 @@
-import type { IpcClient, IpcContract } from './contract'
 import { ipcRenderer } from 'electron/renderer'
+import type { IpcClient, IpcContract } from './contract'
 
 /**
  * 在渲染进程（preload）创建类型安全的 IPC 客户端
@@ -12,6 +12,12 @@ import { ipcRenderer } from 'electron/renderer'
  *
  * @param namespace 服务命名空间，需与 `createIpcService` 一致
  * @param methods `mainHandle` 方法名列表（运行时需要，类型层面自动校验）
+ *
+ * 只校验「名字在契约里」，不校验「契约里的方法都登记了」：漏登记时 renderer 侧
+ * 拿到的是 undefined，调用直接 TypeError 而 typecheck 一声不吭（实测踩过：
+ * recording-recovery 新增 handler 未登记，整条图片写入链路静默中断）
+ * 想补编译期穷举校验，得把 methods 换成 `Record<keyof C['mainHandle'], true>`
+ * 形状——现有 client 全部显式传了类型参数，加泛型推断这条路走不通
  */
 export function createServiceClient<C extends IpcContract>(
   namespace: string,

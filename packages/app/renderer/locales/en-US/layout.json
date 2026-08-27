@@ -4,6 +4,7 @@
     "recorder": "Recording",
     "shortcuts": "Shortcuts",
     "notifyTest": "Notifications",
+    "globalToastTest": "Message Window",
     "update": "App Updates",
     "cards": "Notes",
     "editor": "Editor",
@@ -11,4 +12,3 @@
     "listen": "Listen Together"
   }
 }
-

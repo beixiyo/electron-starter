@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | `mainHandle` | `ipcMain.handle` | renderer → main → renderer | `createIpcService` 的 `mainHandle` | `await $ipc.x.foo()` |
 | `mainOn` | `ipcMain.on` | renderer → main | `createIpcService` 的 `mainOn` | `$ipc.x.send('foo')` |
-| `rendererOn` | `ipcRenderer.on` | main → renderer | `service.emit('foo', payload)` | `$ipc.x.on('foo', cb)` |
+| `rendererOn` | `ipcRenderer.on` | main → renderer | `emitter.emit('foo', payload)` | `$ipc.x.on('foo', cb)` |
 
 字段名以 `main` 开头的，都是 **renderer 发、main 收**；以 `renderer` 开头的，是 **main 发、renderer 收**
 
@@ -39,12 +39,13 @@
 ```
 ipc/
 ├── core/                  机制层，勿加业务
-│   ├── contract.ts        IpcContract / ServiceImpl / IpcEmitter / IpcClient
+│   ├── contract.ts        IpcContract / ServiceImpl / MainToRendererEmitter / IpcClient
 │   ├── service.ts         createIpcService —— main 侧注册 + emit
 │   └── client.ts          createServiceClient —— preload 侧客户端
-└── services/<name>/       每个服务三件套
+└── services/<name>/       每个服务的跨进程契约面
     ├── contract.ts        SSOT，纯类型，两端共享
-    ├── service.ts         main 侧实现
+    ├── service.ts         main 侧接收实现（含 mainHandle / mainOn 时）
+    ├── toRenderer.ts      main 侧纯推送面（只有 rendererOn 时）
     └── client.ts          preload 侧客户端
 ```
 
@@ -102,7 +103,7 @@ export type MediaContract = IpcContract<{
 
 ### 3. 只有 rendererOn（renderer 纯订阅）
 
-实现参数传空对象，`methods` 传空数组，`createIpcService` 只为拿 `emit`：
+`methods` 传空数组；main 侧用 `createMainToRendererEmitter` 只创建推送面，不伪装成注册 service：
 
 ```ts
 // contract.ts
@@ -112,12 +113,12 @@ export type FnContract = IpcContract<{
   }
 }>
 
-// service.ts
-export const fnService = createIpcService<FnContract>('fn', {})
+// toRenderer.ts
+export const fnToRenderer = createMainToRendererEmitter<FnContract>('fn')
 
 export function sendFnRawEvent(window: BrowserWindow, event: FnNativeEvent): void {
   if (!window.isDestroyed())
-    fnService.emit('raw', event, window)
+    fnToRenderer.emit('raw', event, window)
 }
 
 // client.ts
@@ -208,13 +209,16 @@ web 环境（`dev:web` / 纯浏览器构建）preload 不加载，`renderer/util
 | # | 文件 | 动作 |
 | --- | --- | --- |
 | 1 | `services/<name>/contract.ts` | 定义 `IpcContract<{ mainHandle, mainOn, rendererOn }>`，用不到的字段省略 |
-| 2 | `services/<name>/service.ts` | `createIpcService<C>('<name>', { mainHandle, mainOn })` |
-| 3 | `services/<name>/client.ts` | `createServiceClient<C>('<name>', [...方法名])` |
-| 4 | `services/index.ts` | 加一行 `import './<name>/service'` |
-| 5 | `preload/index.ts` | import client 并加进 `ipc` 对象 |
-| 6 | `shared/ipc-types/`（可选） | 两端共享的 payload 类型 |
+| 2 | `services/<name>/service.ts` | 含 `mainHandle` / `mainOn` 时，用 `createIpcService<C>()` 注册接收 handler |
+| 3 | `services/<name>/toRenderer.ts` | 只有 `rendererOn` 时，用 `createMainToRendererEmitter<C>()` 创建纯推送面 |
+| 4 | `services/<name>/client.ts` | `createServiceClient<C>('<name>', [...方法名])` |
+| 5 | `services/index.ts` | 仅有 main 侧 handler 时加一行 `import './<name>/service'` |
+| 6 | `preload/index.ts` | import client 并加进 `ipc` 对象 |
+| 7 | `shared/ipc-types/`（可选） | 两端共享的 payload 类型 |
 
-第 3 步的方法名数组**只列 `mainHandle` 的方法**：preload 走 `contextBridge.exposeInMainWorld`，会克隆对象，Proxy 的键枚举不到，所以必须有真实方法名列表。`on` 和 `send` 是固定的两个方法、走名字传参，契约里加了就能用，不需要登记
+第 4 步的方法名数组**只列 `mainHandle` 的方法**：preload 走 `contextBridge.exposeInMainWorld`，会克隆对象，Proxy 的键枚举不到，所以必须有真实方法名列表。`on` 和 `send` 是固定的两个方法、走名字传参，契约里加了就能用，不需要登记
+
+这份数组的类型只能校验「已填写的名字属于契约」，不能校验「契约中的方法全部填写」。新增 `mainHandle` 时必须同步核对 client；漏登记不会触发 typecheck，但 renderer 运行时调用会得到 `undefined`
 
 ## 约束
 
@@ -223,6 +227,7 @@ web 环境（`dev:web` / 纯浏览器构建）preload 不加载，`renderer/util
 - **三个通道共用 `namespace:name` 命名空间**。它们在 Electron 内部是独立的注册表（`handle` / `ipcMain.on` / `ipcRenderer.on`），同名不会串错；但日志里只看 channel 分不清是哪个通道，靠 `meta.kind` 区分。取名仍应避开
 - **errorLogger 会同时收到 `mainHandle` 和 `mainOn` 的错误**，用 `meta.kind` 分流。`mainHandle` 的错误记完还会抛回 renderer，`mainOn` 的只有这一条日志
 - **service 注册只能跑一次**。macOS 关主窗后 Dock activate 会重跑 `createMainWindow`，IPC 注册必须放在它外面，重复 `ipcMain.handle` 会抛异常
+- **只发不收的模块不进 service barrel**。契约只有 `rendererOn` 时使用 `toRenderer.ts`；它不注册任何 channel，集中 import 没有注册效果
 - **需要注入依赖的服务导出工厂函数**，不做模块级常量，由 `main/index.ts` 在时序就位后手动调（见 `shortcut-config`）
 - **错误只保留 message**。`core/service.ts` 统一 catch → 记日志（含 `senderWebContentsId` / `durationMs`）→ 原样 rethrow，renderer 拿到的是 Electron 包装过的 Error，自定义字段和 `name` 会丢。renderer 需要按错误码分支时，把结果编进返回值（参考 `tracking` 的 `TrackingDispatchResult`），不要依赖 throw
 - **高频流在调用侧攒批或节流，不要靠绕开契约层提速**。契约层每条只多一次字符串拼接和一个 meta 对象，相比 IPC 自身的结构化克隆和跨进程传输可以忽略；换独立 channel 走的是同一个 `ipcRenderer.send`，省不掉真正贵的那部分。`preload/index.ts` 里 `@jl-org/log` 单开 channel 是因为它是外部包、不认识本项目的契约，与性能无关

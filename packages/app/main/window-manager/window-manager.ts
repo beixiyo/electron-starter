@@ -1,7 +1,7 @@
-import type { WindowBounds, WindowConfig, WindowMetadata } from '@shared'
-import type { BrowserWindow } from 'electron'
 import { isObj } from '@jl-org/tool'
+import type { WindowBounds, WindowConfig, WindowMetadata } from '@shared'
 import { PHYSICAL_WINDOW_CONFIGS, WindowType } from '@shared'
+import type { BrowserWindow } from 'electron'
 import { screen } from 'electron'
 import { getSavedBounds, saveBounds } from './bounds-store'
 import { createBrowserWindow } from './window-factory'
@@ -14,6 +14,7 @@ import { createBrowserWindow } from './window-factory'
 const IDLE_DESTROY_WINDOW_TYPES: ReadonlySet<WindowType> = new Set([
   WindowType.MENUBAR,
   WindowType.FLOATING_STATUS_POOL,
+  WindowType.GLOBAL_TOAST,
 ])
 
 /** 隐藏后驻留超过该时长即销毁，释放常驻渲染进程 */
@@ -63,8 +64,7 @@ class WindowManager {
     /** 持久化窗口：resize / move 落盘（saveBounds 内部已防抖） */
     if (config.persistBounds) {
       const persist = (): void => {
-        if (!window.isDestroyed())
-          saveBounds(type, window.getBounds())
+        if (!window.isDestroyed()) saveBounds(type, window.getBounds())
       }
       window.on('resize', persist)
       window.on('move', persist)
@@ -106,7 +106,7 @@ class WindowManager {
     return this.windows.get(type)
   }
 
-  // show 时动态设置置顶，hide 时取消——覆盖了构造时的 alwaysOnTop 配置
+  /** show 时动态设置置顶，hide 时取消——覆盖了构造时的 alwaysOnTop 配置 */
   show(type: WindowType, autoFocus = true): boolean {
     const window = this.windows.get(type)
     if (!window) {
@@ -243,8 +243,7 @@ class WindowManager {
    */
   resizeTo(type: WindowType, width: number, height: number, animate = false): boolean {
     const win = this.windows.get(type)
-    if (!win || win.isDestroyed())
-      return false
+    if (!win || win.isDestroyed()) return false
 
     const current = win.getBounds()
     const position = this.metadata.get(type)?.config.position
@@ -277,8 +276,7 @@ class WindowManager {
    */
   setBounds(type: WindowType, bounds: Partial<WindowBounds>, animate = false): boolean {
     const win = this.windows.get(type)
-    if (!win || win.isDestroyed())
-      return false
+    if (!win || win.isDestroyed()) return false
 
     win.setBounds({ ...win.getBounds(), ...bounds }, animate)
     return true
@@ -286,8 +284,7 @@ class WindowManager {
 
   getBounds(type: WindowType): WindowBounds | null {
     const win = this.windows.get(type)
-    if (!win || win.isDestroyed())
-      return null
+    if (!win || win.isDestroyed()) return null
 
     return win.getBounds()
   }

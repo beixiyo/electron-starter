@@ -1,12 +1,14 @@
-import type { HoldContract } from './contract'
-import { createIpcService } from '@ipc/core'
+/** 长按状态的 main → renderer 推送面 */
+
+import { createMainToRendererEmitter } from '@ipc/core'
 import { createMainDiagnosticLogger } from '@main/logging'
 import { windowManager } from '@main/window-manager'
 import { WindowType } from '@shared'
+import type { HoldContract } from './contract'
 
 const log = createMainDiagnosticLogger('shortcut.runtime')
 
-export const holdService = createIpcService<HoldContract>('hold', {})
+export const holdToRenderer = createMainToRendererEmitter<HoldContract>('hold')
 
 /**
  * 发送长按开始事件到指定窗口
@@ -17,14 +19,14 @@ export function sendHoldStartEvent(windowType?: WindowType): void {
     if (windowType) {
       const window = windowManager.get(windowType) || windowManager.create(windowType)
       if (window && !window.isDestroyed()) {
-        holdService.emit('start', { windowType }, window)
+        holdToRenderer.emit('start', { windowType }, window)
       }
     }
     else {
       /** 获取主窗口发送 */
       const mainWindow = windowManager.getMainWindow()
       if (mainWindow && !mainWindow.isDestroyed()) {
-        holdService.emit('start', { windowType: WindowType.MAIN }, mainWindow)
+        holdToRenderer.emit('start', { windowType: WindowType.MAIN }, mainWindow)
       }
     }
   }
@@ -42,14 +44,14 @@ export function sendHoldEndEvent(windowType?: WindowType): void {
     if (windowType) {
       const window = windowManager.get(windowType)
       if (window && !window.isDestroyed()) {
-        holdService.emit('end', { windowType }, window)
+        holdToRenderer.emit('end', { windowType }, window)
       }
     }
     else {
       /** 如果没有指定窗口类型，尝试向主窗口发送 */
       const mainWindow = windowManager.getMainWindow()
       if (mainWindow && !mainWindow.isDestroyed()) {
-        holdService.emit('end', { windowType: WindowType.MAIN }, mainWindow)
+        holdToRenderer.emit('end', { windowType: WindowType.MAIN }, mainWindow)
       }
     }
   }

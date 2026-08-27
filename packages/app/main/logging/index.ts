@@ -1,10 +1,10 @@
 import type { LogLevel } from '@jl-org/log'
-import type { IpcMain } from 'electron'
-import { readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
 import { listenElectronLogs, NodeLogger } from '@jl-org/log/node'
 import { getAppStorageAreaPath } from '@main/storage'
+import type { IpcMain } from 'electron'
 import { app } from 'electron'
+import { readdir, rm } from 'node:fs/promises'
+import { join } from 'node:path'
 
 /** 日志根目录保留的最近 session 目录数（含当前 session） */
 const MAX_SESSION_LOG_DIRS = 100
@@ -16,8 +16,7 @@ let initialized = false
 
 /** 初始化主进程与 renderer 共用的 session 级诊断日志 */
 export function initAppLogging(ipcMain: IpcMain): void {
-  if (initialized)
-    return
+  if (initialized) return
   initialized = true
 
   stopRendererLogListener = listenElectronLogs(ipcMain, getAppLogger())
@@ -51,17 +50,16 @@ async function pruneStaleSessionLogDirs(): Promise<void> {
     const root = getDiagnosticLogRootDir()
     const entries = await readdir(root, { withFileTypes: true })
     const sessionDirs = entries
-      .filter(entry => entry.isDirectory() && entry.name.startsWith('session'))
-      .map(entry => entry.name)
+      .filter((entry) => entry.isDirectory() && entry.name.startsWith('session'))
+      .map((entry) => entry.name)
       .sort()
 
     const currentSession = getSessionId()
     const staleDirs = sessionDirs
       .slice(0, Math.max(0, sessionDirs.length - MAX_SESSION_LOG_DIRS))
-      .filter(name => name !== currentSession)
+      .filter((name) => name !== currentSession)
 
-    if (staleDirs.length === 0)
-      return
+    if (staleDirs.length === 0) return
 
     let removedCount = 0
     for (const name of staleDirs) {
@@ -69,8 +67,7 @@ async function pruneStaleSessionLogDirs(): Promise<void> {
         .then(() => true)
         .catch(() => false)
 
-      if (removed)
-        removedCount += 1
+      if (removed) removedCount += 1
     }
 
     log.info('logging.prune', 'pruned stale diagnostic session directories', {
@@ -124,8 +121,7 @@ async function closeAppLogger(): Promise<void> {
 }
 
 function getAppLogger(): NodeLogger {
-  if (logger)
-    return logger
+  if (logger) return logger
 
   logger = new NodeLogger({
     prefix: 'electron-app',
@@ -191,8 +187,7 @@ function writeDiagnosticLog(
 }
 
 function getSessionId(): string {
-  if (sessionId)
-    return sessionId
+  if (sessionId) return sessionId
 
   const date = new Date()
   sessionId = [
@@ -223,24 +218,25 @@ function pad(value: number): string {
 }
 
 /** 主进程诊断日志模块名 */
-export type MainDiagnosticModule
-  = | 'app.lifecycle'
-    | 'app.power'
-    | 'ipc.service'
-    | 'meeting.detection'
-    | 'native.bridge'
-    | 'native.recorder'
-    | 'native.recording'
-    | 'permission'
-    | 'recording.recovery'
-    | 'recording.state'
-    | 'screenshot'
-    | 'shortcut.runtime'
-    | 'storage'
-    | 'voice-ime'
-    | 'window.lifecycle'
-    | 'window.renderer'
-    | 'update.service'
+export type MainDiagnosticModule =
+  | 'app.lifecycle'
+  | 'app.power'
+  | 'global-toast'
+  | 'ipc.service'
+  | 'meeting.detection'
+  | 'native.bridge'
+  | 'native.recorder'
+  | 'native.recording'
+  | 'permission'
+  | 'recording.recovery'
+  | 'recording.state'
+  | 'screenshot'
+  | 'shortcut.runtime'
+  | 'storage'
+  | 'voice-ime'
+  | 'window.lifecycle'
+  | 'window.renderer'
+  | 'update.service'
 
 /** 单条日志并入 JSONL 顶层的结构化字段 */
 export type DiagnosticMeta = Record<string, unknown>

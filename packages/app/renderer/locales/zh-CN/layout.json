@@ -4,6 +4,7 @@
     "recorder": "一起录",
     "shortcuts": "快捷键",
     "notifyTest": "通知测试",
+    "globalToastTest": "消息窗口",
     "update": "应用更新",
     "cards": "卡片",
     "editor": "编辑器",
@@ -11,4 +12,3 @@
     "listen": "一起听"
   }
 }
-

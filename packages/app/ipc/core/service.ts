@@ -1,5 +1,5 @@
-import type { IpcContract, IpcEmitter, ServiceImpl } from './contract'
 import { BrowserWindow, ipcMain } from 'electron'
+import type { IpcContract, MainToRendererEmitter, ServiceImpl } from './contract'
 
 let errorLogger: IpcServiceErrorLogger | null = null
 
@@ -21,7 +21,7 @@ export function setIpcServiceErrorLogger(logger: IpcServiceErrorLogger): void {
 export function createIpcService<C extends IpcContract>(
   namespace: string,
   impl: ServiceImpl<C>,
-): IpcEmitter<C> {
+): MainToRendererEmitter<C> {
   const { mainHandle, mainOn } = impl as {
     mainHandle?: Record<string, (...args: unknown[]) => unknown>
     mainOn?: Record<string, (...args: unknown[]) => unknown>
@@ -80,20 +80,40 @@ export function createIpcService<C extends IpcContract>(
     })
   }
 
+  return createMainToRendererEmitter<C>(namespace)
+}
+
+/**
+ * 只造 main → renderer 的推送面，**不注册任何 handler**
+ *
+ * 给「契约里只有 `rendererOn`」的模块用：它们只往渲染进程发事件，收不到任何调用
+ * 这类模块**不该进 `ipc/services/index.ts`**——那个 barrel 的职责是触发 `ipcMain.handle`
+ * 注册，而这里一个 channel 都不注册，import 与否只影响模块何时求值
+ *
+ * 与 {@link createIpcService} 的关系：后者 = 注册 handler + 本函数。曾经没有这个入口，
+ * 只想要发射器的模块只能写 `createIpcService(ns, {})`，一个空对象背后是「我不注册任何东西」
+ * 这层意思，读的人只能去翻 `createIpcService` 才知道空实现意味着什么
+ *
+ * 两处若各建一个发射器，行为完全一致：`emit` 只按 namespace 拼 channel 名，
+ * 不持有任何状态。但命名空间必须同源，漂开了 renderer 订阅的 channel 就对不上，且编译期无信号
+ *
+ * @param namespace 服务命名空间，channel 格式为 `namespace:event`
+ */
+export function createMainToRendererEmitter<C extends IpcContract>(
+  namespace: string,
+): MainToRendererEmitter<C> {
   return {
     emit(event, payload, target?) {
       const channel = `${namespace}:${String(event)}`
 
       if (target) {
         const wc = toWebContents(target)
-        if (wc && !wc.isDestroyed())
-          wc.send(channel, payload)
+        if (wc && !wc.isDestroyed()) wc.send(channel, payload)
         return
       }
 
       for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed())
-          win.webContents.send(channel, payload)
+        if (!win.isDestroyed()) win.webContents.send(channel, payload)
       }
     },
   }
@@ -107,8 +127,7 @@ export function createIpcService<C extends IpcContract>(
 function toWebContents(
   target: BrowserWindow | Electron.WebContents,
 ): Electron.WebContents | null {
-  if (!(target instanceof BrowserWindow))
-    return target
+  if (!(target instanceof BrowserWindow)) return target
   return target.isDestroyed()
     ? null
     : target.webContents

@@ -142,33 +142,38 @@ pnpm build:native:mac   # 显式编译 macOS native helper
 
 ## IPC 通信规范
 
-采用 **contract-driven** 架构，每个服务由三个文件组成，类型安全贯穿主进程与渲染进程：
+采用 **contract-driven** 架构，类型安全贯穿主进程与渲染进程：
 
 | 文件 | 职责 |
 |---|---|
 | `contract.ts` | 定义 `IpcContract<{ mainHandle, mainOn, rendererOn }>`，按接收端声明三类通道 |
 | `service.ts` | 主进程实现，调用 `createIpcService<Contract>(namespace, impl)` 注册 `ipcMain.handle()` / `ipcMain.on()` |
+| `toRenderer.ts` | 仅含 `rendererOn` 时，用 `createMainToRendererEmitter()` 创建纯推送面，不注册 handler |
 | `client.ts` | 渲染进程客户端，调用 `createServiceClient<Contract>(namespace, methods)` 生成类型安全的调用代理 |
 
 核心类型（`ipc/core/contract.ts`）：
 
 - `IpcContract<T>` — 合并 `mainHandle`、`mainOn`、`rendererOn` 三类通道
 - `ServiceImpl<C>` — 根据契约条件约束主进程必须实现的接收通道
-- `IpcEmitter<C>` — 主进程类型安全的事件发射器
+- `MainToRendererEmitter<C>` — main → renderer 的类型安全事件推送面
 - `IpcClient<C>` — renderer 的请求方法、事件订阅与单向发送客户端类型
 
 **服务加载方式：**
 
-- **核心服务**（window / media / screenshot / selection）通过 `ipc/services/index.ts` 统一导入，在 `main/index.ts` 中 `import '@ipc/services'` 始终加载
-- **按需服务**（fn / hold / oauth / voice-ime / focus / shortcut-test）在使用处直接导入 `service.ts`，按需注册
+- 契约含 `mainHandle` / `mainOn` 的服务必须由 `ipc/services/index.ts` 集中导入，不能依赖业务代码顺带注册
+- 契约只有 `rendererOn` 时，文件命名为 `toRenderer.ts`，由实际发送方导入；它不注册 handler，不进入 service barrel
+- `shortcut-config` 是依赖运行时回调的工厂，由 `main/index.ts` 显式创建
 
 **新增 IPC 能力的步骤：**
 
 1. 创建 `ipc/services/<name>/contract.ts`，按接收端定义 `mainHandle`、`mainOn`、`rendererOn`
-2. 创建 `ipc/services/<name>/service.ts`，用同名字段实现 main 侧接收通道
-3. 创建 `ipc/services/<name>/client.ts`，用 `createServiceClient()` 生成客户端
-4. 在主进程入口或使用处导入 `service.ts`（核心服务加到 `ipc/services/index.ts`，按需服务在使用处导入）
-5. 在 `preload/index.ts` 通过 Context Bridge 暴露客户端（`window.$ipc`）
+2. 含 `mainHandle` / `mainOn` 时创建 `ipc/services/<name>/service.ts`，用同名字段实现 main 侧接收通道
+3. 只有 `rendererOn` 时改为创建 `ipc/services/<name>/toRenderer.ts`，使用 `createMainToRendererEmitter()`
+4. 创建 `ipc/services/<name>/client.ts`，用 `createServiceClient()` 生成客户端
+5. 将有 handler 的 `service.ts` 加到 `ipc/services/index.ts`；纯推送模块只在发送方导入 `toRenderer.ts`
+6. 在 `preload/index.ts` 通过 Context Bridge 暴露客户端（`window.$ipc`）
+
+`createServiceClient()` 的方法数组只列 `mainHandle` 方法。类型只会校验已填写的名字合法，无法证明所有方法都已登记；新增方法时必须同步核对，否则 renderer 运行时会拿到 `undefined`
 
 **渲染进程通过 `window.$ipc.xxx` 调用，不要直接使用 `ipcRenderer`**
 

@@ -1,10 +1,10 @@
-import type { UserConfigFnObject } from 'vite'
-import { resolve } from 'node:path'
 import { autoParseStyles } from '@jl-org/js-to-style'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { codeInspectorPlugin } from 'code-inspector-plugin'
+import { resolve } from 'node:path'
 import AutoImport from 'unplugin-auto-import/vite'
+import type { UserConfigFnObject } from 'vite'
 import { defineConfig } from 'vite'
 import svgr from 'vite-plugin-svgr'
 
@@ -56,6 +56,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           screenshot: resolve(__dirname, './renderer/windows/screenshot/index.html'),
           menubar: resolve(__dirname, './renderer/windows/menubar/index.html'),
           floatingStatusPool: resolve(__dirname, './renderer/windows/floating-status-pool/index.html'),
+          globalToast: resolve(__dirname, './renderer/windows/global-toast/index.html'),
           utilityPanelPool: resolve(__dirname, './renderer/windows/utility-panel-pool/index.html'),
         },
       },
@@ -81,10 +82,9 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
         '@shared': resolve(__dirname, './shared'),
         '@ipc': resolve(__dirname, './ipc'),
         'http-api': resolve(__dirname, '../http-api/src/index.ts'),
-
         /**
          * comps / hooks 不配 alias、也不进 optimizeDeps.include：
-         * 统一经各自 package.json exports 解析到 dist 单文件产物。
+         * 统一经各自 package.json exports 解析到 dist 单文件产物
          * - dist 是打包好的单文件，dev 下没有 src barrel 的请求瀑布，启动快
          * - 链接包不预构建 = 不进 .vite 缓存，避免「重建 dist / 改源码后一直吃旧缓存」
          * - 改动 comps / hooks 源码后手动 `pnpm -F <pkg> build` 即刻生效
@@ -107,7 +107,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
          */
       }),
 
-      // envParse({ dtsPath: './src/vite-env.d.ts' }),
+      /** envParse({ dtsPath: './src/vite-env.d.ts' }), */
       react(),
       AutoImport({
         imports: ['react'],

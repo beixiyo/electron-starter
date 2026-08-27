@@ -42,6 +42,10 @@ export const LOGICAL_WINDOW_REGISTRY = {
     strategy: 'lazy',
     physicalWindow: WindowType.MENUBAR,
   },
+  [WindowType.GLOBAL_TOAST]: {
+    strategy: 'lazy',
+    physicalWindow: WindowType.GLOBAL_TOAST,
+  },
   [WindowType.MEETING_TOAST]: {
     strategy: 'pool',
     pool: WindowType.FLOATING_STATUS_POOL,
@@ -52,14 +56,13 @@ export const LOGICAL_WINDOW_REGISTRY = {
 } as const satisfies Record<LogicalWindowType, LogicalWindowConfig>
 
 /**
- * 启动预热只允许 dedicated 逻辑窗口。
+ * 启动预热只允许 dedicated 逻辑窗口
  *
  * lazy 需要首次使用时创建；pool 逻辑窗口需要通过 logicalWindowManager acquire；
- * 物理 pool 窗口不应该被启动预热列表直接创建。
+ * 物理 pool 窗口不应该被启动预热列表直接创建
  */
 export function shouldPreloadLogicalWindow(type: WindowType): boolean {
-  if (!(type in LOGICAL_WINDOW_REGISTRY))
-    return false
+  if (!(type in LOGICAL_WINDOW_REGISTRY)) return false
 
   return LOGICAL_WINDOW_REGISTRY[type as LogicalWindowType].strategy === 'dedicated'
 }
@@ -72,41 +75,41 @@ export type LogicalWindowType = Exclude<WindowType, PoolWindowType>
 /**
  * 真实承载多个逻辑窗口的物理池窗口类型
  */
-export type PoolWindowType
-  = | WindowType.FLOATING_STATUS_POOL
-    | WindowType.UTILITY_PANEL_POOL
+export type PoolWindowType =
+  | WindowType.FLOATING_STATUS_POOL
+  | WindowType.UTILITY_PANEL_POOL
 
 /**
  * 已接入窗口池的逻辑窗口类型
  */
-export type PooledLogicalWindowType
-  = | WindowType.MEETING_TOAST
-    | WindowType.SELECTION
-    | WindowType.SHORTCUT_TEST
-    | WindowType.FOCUS_NATIVE
+export type PooledLogicalWindowType =
+  | WindowType.MEETING_TOAST
+  | WindowType.SELECTION
+  | WindowType.SHORTCUT_TEST
+  | WindowType.FOCUS_NATIVE
 
 /**
  * 窗口池 renderer 内部要渲染的业务组件角色
  */
-export type PoolWindowRole
-  = | 'meeting-toast'
-    | 'selection'
-    | 'shortcut-test'
-    | 'focus-native'
+export type PoolWindowRole =
+  | 'meeting-toast'
+  | 'selection'
+  | 'shortcut-test'
+  | 'focus-native'
 
 /**
  * 逻辑窗口调度策略
  */
-export type LogicalWindowStrategy
-  = | 'dedicated'
-    | 'pool'
-    | 'lazy'
+export type LogicalWindowStrategy =
+  | 'dedicated'
+  | 'pool'
+  | 'lazy'
 
 /**
  * 逻辑窗口声明项
  */
-export type LogicalWindowConfig
-  = | {
+export type LogicalWindowConfig =
+  | {
     strategy: 'dedicated' | 'lazy'
     physicalWindow: LogicalWindowType
   }

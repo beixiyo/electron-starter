@@ -18,6 +18,27 @@ export const VOICE_IME_WINDOW_SIZE = {
   processing: { width: VOICE_IME_CONTENT_SIZE.processing.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.processing.height + SHADOW_INSET * 2 },
 } as const
 
+/** 全局提示窗口为自身视觉留白预留的单侧边距 */
+export const GLOBAL_TOAST_SHADOW_INSET = 10
+
+/** 全局提示窗口首次创建时的兜底内容尺寸，renderer 实测后会立即覆盖 */
+export const GLOBAL_TOAST_CONTENT_SIZE = {
+  width: 320,
+  height: 40,
+} as const
+
+/** 全局提示初始窗口尺寸（内容 + 两侧留白） */
+export const GLOBAL_TOAST_WINDOW_SIZE = {
+  width: GLOBAL_TOAST_CONTENT_SIZE.width + GLOBAL_TOAST_SHADOW_INSET * 2,
+  height: GLOBAL_TOAST_CONTENT_SIZE.height + GLOBAL_TOAST_SHADOW_INSET * 2,
+} as const
+
+/** 全局提示可见底边与 Voice IME 可见顶边的间距 */
+export const GLOBAL_TOAST_GAP = 8
+
+/** 屏幕相对定位时，全局提示可见边与工作区边缘的默认距离 */
+export const GLOBAL_TOAST_EDGE_OFFSET = 96
+
 /** 焦点浮窗左右实体卡片之间的真实点击穿透空隙 */
 export const FOCUS_NATIVE_GAP = 12
 
@@ -50,8 +71,14 @@ export const FOCUS_NATIVE_CONTENT_SIZE = {
 
 /** 焦点浮窗整体窗口尺寸（内容 + shadow inset） */
 export const FOCUS_NATIVE_WINDOW_SIZE = {
-  idle: { width: FOCUS_NATIVE_CONTENT_SIZE.idle.width + FOCUS_NATIVE_SHADOW_INSET * 2, height: FOCUS_NATIVE_CONTENT_SIZE.idle.height + FOCUS_NATIVE_SHADOW_INSET * 2 },
-  focused: { width: FOCUS_NATIVE_CONTENT_SIZE.focused.width + FOCUS_NATIVE_SHADOW_INSET * 2, height: FOCUS_NATIVE_CONTENT_SIZE.focused.height + FOCUS_NATIVE_SHADOW_INSET * 2 },
+  idle: {
+    width: FOCUS_NATIVE_CONTENT_SIZE.idle.width + FOCUS_NATIVE_SHADOW_INSET * 2,
+    height: FOCUS_NATIVE_CONTENT_SIZE.idle.height + FOCUS_NATIVE_SHADOW_INSET * 2,
+  },
+  focused: {
+    width: FOCUS_NATIVE_CONTENT_SIZE.focused.width + FOCUS_NATIVE_SHADOW_INSET * 2,
+    height: FOCUS_NATIVE_CONTENT_SIZE.focused.height + FOCUS_NATIVE_SHADOW_INSET * 2,
+  },
 } as const
 
 /** MEETING_TOAST 内容尺寸（不含 shadow inset） */

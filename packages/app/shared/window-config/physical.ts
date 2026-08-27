@@ -1,5 +1,11 @@
 import { WindowType } from '../types/window'
-import { FLOATING_STATUS_POOL_WINDOW_SIZE, MENUBAR_WINDOW_SIZE, UTILITY_PANEL_POOL_WINDOW_SIZE, VOICE_IME_WINDOW_SIZE } from './metrics'
+import {
+  FLOATING_STATUS_POOL_WINDOW_SIZE,
+  GLOBAL_TOAST_WINDOW_SIZE,
+  MENUBAR_WINDOW_SIZE,
+  UTILITY_PANEL_POOL_WINDOW_SIZE,
+  VOICE_IME_WINDOW_SIZE,
+} from './metrics'
 import type { WindowConfig } from './types'
 
 /**
@@ -92,6 +98,27 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     openDevTools: false,
   },
 
+  [WindowType.GLOBAL_TOAST]: {
+    width: GLOBAL_TOAST_WINDOW_SIZE.width,
+    height: GLOBAL_TOAST_WINDOW_SIZE.height,
+    /** 首次创建先放在底部；每次显示时会根据目标位置重新计算 bounds */
+    position: 'bottom-center',
+    title: 'Global Toast',
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    focusable: false,
+    hasShadow: false,
+    htmlPath: 'windows/global-toast/index.html',
+    show: false,
+    macFullscreenAuxiliary: true,
+    openDevTools: false,
+  },
+
   [WindowType.FLOATING_STATUS_POOL]: {
     width: FLOATING_STATUS_POOL_WINDOW_SIZE.width,
     height: FLOATING_STATUS_POOL_WINDOW_SIZE.height,
@@ -142,5 +169,6 @@ export type PhysicalWindowType =
   | WindowType.VOICE_IME
   | WindowType.OAUTH
   | WindowType.MENUBAR
+  | WindowType.GLOBAL_TOAST
   | WindowType.FLOATING_STATUS_POOL
   | WindowType.UTILITY_PANEL_POOL
