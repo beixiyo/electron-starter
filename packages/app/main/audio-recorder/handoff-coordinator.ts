@@ -4,6 +4,7 @@ const STOP_HANDOFF_TIMEOUT_MS = 60_000
 const RECYCLE_TERMINAL_TIMEOUT_MS = 2_000
 const STOP_HANDOFF_TIMEOUT_DETAIL = `audio recorder did not finish stop handoff within ${STOP_HANDOFF_TIMEOUT_MS}ms; recovery assets were preserved`
 const HANDOFF_INTERRUPTED_DETAIL = 'audio recorder helper exited before stop handoff produced a terminal result; recovery assets were preserved'
+const RECYCLE_EXIT_UNCONFIRMED_DETAIL = 'audio recorder helper recycle did not confirm old process exit; recovery assets were preserved'
 
 /**
  * 协调停止终态事件、helper 回收与超时恢复
@@ -97,7 +98,12 @@ export class RecorderHandoffCoordinator {
       .then(emit)
       .catch((error) => {
         this.options.logger.error('process.recycle-failed', 'audio recorder process recycle failed', error)
-        emit()
+        this.options.emitError({
+          code: 'handoff_timeout',
+          detail: RECYCLE_EXIT_UNCONFIRMED_DETAIL,
+          path: handoff.expectedOutputPath,
+          terminal: true,
+        })
       })
   }
 

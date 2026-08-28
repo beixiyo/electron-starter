@@ -50,6 +50,11 @@ export class NativeBridge<T extends Record<string, any>> {
   private readonly settledChildren = new WeakSet<ChildProcess>()
   private restarting = false
   private restartPromise: Promise<void> | null = null
+  /**
+   * 强制回收已发出 SIGKILL 但尚未收到 exit 的旧 helper
+   * 该状态禁止在未确认退出时启动下一代，避免两个采集 helper 并存
+   */
+  private pendingExitChild: ChildProcess | null = null
   private handoffCounter = 0
   private activeHandoffGeneration: number | null = null
   private readonly pendingWrites: PendingWrite[] = []
@@ -79,6 +84,8 @@ export class NativeBridge<T extends Record<string, any>> {
       })
       return
     }
+    if (this.pendingExitChild !== null)
+      return
     if (this.child !== null)
       return
 
@@ -141,7 +148,11 @@ export class NativeBridge<T extends Record<string, any>> {
       if (this.child === child)
         this.child = null
       if (this.restarting) {
-        void this.forceRestart(this.activeHandoffGeneration ?? undefined)
+        void this.forceRestart(this.activeHandoffGeneration ?? undefined).catch((error) => {
+          log.error('process.recycle-failed', 'audio recorder process recycle failed', error, {
+            helper: this.config.name,
+          })
+        })
         return
       }
       const unexpected = signal !== 'SIGTERM' && signal !== 'SIGINT'
@@ -164,7 +175,11 @@ export class NativeBridge<T extends Record<string, any>> {
       if (this.child === child)
         this.child = null
       if (this.restarting) {
-        void this.forceRestart(this.activeHandoffGeneration ?? undefined)
+        void this.forceRestart(this.activeHandoffGeneration ?? undefined).catch((error) => {
+          log.error('process.recycle-failed', 'audio recorder process recycle failed', error, {
+            helper: this.config.name,
+          })
+        })
         return
       }
       this.config.onUnexpectedExit?.(null, null)
@@ -241,7 +256,8 @@ export class NativeBridge<T extends Record<string, any>> {
    * 仅用于 helper 已完成业务收尾、但内部原生资源可能卡在不可取消同步调用的场景
    *
    * SIGTERM 会进入 helper 自己的优雅收尾链，若该链正被系统调用卡住就无法退出；
-   * 此处明确用 SIGKILL 回收旧进程，并立即创建干净的新一代
+   * 此处明确用 SIGKILL 回收旧进程，并只在收到旧进程 exit 后创建干净的新一代
+   * 未观察到 exit 的超时只报告失败，不得把未确认退出当成换代完成
    */
   forceRestart(expectedGeneration?: number): Promise<void> {
     if (
@@ -250,8 +266,12 @@ export class NativeBridge<T extends Record<string, any>> {
     ) {
       return Promise.resolve()
     }
+
     if (this.restartPromise)
       return this.restartPromise
+    if (this.pendingExitChild !== null)
+      return Promise.reject(new Error('native helper exit is still unconfirmed'))
+
     this.restarting = true
     const completedGeneration = this.activeHandoffGeneration
     this.restartPromise = this.performForceRestart(completedGeneration)
@@ -271,44 +291,67 @@ export class NativeBridge<T extends Record<string, any>> {
 
     this.settledChildren.add(child)
     this.child = null
-    await new Promise<void>((resolve) => {
-      let restarted = false
-      let watchdog: ReturnType<typeof setTimeout> | null = null
+    this.pendingExitChild = child
 
-      const restartAfterExit = (reason: 'exit' | 'watchdog' | 'kill-failed') => {
-        if (restarted)
+    await new Promise<void>((resolve, reject) => {
+      let exited = false
+      let failureReported = false
+      let killRequested: boolean | null = null
+      let watchdog: ReturnType<typeof setTimeout> | null = null
+      const restartStartedAt = Date.now()
+
+      const finishAfterExit = (exitCode: number | null, exitSignal: NodeJS.Signals | null) => {
+        if (exited)
           return
-        restarted = true
+        exited = true
+        this.pendingExitChild = null
         child.off('exit', onExit)
         if (watchdog !== null) {
           clearTimeout(watchdog)
           watchdog = null
         }
-        if (reason !== 'exit') {
-          log.warn('process.force-restart-watchdog', 'native helper exit event was not observed; starting a new generation', {
-            helper: this.config.name,
-            pid: child.pid,
-            reason,
-          })
-        }
         this.start()
+        log.debug('process.force-restarted', 'native helper process force restarted after confirmed exit', {
+          helper: this.config.name,
+          oldPid: child.pid,
+          newPid: this.pid,
+          elapsedMs: Date.now() - restartStartedAt,
+          exitCode,
+          exitSignal,
+          signaled: killRequested,
+          exitConfirmed: true,
+        })
         this.finishRestart(completedGeneration)
         resolve()
       }
-      const onExit = () => restartAfterExit('exit')
+      const onExit = (exitCode: number | null, exitSignal: NodeJS.Signals | null) => finishAfterExit(exitCode, exitSignal)
       child.once('exit', onExit)
-      watchdog = setTimeout(() => restartAfterExit('watchdog'), FORCE_RESTART_EXIT_TIMEOUT_MS)
+      watchdog = setTimeout(() => {
+        if (exited || failureReported)
+          return
+        failureReported = true
+        log.warn('process.force-restart-watchdog', 'native helper exit event was not observed; keeping the old generation isolated', {
+          helper: this.config.name,
+          pid: child.pid,
+          timeoutMs: FORCE_RESTART_EXIT_TIMEOUT_MS,
+        })
+        /**
+         * Promise 只负责通知本次调用失败；exit listener 必须保留，迟到退出后才能
+         * 启动新 helper 并重放排队命令。未收到 exit 前绝不调用 finishRestart
+         */
+        const error = new Error('native helper exit was not confirmed before force-restart timeout')
+        error.name = 'NativeHelperExitUnconfirmedError'
+        reject(error)
+        watchdog = null
+      }, FORCE_RESTART_EXIT_TIMEOUT_MS)
       watchdog.unref?.()
 
-      const signaled = child.kill('SIGKILL')
-      log.debug('process.force-restarted', 'native helper process force restarted after completed handoff', {
-        helper: this.config.name,
-        pid: child.pid,
-        signaled,
-      })
-      if (!signaled) {
-        restartAfterExit('kill-failed')
-      }
+      killRequested = child.kill('SIGKILL')
+      if (!killRequested)
+        log.warn('process.force-restart-signal-failed', 'native helper termination signal was not accepted; waiting for exit confirmation', {
+          helper: this.config.name,
+          pid: child.pid,
+        })
     })
   }
 

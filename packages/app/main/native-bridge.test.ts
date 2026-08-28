@@ -79,7 +79,7 @@ describe('native bridge 重启生命周期', () => {
     expect(bridge.handoffGeneration).toBe(generation)
   })
 
-  it('force restart 在 SIGKILL 成功但没有 exit 事件时由短 watchdog 完成重启', async () => {
+  it('旧 helper 未确认退出时不启动新代，迟到 exit 后才恢复并重放命令', async () => {
     const handoffComplete = vi.fn()
     const bridge = createBridge({ handoffComplete })
 
@@ -88,21 +88,39 @@ describe('native bridge 重启生命周期', () => {
     oldChild.kill.mockReturnValue(true)
     const generation = bridge.sendAndBeginHandoff(() => 'stop')
     const restart = bridge.forceRestart(generation)
+    const queuedCommand = JSON.stringify({ action: 'start', outputPath: '/tmp/next.m4a' })
+
+    expect(bridge.forceRestart(generation)).toBe(restart)
+    expect(bridge.send(queuedCommand)).toBe(true)
+    const failedRestart = expect(restart).rejects.toMatchObject({ name: 'NativeHelperExitUnconfirmedError' })
 
     expect(harness.children).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(1_000)
-    await restart
+    await failedRestart
 
+    bridge.start()
+    expect(harness.children).toHaveLength(1)
+    expect(bridge.running).toBe(false)
+    expect(bridge.handoffGeneration).toBe(generation)
+    expect(handoffComplete).not.toHaveBeenCalled()
+
+    oldChild.emit('exit', null, 'SIGKILL')
     expect(harness.children).toHaveLength(2)
     expect(bridge.running).toBe(true)
     expect(bridge.handoffGeneration).toBeNull()
     expect(handoffComplete).toHaveBeenCalledOnce()
     expect(handoffComplete).toHaveBeenCalledWith(generation)
+    expect(harness.children[1].stdin.write).toHaveBeenCalledWith(`${queuedCommand}\n`)
+    expect(harness.logger.debug).toHaveBeenCalledWith(
+      'process.force-restarted',
+      'native helper process force restarted after confirmed exit',
+      expect.objectContaining({
+        oldPid: oldChild.pid,
+        newPid: harness.children[1].pid,
+        exitConfirmed: true,
+      }),
+    )
     expect(vi.getTimerCount()).toBe(0)
-
-    oldChild.emit('exit', null, 'SIGKILL')
-    expect(harness.children).toHaveLength(2)
-    expect(handoffComplete).toHaveBeenCalledOnce()
   })
 
   it('handoff 中的正常 exit 只启动一代新进程，不会重复重启', async () => {
