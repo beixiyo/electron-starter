@@ -2,6 +2,8 @@
  * 在独立 Node Worker 中运行 uiohook native addon
  *
  * macOS 下 addon 启动失败时可能同步卡在 uv_thread_join，不能让它阻塞 Electron 主线程
+ * Worker 首次启动后随 App 进程驻留，刻意不暴露 stop 命令：native abort 会跨 Worker
+ * 终止整个 Electron 进程，不能用线程级 try/catch 或 exit 事件兜底
  */
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
 import { parentPort } from 'node:worker_threads'
@@ -14,18 +16,6 @@ const port = parentPort
 
 uIOhook.on('keydown', event => emitKeyboardEvent('keydown', event))
 uIOhook.on('keyup', event => emitKeyboardEvent('keyup', event))
-
-port.on('message', (message: UiohookWorkerCommand) => {
-  if (message.type !== 'stop')
-    return
-
-  try {
-    uIOhook.stop()
-  }
-  finally {
-    port.close()
-  }
-})
 
 try {
   uIOhook.start()
@@ -46,10 +36,6 @@ function emitKeyboardEvent(
   event: UiohookKeyboardEvent,
 ): void {
   port.postMessage({ type, event } satisfies UiohookWorkerMessage)
-}
-
-type UiohookWorkerCommand = {
-  type: 'stop'
 }
 
 type UiohookWorkerMessage
