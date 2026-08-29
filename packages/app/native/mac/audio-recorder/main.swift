@@ -4,7 +4,7 @@ import Cocoa
 
 // stdin JSON → {"action":"start","outputPath":"/tmp/rec.m4a"}                        // 会议录音:ScreenCaptureKit 全系统音频
 //            → {"action":"start","outputPath":"...","engine":"tap","tapEnabled":false,
-//               "pids":[123],"excludePids":[456],"mic":true,"micAec":true}                        // 手动录音:tap 引擎(macOS 14.2+);tapEnabled=false 先纯 mic
+//               "pids":[123],"excludePids":[456],"mic":true,"audioProcessing":{"processor":"webrtcAec3"}} // 手动录音:tap 引擎(macOS 14.2+)
 //            → {"action":"update","tapEnabled":true,"micEnabled":true,"pids":[123],"excludePids":[456]} // tap 录音中热挂/卸 mic 与系统音轨、变更混入进程集合
 //            → {"action":"stop"}
 // 进程级 CLI:--mono-output  最终成品写单声道(下游只接受单声道输入时使用);采集侧仍保持立体声

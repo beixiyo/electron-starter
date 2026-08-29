@@ -1,4 +1,4 @@
-import type { MicCaptureStrategy, MicVoiceProcessingOutcome, RecorderEvents } from './protocol'
+import type { MicCaptureStrategy, RecorderEvents } from './protocol'
 import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
@@ -11,9 +11,8 @@ import { parseRecorderMessage } from './protocol'
 
 const nativeLog = createMainDiagnosticLogger('native.recorder')
 let handoffCoordinator: RecorderHandoffCoordinator
-/** helper 每场后会强制重启；路线提示由主进程内存跨代持有，App 退出即清空 */
+/** helper 每场后会强制重启；raw/capture 路线提示由主进程内存跨代持有，App 退出即清空 */
 let preferredMicStrategyHint: { strategy: MicCaptureStrategy, deviceKey: string } | null = null
-
 const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
   writable: true,
@@ -21,7 +20,6 @@ const bridge = new NativeBridge<RecorderEvents>({
   args: getMonoOutputArgs(),
   onStderrLine: line => nativeLog.debug('native.stderr', line),
   onUnexpectedExit: (code, signal) => {
-    /** helper 崩溃可能正由缓存路线触发；下次必须恢复完整探测，不能重复信任旧 hint */
     preferredMicStrategyHint = null
     bridge.events.emit('exited', { code, signal })
   },
@@ -31,9 +29,8 @@ const bridge = new NativeBridge<RecorderEvents>({
     try {
       const msg = parseRecorderMessage(line)
       if ('error' in msg) {
-        if (msg.terminal === true) {
+        if (msg.terminal === true)
           preferredMicStrategyHint = null
-        }
         const emitError = () => {
           bus.emit('error', {
             code: msg.error,
@@ -65,13 +62,10 @@ const bridge = new NativeBridge<RecorderEvents>({
             deviceKey: msg.micDeviceKey,
           }
         }
-        /** deviceKey 是设备指纹，只留在主进程内存里，不随事件外发也不落日志 */
         bus.emit('recording', {
           path: msg.path,
           outputTransport: msg.outputTransport,
-          strategy: msg.micStrategy,
-          voiceProcessing: msg.micVoiceProcessing,
-          voiceProcessingChannels: msg.micVoiceProcessingChannels,
+          micStrategy: msg.micStrategy,
         })
       }
       else if (msg.status === 'paused') {
@@ -124,7 +118,6 @@ const bridge = new NativeBridge<RecorderEvents>({
         }
       }
       else if (msg.status === 'mic_degraded') {
-        /** 当前路线已无法持续出样；下次正式录音从完整降级链重新判断 */
         preferredMicStrategyHint = null
         /** 非致命：麦克风掉线且未能自愈，录音继续保留系统音轨 */
         console.warn(`[audio-recorder] mic degraded${msg.detail
@@ -141,13 +134,10 @@ const bridge = new NativeBridge<RecorderEvents>({
         bus.emit('tap_attach_failed', { phase: msg.phase, detail: msg.detail })
       }
       else if (msg.status === 'mic_route_changed') {
-        /** 重挂会重新探测路线，旧提示可能已不成立 */
         preferredMicStrategyHint = null
         bus.emit('mic_route_changed', {
           reason: msg.reason,
-          strategy: msg.micStrategy,
-          voiceProcessing: msg.micVoiceProcessing,
-          voiceProcessingChannels: msg.micVoiceProcessingChannels,
+          micStrategy: msg.micStrategy,
         })
       }
     }
@@ -157,9 +147,9 @@ const bridge = new NativeBridge<RecorderEvents>({
   },
 })
 
+/** 启动预检使用隔离 helper；只验证 raw/capture 路线是否能出样，不触碰 VPIO。 */
 let micProbeBridge: NativeBridge<RecorderEvents> | null = null
 
-/** 启动预检使用隔离 helper；惰性创建避免普通录音测试和非 macOS 运行时持有无用实例 */
 function getMicProbeBridge(): NativeBridge<RecorderEvents> {
   if (micProbeBridge)
     return micProbeBridge
@@ -170,9 +160,7 @@ function getMicProbeBridge(): NativeBridge<RecorderEvents> {
     writable: true,
     logStderr: true,
     onStderrLine: line => nativeLog.debug('native.probe.stderr', line),
-    onUnexpectedExit: (code, signal) => {
-      probeBridge.events.emit('exited', { code, signal })
-    },
+    onUnexpectedExit: (code, signal) => probeBridge.events.emit('exited', { code, signal }),
     parseLine(line, bus) {
       try {
         const msg = parseRecorderMessage(line)
@@ -184,8 +172,6 @@ function getMicProbeBridge(): NativeBridge<RecorderEvents> {
           bus.emit('mic_probe_complete', {
             strategy: msg.micStrategy,
             deviceKey: msg.micDeviceKey,
-            voiceProcessing: msg.micVoiceProcessing,
-            voiceProcessingChannels: msg.micVoiceProcessingChannels,
           })
         }
         else if (msg.status === 'mic_probe_failed') {
@@ -227,12 +213,7 @@ export function startRecorder(): void {
   bridge.start()
 }
 
-/**
- * 已授权启动预检；使用隔离 helper，预检卡死或回收都不会影响正式录音
- *
- * 返回具名对象而不是裸 boolean：`ready` 只说明三条路线里有一条能出样，raw 兜底成功也是
- * true，恰好把「有没有系统回声消除」这个唯一有诊断价值的区分抹平了
- */
+/** 已授权启动预检；只验证 raw/capture 路线，不启用或探测 VPIO。 */
 export async function probeMicCaptureStrategy(): Promise<MicCaptureProbeResult> {
   const probeBridge = getMicProbeBridge()
   if (!probeBridge.running)
@@ -248,20 +229,17 @@ export async function probeMicCaptureStrategy(): Promise<MicCaptureProbeResult> 
       unsubscribeComplete()
       unsubscribeFailed()
       unsubscribeExited()
-      /** SIGKILL 确保系统 API 卡住时也立即释放一次性进程；正式 helper 是另一进程 */
       probeBridge.stop('SIGKILL')
       resolve(result)
     }
     const unsubscribeComplete = probeBridge.events.on('mic_probe_complete', event => finish({
       ready: true,
       strategy: event.strategy,
-      voiceProcessing: event.voiceProcessing,
-      voiceProcessingChannels: event.voiceProcessingChannels,
     }))
     const unsubscribeFailed = probeBridge.events.on('mic_probe_failed', () => finish({ ready: false }))
     const unsubscribeExited = probeBridge.events.on('exited', () => finish({ ready: false }))
     const timeout = setTimeout(() => finish({ ready: false }), 5_000)
-    if (!probeBridge.send(JSON.stringify({ action: 'probeMic', micAec: true })))
+    if (!probeBridge.send(JSON.stringify({ action: 'probeMic' })))
       finish({ ready: false })
   })
 }
@@ -361,8 +339,8 @@ export type StartRecordingOptions = {
    * @default true
    */
   mic?: boolean
-  /** tap 引擎：是否优先尝试 Voice Processing AEC；@default true */
-  micAec?: boolean
+  /** tap 引擎的软件音频处理；未提供时关闭 */
+  audioProcessing?: AudioProcessingOptions
 }
 
 /** tap 录音中热挂/卸的完整音源状态（renderer 每次变更下发全量，Swift 据此挂/卸 mic 与 tap） */
@@ -379,10 +357,32 @@ export type UpdateRecordingOptions = {
 
 /** 启动预检结果；deviceKey 是设备指纹，刻意不外发，只留在主进程内存里做下次探测提示 */
 export type MicCaptureProbeResult = {
-  /** 三条采集路线里是否有一条能出样；raw 兜底成功同样为 true */
+  /** raw/capture 路线里是否有一条能出样 */
   ready: boolean
   strategy?: MicCaptureStrategy
-  voiceProcessing?: MicVoiceProcessingOutcome
-  /** VPIO 报的声道数，跨机型不固定（实测 5ch / 7ch），>2 时由 Swift 侧折成 ch0 */
-  voiceProcessingChannels?: number
+}
+
+export type AudioProcessingOptions = {
+  /** @default 'off' */
+  processor: 'off' | 'webrtcAec3'
+  /** @default 'auto' */
+  delayMode?: 'auto' | 'fixed' | 'hybrid'
+  /** 固定/混合模式的初始延迟，单位毫秒；@default 120 */
+  fixedDelayMs?: number
+  /** @default 'moderate' */
+  noiseSuppression?: 'off' | 'low' | 'moderate' | 'high' | 'very-high'
+  /** @default 'off' */
+  gainControl?: 'off' | 'agc1-adaptive-digital' | 'agc1-fixed' | 'agc2'
+  /** @default true */
+  highPass?: boolean
+}
+
+/** 会议与手动混音共用的实时 AEC3 默认配置；构建模式不改变它。 */
+export const DEFAULT_REALTIME_AUDIO_PROCESSING: AudioProcessingOptions = {
+  processor: 'webrtcAec3',
+  delayMode: 'auto',
+  fixedDelayMs: 120,
+  noiseSuppression: 'moderate',
+  gainControl: 'off',
+  highPass: true,
 }

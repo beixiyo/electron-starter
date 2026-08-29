@@ -1,6 +1,6 @@
 import type { AudioSourceCaptureOptions, AudioSourceCaptureResult, ManualRecordingPrefs } from '@ipc/services/recording/contract'
 import type { RecordingSnapshot } from '@shared'
-import { startRecording, updateRecording } from '@main/audio-recorder'
+import { DEFAULT_REALTIME_AUDIO_PROCESSING, startRecording, updateRecording } from '@main/audio-recorder'
 import { getPermissionStatus, getSystemAudioPermissionDetail, requestAudioCaptureIfNeverAsked, requestPermission } from '@main/permissions'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
@@ -68,19 +68,21 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
     const selectedPids = mixSystemAudio
       ? manualPrefs.pids
       : []
+    /** 系统音频开启且 PID 为空时表示捕获所有软件，这是 renderer/IPC 的既有契约。 */
+    const systemAudioEnabled = mixSystemAudio
 
     /** 用户没有选择音源时拒绝开录，不擅自开启麦克风 */
-    if (!micEnabled && !mixSystemAudio)
+    if (!micEnabled && !systemAudioEnabled)
       return recordingState.snapshot
 
     /**
      * 系统音频权限缺失时拒绝开录，不把用户选择的 system-only 偷换成麦克风
      */
-    if (mixSystemAudio && !isSystemAudioPermissionUsable()) {
+    if (systemAudioEnabled && !isSystemAudioPermissionUsable()) {
       return recordingState.snapshot
     }
 
-    if (mixSystemAudio) {
+    if (systemAudioEnabled) {
       /** 放行依据的两项 TCC 状态分开记，用于判断屏幕录制短路是否让 tap 静默失效 */
       console.log('[native-recording] system audio permission', getSystemAudioPermissionDetail())
       /** 放行之后才补发，确保它绝不参与本次放行判定，也不阻塞本场录音 */
@@ -96,7 +98,7 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
 
     const session = createRecordingRecoverySession('manual', undefined, {
       micAudio: micEnabled,
-      systemAudio: mixSystemAudio,
+      systemAudio: systemAudioEnabled,
     })
     setNativeRecordingSession(session)
     const snapshot = recordingState.startManualNative()
@@ -105,10 +107,13 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
     try {
       sent = startRecording(session.outputPath, {
         engine: 'tap',
-        tapEnabled: mixSystemAudio,
+        tapEnabled: systemAudioEnabled,
         pids: selectedPids,
         excludePids: getSelfProcessPids(),
         mic: micEnabled,
+        audioProcessing: systemAudioEnabled && micEnabled
+          ? DEFAULT_REALTIME_AUDIO_PROCESSING
+          : { processor: 'off' },
       })
     }
     catch (error) {

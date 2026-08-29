@@ -3,12 +3,12 @@
 import Foundation
 
 /// native helper 构建标识,启动时打进二进制并输出横幅;发包时用 `strings ... | rg` 核验装进去的是最新 helper 而非旧缓存
-let AUDIO_RECORDER_BUILD_ID = "2026-08-15-startup-mic-probe-v3"
+let AUDIO_RECORDER_BUILD_ID = "2026-08-29-audio-processing-v1"
 
-/// raw AVAudioEngine 启动瞬时失败(如 `!dev` 设备忙:上一条录音/VPIO 拆除未完成即抢设备)的最大重试次数
+/// raw AVAudioEngine 启动瞬时失败(如 `!dev` 设备忙:上一条录音拆除未完成即抢设备)的最大重试次数
 let RAW_AUDIO_ENGINE_START_ATTEMPTS = 3
 
-/// 每次重试前的等待(秒),给 HAL / VPIO 拆除后释放输入设备留窗口;过短会连撞 `!dev`,过长会拖慢开录
+/// 每次重试前的等待(秒),给 HAL 拆除后释放输入设备留窗口;过短会连撞 `!dev`,过长会拖慢开录
 let RAW_AUDIO_ENGINE_RETRY_DELAY_SEC: TimeInterval = 0.35
 
 /// 引擎 `start()` 成功后等待首个麦克风回调的最长时间(秒);超时即判「僵尸引擎」(启动成功却零数据流),拆掉后重试 / 降级
@@ -16,7 +16,7 @@ let MIC_FIRST_SAMPLE_PROBE_TIMEOUT_SEC: TimeInterval = 0.30
 /** stop 等待采样队列完成所有已入队写操作的上限；超时转崩溃恢复，绝不继续碰 writer */
 let SAMPLE_QUEUE_DRAIN_TIMEOUT_SEC: TimeInterval = 2
 
-/** stop 等待正在进行的设备重挂退出的上限；覆盖 VPIO、raw engine 重试与 AVCapture 首帧探测 */
+/** stop 等待正在进行的设备重挂退出的上限；覆盖 raw engine 重试与 AVCapture 首帧探测 */
 let CAPTURE_LIFECYCLE_DRAIN_TIMEOUT_SEC: TimeInterval = 5
 
 /// 首帧探测的轮询间隔(秒):每隔这么久检查一次麦克风回调计数是否推进
@@ -31,7 +31,7 @@ let AUDIO_SAMPLE_GAP_TIMEOUT: TimeInterval = 30
 /// 断流看门狗的检查周期(秒)
 let AUDIO_SAMPLE_GAP_WATCHDOG_INTERVAL: TimeInterval = 5
 
-/// mic 单轨持续静默多久(秒)判为麦克风掉线(如蓝牙耳机中途断开令 VPIO 引擎僵尸化),触发重挂自愈;
+/// mic 单轨持续静默多久(秒)判为麦克风掉线(如蓝牙耳机中途断开令采集引擎僵尸化),触发重挂自愈;
 /// 短于整体断流阈值,因系统音轨仍在出样时整体不会超时,mic 死亡只能靠独立时间戳发现
 let MIC_SAMPLE_GAP_TIMEOUT: TimeInterval = 8
 

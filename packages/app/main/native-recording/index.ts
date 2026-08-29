@@ -108,7 +108,7 @@ export function initNativeRecordingPipeline(): void {
 
   recordingState.onPhaseChange(syncToRecorder)
 
-  onRecorderEvent('recording', ({ path, strategy, voiceProcessing, voiceProcessingChannels, outputTransport }) => {
+  onRecorderEvent('recording', ({ path, micStrategy, outputTransport }) => {
     const session = peekNativeRecordingSession()
     if (
       !session
@@ -127,14 +127,11 @@ export function initNativeRecordingPipeline(): void {
     /**
      * 本轮实际走的采集路线
      *
-     * strategy 是主字段：正式录音多数会命中预检留下的缓存路线，此时 voiceProcessing
-     * 只会是 skipped-cached-route，真正的失败原因在启动预检那条日志里
-     * outputTransport 一并记：builtin 扬声器 + 无 AEC 才存在外放回声路径，耳机不存在
+     * micStrategy 只描述 raw/capture 采集路线；软件 AEC 的实际配置由 start 命令单独记录
+     * outputTransport 一并记：builtin 扬声器 + 未启用软件 AEC 才存在外放回声路径，耳机不存在
      */
     console.log('[native-recording] recording started', {
-      strategy,
-      voiceProcessing,
-      voiceProcessingChannels,
+      micStrategy,
       outputTransport,
     })
 
@@ -157,14 +154,12 @@ export function initNativeRecordingPipeline(): void {
    * 录音中途麦克风重挂成功且重新选路
    *
    * 与 mic_degraded 互补：那条只在重挂彻底失败时发出，覆盖不到「重挂成功但换了路线」的
-   * 静默降级——例如从 voiceProcessed 掉到 raw，整场后半段同时失去 AEC 与系统降噪
+   * 静默降级——例如从 Audio Unit 路线切到 capture session，需让诊断日志保留路线变化
    */
-  onRecorderEvent('mic_route_changed', ({ reason, strategy, voiceProcessing, voiceProcessingChannels }) => {
+  onRecorderEvent('mic_route_changed', ({ reason, micStrategy }) => {
     console.warn('[native-recording] microphone capture route changed mid-recording', {
       reason,
-      strategy,
-      voiceProcessing,
-      voiceProcessingChannels,
+      micStrategy,
     })
   })
 
@@ -385,18 +380,10 @@ export function initNativeRecordingPipeline(): void {
   /** 只读权限已授权时才预检；绝不因后台探测触发系统授权框或应用内权限门 */
   if (process.platform === 'darwin' && isMacOSAtLeast(14, 2) && getPermissionStatus('microphone') === 'granted') {
     void probeMicCaptureStrategy().then((probe) => {
-      /**
-       * strategy / voiceProcessing 必须记下来
-       *
-       * 只记 `ready` 是不够的：raw 兜底成功同样是 true，恰好把「这台机器有没有系统回声
-       * 消除」这个唯一有诊断价值的区分抹平——外放通话时对端声音会延迟约 120ms 漏进麦克风
-       * 录第二遍，排查该问题只需要这一位信息。deviceKey 是设备指纹，不进日志
-       */
+      /** 只记录 raw/capture 路线；模板不启用 VPIO。 */
       console.log('[native-recording] startup microphone strategy probe completed', {
         ready: probe.ready,
         strategy: probe.strategy,
-        voiceProcessing: probe.voiceProcessing,
-        voiceProcessingChannels: probe.voiceProcessingChannels,
       })
     })
   }

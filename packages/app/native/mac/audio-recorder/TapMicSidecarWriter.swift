@@ -1,6 +1,7 @@
 // 统一麦克风 PCM 格式、电平处理和 `.mic.caf` sidecar 写盘
 
 import AVFoundation
+import AudioProcessing
 import CoreMedia
 import Darwin
 
@@ -8,8 +9,8 @@ import Darwin
  * 麦克风 PCM sidecar 的唯一状态所有者
  *
  * 输入是 MicCapture 交付的 PCM，输出是与主 M4A 同名的 `.mic.caf`；
- * 内部负责文件格式冻结、设备切换后的格式转换、受限人声增益与写盘诊断。
- * 该对象由 TapRecorder.sampleQueue 独占，读取 summary 前必须先排空该队列。
+ * 内部负责文件格式冻结、设备切换后的格式转换、受限人声增益与写盘诊断
+ * 该对象由 TapRecorder.sampleQueue 独占，读取 summary 前必须先排空该队列
  */
 final class TapMicSidecarWriter {
   private enum TimelinePolicy {
@@ -21,7 +22,10 @@ final class TapMicSidecarWriter {
 
   let fileURL: URL
 
-  private let signalProcessor = MicrophoneSignalProcessor()
+  private let signalProcessor = MicrophoneSignalProcessor(
+    logger: { message in log(message) },
+    onInputRMS: { rms in AudioLevelMeter.shared.submit(inputRMS: rms) }
+  )
   private var audioFile: AVAudioFile?
   private var converter: AVAudioConverter?
   private var converterSourceFormat: AVAudioFormat?
@@ -43,8 +47,7 @@ final class TapMicSidecarWriter {
   @discardableResult
   func append(
     _ buffer: AVAudioPCMBuffer,
-    at logicalTime: CMTime,
-    processingMode: MicCaptureProcessingMode
+    at logicalTime: CMTime
   ) -> Bool {
     do {
       if audioFile == nil {
@@ -81,7 +84,7 @@ final class TapMicSidecarWriter {
         logicalTime: logicalTime,
         audioFile: audioFile
       )
-      signalProcessor.process(writableBuffer, mode: processingMode)
+      signalProcessor.process(writableBuffer)
       try audioFile.write(from: writableBuffer)
       appendCount += 1
       return true

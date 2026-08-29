@@ -341,7 +341,7 @@ final class TapProcessCapture {
   }
 
   /**
-   * 聚合设备 ABL 中可能含 VPIO 参考流，先排除声道数不同的流
+   * 聚合设备 ABL 中可能含参考流，先排除声道数不同的流
    *
    * Core Audio 没有在 callback 里附带 buffer 来源；若外部虚拟设备也暴露同声道流，
    * 当前无法只凭 ABL 证明哪个是 tap，因此记录完整布局供真机定位

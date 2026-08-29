@@ -7,14 +7,34 @@ let package = Package(
   platforms: [.macOS(.v14)],
   products: [
     .executable(name: "audio-recorder", targets: ["AudioRecorder"]),
+    .library(name: "AudioProcessing", targets: ["AudioProcessing"]),
   ],
   targets: [
+    .binaryTarget(
+      name: "RecorderAPM",
+      path: "Vendor/RecorderAPM.xcframework"
+    ),
+    .target(
+      name: "AudioProcessing",
+      dependencies: ["RecorderAPM"],
+      path: "AudioProcessing",
+      linkerSettings: [
+        .linkedFramework("AVFoundation"),
+        .linkedFramework("CoreMedia"),
+        .linkedLibrary("c++"),
+      ]
+    ),
     .executableTarget(
       name: "AudioRecorder",
+      dependencies: ["AudioProcessing"],
       path: ".",
       exclude: [
         "README.md",
         "MACOS-PITFALLS.md",
+        "APMShim",
+        "AudioProcessing",
+        "Tests",
+        "Vendor",
       ],
       sources: [
         "AudioAssetInspector.swift",
@@ -35,7 +55,6 @@ let package = Package(
         "MicSidecarRecovery.swift",
         "MicSidecarTransaction.swift",
         "MicSidecarTransactionStore.swift",
-        "MicrophoneSignalProcessor.swift",
         "Permissions.swift",
         "ProcessLifecycle.swift",
         "RecorderCoordinator.swift",

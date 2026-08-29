@@ -12,10 +12,12 @@ final class RecorderCoordinator {
 
   func handle(_ command: RecorderCommand) async {
     switch command {
+    case .invalid(let detail):
+      emitError("invalid_command", detail: detail)
     case .start(let options):
       await start(options)
-    case .probeMic(let options):
-      await probeMic(options)
+    case .probeMic:
+      await probeMic()
     case .update(let options):
       update(options)
     case .pause:
@@ -27,7 +29,7 @@ final class RecorderCoordinator {
     }
   }
 
-  private func probeMic(_ options: RecorderCommand.ProbeMicOptions) async {
+  private func probeMic() async {
     guard activeEngine == .none else {
       emitError("already_recording")
       return
@@ -46,7 +48,7 @@ final class RecorderCoordinator {
       return
     }
 
-    await tapRecorder().probeMic(aec: options.micAec)
+    await tapRecorder().probeMic()
   }
 
   func stop(handoffId: Int? = nil) async {
@@ -95,7 +97,7 @@ final class RecorderCoordinator {
         excludePids: tapOptions.excludePids,
         withMic: tapOptions.mic,
         tapEnabled: tapOptions.tapEnabled,
-        micAec: tapOptions.micAec,
+        audioProcessing: tapOptions.audioProcessing,
         preferredMicStrategy: tapOptions.preferredMicStrategy,
         preferredMicDeviceKey: tapOptions.preferredMicDeviceKey
       )

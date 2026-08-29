@@ -63,6 +63,8 @@ mac:
       to: native/mac/audio-monitor
     - from: resources/native/mac/audio-recorder
       to: native/mac/audio-recorder
+    - from: resources/native/mac/RecorderAPM-LICENSES
+      to: native/mac/RecorderAPM-LICENSES
   # 正式分发默认使用 electron-builder 内置公证
   notarize: true
 dmg:

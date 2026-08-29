@@ -1,9 +1,11 @@
 // 定义并解码 Electron 通过 stdin 发给 native recorder 的命令
 
 import Foundation
+import AudioProcessing
 
 /** stdin NDJSON 命令的内部模型，只描述协议数据，不执行录音策略 */
 enum RecorderCommand {
+  case invalid(String)
   case start(StartOptions)
   case probeMic(ProbeMicOptions)
   case update(UpdateOptions)
@@ -17,7 +19,6 @@ enum RecorderCommand {
   }
 
   struct ProbeMicOptions {
-    let micAec: Bool
   }
 
   enum Engine {
@@ -30,7 +31,7 @@ enum RecorderCommand {
     let excludePids: [pid_t]
     let mic: Bool
     let tapEnabled: Bool
-    let micAec: Bool
+    let audioProcessing: AudioProcessingOptions
     let preferredMicStrategy: MicCaptureStrategy?
     let preferredMicDeviceKey: String?
   }
@@ -46,39 +47,86 @@ enum RecorderCommand {
 /**
  * 将一行 renderer/main 写入 stdin 的 JSON 转为录音命令
  *
- * 保留旧协议的宽松边界：畸形 JSON、未知 action 静默忽略，缺失字段使用既有默认值
+ * 缺失字段使用当前协议默认值；未知 action、未知字段和畸形 JSON 明确返回 invalid
  */
 enum RecorderCommandDecoder {
   static func decode(_ line: String) -> RecorderCommand? {
-    guard let data = line.data(using: .utf8),
-          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let action = json["action"] as? String
-    else { return nil }
+    guard let data = line.data(using: .utf8) else {
+      return .invalid("command is not valid UTF-8")
+    }
 
-    switch action {
-    case "start":
-      return decodeStart(json)
-    case "probeMic":
-      return .probeMic(.init(micAec: json["micAec"] as? Bool ?? true))
-    case "update":
-      return .update(.init(
-        tapEnabled: json["tapEnabled"] as? Bool ?? true,
-        micEnabled: json["micEnabled"] as? Bool ?? true,
-        pids: processIDs(json["pids"]),
-        excludePids: processIDs(json["excludePids"])
-      ))
-    case "pause":
-      return .pause
-    case "resume":
-      return .resume
-    case "stop":
-      return .stop(handoffId: (json["handoffId"] as? NSNumber)?.intValue)
-    default:
-      return nil
+    let json: [String: Any]
+    do {
+      guard let decoded = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        return .invalid("command must be a JSON object")
+      }
+      json = decoded
+    }
+    catch {
+      return .invalid("malformed JSON: \(error)")
+    }
+
+    guard let action = json["action"] as? String else {
+      return .invalid("command action must be a string")
+    }
+
+    do {
+      switch action {
+      case "start":
+        try validateKeys(
+          json,
+          action: action,
+          allowed: [
+            "action", "outputPath", "engine", "pids", "excludePids", "mic", "tapEnabled",
+            "audioProcessing", "preferredMicStrategy", "preferredMicDeviceKey",
+          ]
+        )
+        return try decodeStart(json)
+      case "probeMic":
+        try validateKeys(json, action: action, allowed: ["action"])
+        return .probeMic(.init())
+      case "update":
+        try validateKeys(
+          json,
+          action: action,
+          allowed: ["action", "tapEnabled", "micEnabled", "pids", "excludePids"]
+        )
+        return .update(.init(
+          tapEnabled: json["tapEnabled"] as? Bool ?? true,
+          micEnabled: json["micEnabled"] as? Bool ?? true,
+          pids: processIDs(json["pids"]),
+          excludePids: processIDs(json["excludePids"])
+        ))
+      case "pause":
+        try validateKeys(json, action: action, allowed: ["action"])
+        return .pause
+      case "resume":
+        try validateKeys(json, action: action, allowed: ["action"])
+        return .resume
+      case "stop":
+        try validateKeys(json, action: action, allowed: ["action", "handoffId"])
+        return .stop(handoffId: (json["handoffId"] as? NSNumber)?.intValue)
+      default:
+        return .invalid("unsupported action: \(action)")
+      }
+    }
+    catch {
+      return .invalid(String(describing: error))
     }
   }
 
-  private static func decodeStart(_ json: [String: Any]) -> RecorderCommand {
+  private static func validateKeys(
+    _ json: [String: Any],
+    action: String,
+    allowed: Set<String>
+  ) throws {
+    let unknown = Set(json.keys).subtracting(allowed).sorted()
+    guard unknown.isEmpty else {
+      throw RecorderCommandDecodingError.unknownFields(action: action, fields: unknown)
+    }
+  }
+
+  private static func decodeStart(_ json: [String: Any]) throws -> RecorderCommand {
     let outputPath = json["outputPath"] as? String
       ?? "/tmp/audio-recording-\(Int(Date().timeIntervalSince1970)).m4a"
 
@@ -93,7 +141,7 @@ enum RecorderCommandDecoder {
         excludePids: processIDs(json["excludePids"]),
         mic: json["mic"] as? Bool ?? true,
         tapEnabled: json["tapEnabled"] as? Bool ?? true,
-        micAec: json["micAec"] as? Bool ?? true,
+        audioProcessing: try decodeAudioProcessing(json["audioProcessing"]),
         preferredMicStrategy: (json["preferredMicStrategy"] as? String)
           .flatMap(MicCaptureStrategy.init(rawValue:)),
         preferredMicDeviceKey: json["preferredMicDeviceKey"] as? String
@@ -101,7 +149,22 @@ enum RecorderCommandDecoder {
     ))
   }
 
+  private static func decodeAudioProcessing(_ value: Any?) throws -> AudioProcessingOptions {
+    try AudioProcessingOptions.decode(jsonValue: value)
+  }
+
   private static func processIDs(_ value: Any?) -> [pid_t] {
     (value as? [Any] ?? []).compactMap { ($0 as? NSNumber)?.int32Value }
+  }
+}
+
+private enum RecorderCommandDecodingError: Error, CustomStringConvertible {
+  case unknownFields(action: String, fields: [String])
+
+  var description: String {
+    switch self {
+    case .unknownFields(let action, let fields):
+      "unknown fields for \(action): \(fields.joined(separator: ", "))"
+    }
   }
 }

@@ -1,12 +1,14 @@
 import type { MeetingDetectionContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { startRecording as startNativeRecorder } from '@main/audio-recorder'
+import { DEFAULT_REALTIME_AUDIO_PROCESSING, startRecording as startNativeRecorder } from '@main/audio-recorder'
 import { dismissSession, suppressSession } from '@main/meeting-detection/meeting-detector'
 import { failNativeRecordingStart, registerNativeRecordingHandlers } from '@main/native-recording'
 import { hasNativeRecordingSession, setNativeRecordingSession } from '@main/native-recording/session'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
 import { ensureRecordingStorageAvailable, reportRecordingStorageInsufficient } from '@main/recording-storage'
+import { isSystemAudioRecordingSupported } from '@main/native-recording/manual'
+import { getSelfProcessPids } from '@main/utils/self-pids'
 
 export const meetingDetectionService = createIpcService<MeetingDetectionContract>('meeting-detection', {
   mainHandle: {
@@ -34,7 +36,17 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
       recordingState.startMeetingNative()
       let sent = false
       try {
-        sent = startNativeRecorder(session.outputPath)
+        /** 14.2+ 使用指定会议进程的 tap，旧系统保留 SCK 全系统回退。 */
+        sent = startNativeRecorder(session.outputPath, isSystemAudioRecordingSupported()
+          ? {
+              engine: 'tap',
+              tapEnabled: true,
+              pids: [pid],
+              excludePids: getSelfProcessPids(),
+              mic: true,
+              audioProcessing: DEFAULT_REALTIME_AUDIO_PROCESSING,
+            }
+          : undefined)
       }
       catch (error) {
         failNativeRecordingStart(session, 'helper_unavailable', error instanceof Error

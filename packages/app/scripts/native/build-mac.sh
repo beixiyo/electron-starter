@@ -6,7 +6,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-for command in swift lipo otool file awk; do
+for command in swift lipo otool file awk shasum; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required macOS build tool: $command" >&2
     exit 1
@@ -16,6 +16,7 @@ done
 APP_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 NATIVE_DIR="$APP_DIR/native/mac"
 OUT_DIR="$APP_DIR/resources/native/mac"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/flowtica-native-build.XXXXXX")"
 
 readonly ARM64_TRIPLE_PREFIX="arm64-apple-macos"
@@ -124,11 +125,103 @@ build_product() {
   echo "  output: $output"
 }
 
+APM_XCFRAMEWORK="$NATIVE_DIR/audio-recorder/Vendor/RecorderAPM.xcframework"
+apm_provenance_value() {
+  local key="$1"
+  awk -F= -v key="$key" '$1 == key { print substr($0, index($0, "=") + 1); exit }' \
+    "$APM_XCFRAMEWORK/BUILD-PROVENANCE.txt"
+}
+
+apm_file_matches_provenance() {
+  local file="$1"
+  local key="$2"
+  local expected
+  expected="$(apm_provenance_value "$key")"
+  [[ -n "$expected" ]] || return 1
+  [[ "$(shasum -a 256 "$file" | awk '{print $1}')" == "$expected" ]]
+}
+
+has_valid_apm_artifact() {
+  local required_file
+  for required_file in \
+    "$APM_XCFRAMEWORK/Info.plist" \
+    "$APM_XCFRAMEWORK/BUILD-PROVENANCE.txt" \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/libRecorderAPM.a" \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/Headers/RecorderAPM.h" \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/Headers/module.modulemap"; do
+    [[ -s "$required_file" ]] || return 1
+  done
+
+  local architectures
+  if ! architectures="$(lipo -archs "$APM_XCFRAMEWORK/macos-arm64_x86_64/libRecorderAPM.a" 2>/dev/null)"; then
+    return 1
+  fi
+  [[ "$architectures" == "arm64 x86_64" || "$architectures" == "x86_64 arm64" ]] || return 1
+
+  apm_file_matches_provenance \
+    "$NATIVE_DIR/audio-recorder/APMShim/RecorderAPM.cpp" \
+    shim_cpp_sha256 || return 1
+  apm_file_matches_provenance \
+    "$NATIVE_DIR/audio-recorder/APMShim/include/RecorderAPM.h" \
+    shim_header_sha256 || return 1
+  apm_file_matches_provenance \
+    "$SCRIPT_DIR/build-webrtc-apm.sh" \
+    build_script_sha256 || return 1
+  apm_file_matches_provenance \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/Headers/RecorderAPM.h" \
+    vendored_header_sha256 || return 1
+  apm_file_matches_provenance \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/Headers/module.modulemap" \
+    modulemap_sha256 || return 1
+  apm_file_matches_provenance \
+    "$APM_XCFRAMEWORK/Info.plist" \
+    info_plist_sha256 || return 1
+  apm_file_matches_provenance \
+    "$APM_XCFRAMEWORK/macos-arm64_x86_64/libRecorderAPM.a" \
+    archive_sha256
+}
+
+if ! has_valid_apm_artifact; then
+  echo "RecorderAPM artifact is missing; building it from pinned source"
+  bash "$SCRIPT_DIR/build-webrtc-apm.sh"
+fi
+
+APM_LICENSES_SOURCE="$NATIVE_DIR/audio-recorder/Vendor/RecorderAPM-LICENSES"
+APM_LICENSES_OUTPUT="$OUT_DIR/RecorderAPM-LICENSES"
+readonly APM_LICENSE_FILES=(
+  Abseil-LICENSE
+  Ooura-LICENSE
+  PFFFT-LICENSE
+  RNNoise-COPYING
+  SPLSqrtFloor-LICENSE
+  WebRTC-LICENSE
+  WebRTC-PATENTS
+  WebRTCFFT-LICENSE
+  webrtc-audio-processing-COPYING
+)
+if [[ ! -d "$APM_LICENSES_SOURCE" ]]; then
+  echo "Missing RecorderAPM license directory: $APM_LICENSES_SOURCE" >&2
+  exit 1
+fi
+for license_file in "${APM_LICENSE_FILES[@]}"; do
+  if [[ ! -s "$APM_LICENSES_SOURCE/$license_file" ]]; then
+    echo "Missing or empty RecorderAPM license file: $APM_LICENSES_SOURCE/$license_file" >&2
+    exit 1
+  fi
+done
+
 build_product accessibility focus-check 11.0
 build_product accessibility fn-listener 11.0
 build_product hour-cycle hour-cycle 14.2
 build_product audio-monitor audio-monitor 14.2
 build_product audio-recorder audio-recorder 14.0
+
+rm -rf -- "$APM_LICENSES_OUTPUT"
+mkdir -p "$APM_LICENSES_OUTPUT"
+for license_file in "${APM_LICENSE_FILES[@]}"; do
+  cp "$APM_LICENSES_SOURCE/$license_file" "$APM_LICENSES_OUTPUT/$license_file"
+done
+echo "  output: $APM_LICENSES_OUTPUT"
 
 echo
 echo "All macOS native binaries built and verified"

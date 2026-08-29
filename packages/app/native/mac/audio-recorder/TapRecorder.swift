@@ -1,6 +1,7 @@
 // 编排 process tap 系统音、麦克风 sidecar、恢复和最终混音生命周期
 
 import AVFoundation
+import AudioProcessing
 import Cocoa
 import CoreAudio
 import CoreMedia
@@ -11,8 +12,7 @@ import CoreMedia
 // - 权限:只需「System Audio Recording Only」TCC(kTCCServiceAudioCapture),不需要屏幕录制
 // - 支持按进程过滤:pids 非空 = 仅混入这些进程;pids 为空 = 全系统混音并排除 excludePids(自身进程族)
 // - 系统音轨可热挂/卸:tapEnabled=false 纯 mic 开录(系统音轨预建空轨),录音中经 update 随时挂上/摘下 tap
-// - 麦克风:优先 AVAudioEngine voice processing(苹果 AEC/NS/AGC),
-//   失败依次降级 raw AVAudioEngine 和 AVCaptureSession
+// - 麦克风:优先 raw AVAudioEngine,失败后降级 AVCaptureSession；软件 AEC 在独立队列中运行
 //
 // 流程:pid → AudioObjectID → CATapDescription → AudioHardwareCreateProcessTap
 //     → 私有聚合设备(默认输出为 main sub-device,tap 挂 TapList,AudioCap 同配方)
@@ -64,11 +64,10 @@ class TapRecorder: NSObject {
   /** 物理麦克风采集与降级顺序由独立对象持有，TapRecorder 只接收已拷贝的 PCM */
   private lazy var micCapture = TapMicCapture(
     sampleQueue: sampleQueue,
-    onSample: { [weak self] buffer, captureHostTime, processingMode in
+    onSample: { [weak self] buffer, captureHostTime in
       self?.appendMicSample(
         buffer,
-        captureHostTime: captureHostTime,
-        processingMode: processingMode
+        captureHostTime: captureHostTime
       )
     }
   )
@@ -89,10 +88,11 @@ class TapRecorder: NSObject {
   private var systemInput: AVAssetWriterInput?
   /** mic PCM 文件、格式转换和电平处理的唯一状态所有者 */
   private var micSidecarWriter: TapMicSidecarWriter?
+  /** 在线 AEC3 的唯一状态所有者；stop 只排空该队列，不重新读取整场 raw sidecar */
+  private var realtimeEchoProcessor: RealtimeEchoProcessor?
   /** host time、暂停偏移、样本 cutoff 和系统音连续片段的唯一状态所有者 */
   private let recordingTimeline = TapRecordingTimeline()
-  /** 录音中重新 attach mic 复用的 AEC 偏好(start 时传入) */
-  private var micAecPref = true
+  /** 当前录音明确选择的实时音频处理；缺省为 off */
   private var outputPath = ""
   private var startTime: Date?
   private var totalPausedDuration: TimeInterval = 0
@@ -149,13 +149,13 @@ class TapRecorder: NSObject {
   private var micRecoveryRequested = false
 
   /** 已授权后的启动预检：只验证麦克风路线，不创建 Writer、系统 Tap、恢复任务或录音产物 */
-  func probeMic(aec: Bool) async {
+  func probeMic() async {
     guard writer == nil else {
       emitError("already_recording")
       return
     }
 
-    guard micCapture.attach(aec: aec) != nil,
+    guard micCapture.attach() != nil,
           let strategy = micCapture.activeStrategy,
           let deviceKey = micCapture.activeDeviceKey
     else {
@@ -164,15 +164,10 @@ class TapRecorder: NSObject {
       return
     }
 
-    /** 必须在 detach 前取值：探测结果只反映刚结束的这一轮 attach */
-    let voiceProcessing = micCapture.voiceProcessingOutcome
-    let voiceProcessingChannels = micCapture.voiceProcessingChannelCount
     micCapture.detach()
     emitMicProbeComplete(
       strategy: strategy,
-      deviceKey: deviceKey,
-      voiceProcessing: voiceProcessing,
-      voiceProcessingChannels: voiceProcessingChannels
+      deviceKey: deviceKey
     )
   }
 
@@ -183,7 +178,7 @@ class TapRecorder: NSObject {
     excludePids: [pid_t],
     withMic: Bool,
     tapEnabled: Bool,
-    micAec: Bool,
+    audioProcessing: AudioProcessingOptions,
     preferredMicStrategy: MicCaptureStrategy?,
     preferredMicDeviceKey: String?
   ) async -> Bool {
@@ -194,23 +189,34 @@ class TapRecorder: NSObject {
 
     beginRecordingGeneration(micRequested: withMic, tapRequested: tapEnabled)
     self.outputPath = outputPath
-    self.micAecPref = micAec
     self.micRequested = withMic
     self.tapRequested = tapEnabled
     sampleQueue.sync {
       micSidecarWriter = TapMicSidecarWriter(outputPath: outputPath)
+      if audioProcessing.processor == .webrtcAec3 {
+        do {
+          realtimeEchoProcessor = try RealtimeEchoProcessor(
+            options: audioProcessing,
+            cleanFileURL: realtimeCleanURL(outputPath: outputPath),
+            logger: { message in log("tap: \(message)") }
+          )
+        }
+        catch {
+          realtimeEchoProcessor = nil
+          log("tap: realtime audio processing unavailable, retaining raw mic: \(error)")
+        }
+      }
     }
 
     do {
       /**
-       * 顺序约束:先起 mic 引擎再建 tap 管线——VPIO(AEC)启动会重配置输出设备,
-       * 之后读到的 tap 格式才与实际回调一致;mic 设备不可用时降级为仅系统音频,
+       * 顺序约束:先起 raw mic 引擎再建 tap 管线，之后读到的 tap 格式才与实际回调一致；
+       * mic 设备不可用时降级为仅系统音频，
        * 不整体失败(mic 权限由 TS 侧前置保证)
        */
       let recordingGeneration = currentRecordingGeneration()
       let micReady = withMic
         ? attachMic(
-          aec: micAec,
           generation: recordingGeneration,
           preferredStrategy: preferredMicStrategy,
           preferredDeviceKey: preferredMicDeviceKey
@@ -250,8 +256,6 @@ class TapRecorder: NSObject {
         path: outputPath,
         micStrategy: micCapture.activeStrategy,
         micDeviceKey: micCapture.activeDeviceKey,
-        micVoiceProcessing: micReady ? micCapture.voiceProcessingOutcome : nil,
-        micVoiceProcessingChannels: micCapture.voiceProcessingChannelCount,
         outputTransport: getDefaultOutputTransport()
       )
       return true
@@ -330,7 +334,7 @@ class TapRecorder: NSObject {
 
     if micEnabled, !isMicActive() {
       guard resetMicRecoveryBackoff(for: generation) else { return }
-      if attachMic(aec: micAecPref, generation: generation) != nil {
+      if attachMic(generation: generation) != nil {
         log("mic attached")
       }
       else {
@@ -444,7 +448,7 @@ class TapRecorder: NSObject {
     if micRequested {
       enableMicSampleGate()
       /**
-       * pause 只关采样闸门、从不停止引擎，健康的 VPIO 在 resume 时不需要重挂。
+       * pause 只关采样闸门、从不停止引擎，健康的 raw engine 在 resume 时不需要重挂
        * 无条件 detach + attach 要付出 settle 延迟、首帧探测和 `!dev` 设备忙重试，
        * 实测在成品里表现为 resume 后约 1.9s 的静音；只有确有理由时才重挂：
        * - 暂停期间换过默认输入设备（该事件当时被闸门吞掉，只能记账后补）
@@ -522,6 +526,22 @@ class TapRecorder: NSObject {
       return
     }
 
+    /** 采集队列已排空；只处理尚未消费的实时队列尾部，不重新读取整场 sidecar。 */
+    let realtimeResult = realtimeEchoProcessor?.finish()
+    if let realtimeResult {
+      log(
+        "tap: realtime result promote=\(realtimeResult.canPromote) "
+          + "input=\(realtimeResult.inputSamples) output=\(realtimeResult.outputSamples) "
+          + "frames=\(realtimeResult.processedFrames) refs=\(realtimeResult.referenceSubmissions) "
+          + "missingReference=\(realtimeResult.missingReferenceSamples) "
+          + "dropped=\(realtimeResult.droppedSubmissions) "
+          + "mean=\(String(format: "%.3f", realtimeResult.meanFrameProcessingMS))ms "
+          + "p95=\(String(format: "%.3f", realtimeResult.p95FrameProcessingMS))ms "
+          + "delay=\(realtimeResult.delayMS)ms "
+          + "error=\(realtimeResult.errorDescription ?? "none")"
+      )
+    }
+
     systemInput?.markAsFinished()
 
     if let writer, writer.status == .writing {
@@ -549,7 +569,29 @@ class TapRecorder: NSObject {
     let storageWriteError = isStorageInsufficientError(writer?.error)
       ? writerError
       : describeError(sidecarSummary.writeError)
-    let micSidecarPath = sidecarSummary.filePath
+    var micSidecarPath = sidecarSummary.filePath
+    if let realtimeResult {
+      var promoted = false
+      if realtimeResult.canPromote, let rawSidecarPath = sidecarSummary.filePath {
+        promoted = promoteRealtimeClean(
+          from: realtimeResult.cleanFileURL,
+          to: URL(fileURLWithPath: rawSidecarPath)
+        )
+        if promoted {
+          log("tap: promoted realtime clean mic to \(rawSidecarPath)")
+          micSidecarPath = rawSidecarPath
+        }
+      }
+      if !promoted {
+        try? FileManager.default.removeItem(at: realtimeResult.cleanFileURL)
+        if realtimeResult.canPromote {
+          log("tap: realtime clean promotion failed; retaining raw mic sidecar")
+        }
+        else if let error = realtimeResult.errorDescription {
+          log("tap: realtime clean not promoted: \(error)")
+        }
+      }
+    }
     let hasDetectedMicSignal = sidecarSummary.hasDetectedSignal
     var micSidecarDuration = CMTime.zero
     if let micSidecarPath {
@@ -612,7 +654,7 @@ class TapRecorder: NSObject {
 
     /**
      * 整场没检测到有效 mic 且系统主轨健康时，不能因为 sidecar 里有静音/底噪时长就强制
-     * 二次 AAC 编码和多轨 limiter。纯 mic 或主 writer 失败时仍保留 sidecar 作为唯一音源。
+     * 二次 AAC 编码和多轨 limiter。纯 mic 或主 writer 失败时仍保留 sidecar 作为唯一音源
      */
     let shouldMixMicSidecar = hasMicSidecarSamples
       && (hasDetectedMicSignal || writerStatus != .completed)
@@ -1082,7 +1124,7 @@ class TapRecorder: NSObject {
     }
 
     log("tap: mic recovery attach begin")
-    let recovered = attachMic(aec: micAecPref, generation: generation) != nil
+    let recovered = attachMic(generation: generation) != nil
     guard isMicRecoveryValid(token: token, generation: generation) else {
       log("tap: mic recovery result discarded (\(reason))")
       return
@@ -1092,9 +1134,7 @@ class TapRecorder: NSObject {
       log("tap: mic recovery succeeded (micCb=\(micCapture.callbackCount)), devices: \(describeDefaultAudioDevices())")
       emitMicRouteChanged(
         reason: reason,
-        strategy: micCapture.activeStrategy,
-        voiceProcessing: micCapture.voiceProcessingOutcome,
-        voiceProcessingChannels: micCapture.voiceProcessingChannelCount
+        strategy: micCapture.activeStrategy
       )
       return
     }
@@ -1184,7 +1224,7 @@ class TapRecorder: NSObject {
   }
 
   /**
-   * 主 writer 只承载系统音；麦克风恒写 PCM sidecar，避开实时 AAC 在设备切换和 VPIO 时的静默失败
+   * 主 writer 只承载系统音；麦克风恒写 PCM sidecar，避开实时 AAC 在设备切换时的静默失败
    * AAC 仅支持 8k~48k；tap 原生采样率跟随输出设备，罕见值与未挂 tap 的缺省均落 48k
    */
   private func setupWriter(outputPath: String) throws {
@@ -1217,15 +1257,9 @@ class TapRecorder: NSObject {
     sessionStarted = false
   }
 
-  /**
-   * 起 mic 采集引擎（VPIO AEC 或裸采集）；PCM 由 TapMicSidecarWriter 按需建档
-   *
-   * 录音中热挂时:VPIO 启动会重配置输出设备,可能扰动正在跑的 tap——若实测有此问题,
-   * 需改为「tap 正跑时挂 mic 强制走裸采集」或「重挂 tap」策略。返回是否成功挂上
-   */
+  /** 起 raw mic 采集引擎；PCM 由 TapMicSidecarWriter 按需建档。 */
   @discardableResult
   private func attachMic(
-    aec: Bool,
     generation: UUID,
     preferredStrategy: MicCaptureStrategy? = nil,
     preferredDeviceKey: String? = nil
@@ -1234,7 +1268,6 @@ class TapRecorder: NSObject {
       return isRecordingGenerationCurrent(generation) ? micCapture.activeGenerationToken : nil
     }
     guard let physicalGeneration = micCapture.attach(
-      aec: aec,
       preferredStrategy: preferredStrategy,
       preferredDeviceKey: preferredDeviceKey
     ) else { return nil }
@@ -1271,12 +1304,15 @@ class TapRecorder: NSObject {
 
   private func appendMicSample(
     _ buffer: AVAudioPCMBuffer,
-    captureHostTime: CMTime,
-    processingMode: MicCaptureProcessingMode
+    captureHostTime: CMTime
   ) {
     guard shouldAcceptMicSamples(),
           let logicalTime = recordingTimeline.logicalMicTime(at: captureHostTime) else { return }
-    if micSidecarWriter?.append(buffer, at: logicalTime, processingMode: processingMode) == true {
+    if let realtimeEchoProcessor,
+       !realtimeEchoProcessor.submitCapture(buffer, logicalTimeSeconds: logicalTime.seconds) {
+      log("tap: realtime capture submission rejected; raw sidecar retained")
+    }
+    if micSidecarWriter?.append(buffer, at: logicalTime) == true {
       micLastSampleAt = Date()
     }
   }
@@ -1303,6 +1339,13 @@ class TapRecorder: NSObject {
     /** 统一到录音逻辑时间；记录有效片段，暂停时段从两轨共同剔除 */
     guard let adjusted = recordingTimeline.retimeSystemSample(sampleBuffer) else { return .ignored }
 
+    if let realtimeEchoProcessor {
+      let logicalTime = CMSampleBufferGetPresentationTimeStamp(adjusted).seconds
+      if !realtimeEchoProcessor.submitReference(adjusted, logicalTimeSeconds: logicalTime) {
+        log("tap: realtime reference submission rejected; raw sidecar retained")
+      }
+    }
+
     if !sessionStarted {
       /** AAC 会压紧 PTS 空洞；session 从零开始，最终由片段映射恢复真实位置 */
       writer.startSession(atSourceTime: .zero)
@@ -1324,6 +1367,41 @@ class TapRecorder: NSObject {
     return .dropped
   }
 
+  private func promoteRealtimeClean(from cleanURL: URL, to sidecarURL: URL) -> Bool {
+    guard FileManager.default.fileExists(atPath: cleanURL.path),
+          FileManager.default.fileExists(atPath: sidecarURL.path)
+    else {
+      log(
+        "tap: realtime clean promotion skipped: cleanExists="
+          + "\(FileManager.default.fileExists(atPath: cleanURL.path)) "
+          + "rawExists=\(FileManager.default.fileExists(atPath: sidecarURL.path))"
+      )
+      return false
+    }
+
+    do {
+      _ = try FileManager.default.replaceItemAt(
+        sidecarURL,
+        withItemAt: cleanURL,
+        backupItemName: nil,
+        options: []
+      )
+      return true
+    }
+    catch {
+      log("tap: realtime clean promotion failed: \(describeError(error))")
+      return false
+    }
+  }
+
+  private func realtimeCleanURL(outputPath: String) -> URL {
+    let outputURL = URL(fileURLWithPath: outputPath)
+    return outputURL.deletingLastPathComponent()
+      .appendingPathComponent(
+        "\(outputURL.deletingPathExtension().lastPathComponent).realtime-clean.caf"
+      )
+  }
+
   // ── 拆除与清理 ──
 
   private func stopCapturePipeline() {
@@ -1341,7 +1419,8 @@ class TapRecorder: NSObject {
     systemInput = nil
     micSidecarWriter?.finish()
     micSidecarWriter = nil
-    micAecPref = true
+    realtimeEchoProcessor?.cancel()
+    realtimeEchoProcessor = nil
     startTime = nil
     totalPausedDuration = 0
     pausedAt = nil

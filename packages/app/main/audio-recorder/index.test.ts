@@ -177,6 +177,47 @@ describe('audio recorder stop handoff', () => {
     })
   })
 
+  it('默认 tap 录音不附加软件音频处理配置', () => {
+    recorder.startRecording('/tmp/mic-only.m4a', {
+      engine: 'tap',
+      tapEnabled: false,
+      mic: true,
+    })
+
+    const command = JSON.parse(harness.send.mock.calls.at(-1)![0])
+    expect(command).not.toHaveProperty('micAec')
+    expect(command).not.toHaveProperty('audioProcessing')
+  })
+
+  it('tap 录音显式传入 AEC3 配置并保留完整进程选择', () => {
+    recorder.startRecording('/tmp/meeting.m4a', {
+      engine: 'tap',
+      tapEnabled: true,
+      pids: [1234],
+      excludePids: [5678],
+      mic: true,
+      audioProcessing: {
+        processor: 'webrtcAec3',
+        delayMode: 'auto',
+        fixedDelayMs: 120,
+        noiseSuppression: 'moderate',
+        gainControl: 'off',
+        highPass: true,
+      },
+    })
+
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toMatchObject({
+      action: 'start',
+      pids: [1234],
+      excludePids: [5678],
+      audioProcessing: {
+        processor: 'webrtcAec3',
+        fixedDelayMs: 120,
+      },
+    })
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).not.toHaveProperty('micAec')
+  })
+
   it.each(['completed', 'failed'] as const)(
     'watchdog timeout publishes one routed terminal error after restart %s',
     async (restartOutcome) => {
@@ -487,9 +528,9 @@ describe('audio recorder stop handoff', () => {
     expect(harness.forceRestart).not.toHaveBeenCalled()
   })
 
-  it('启动预检成功后把策略作为正式 tap 录音提示，并强制回收隔离 helper', async () => {
+  it('启动预检成功后把 raw/capture 策略作为正式 tap 录音提示，并强制回收隔离 helper', async () => {
     const probe = recorder.probeMicCaptureStrategy()
-    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toEqual({ action: 'probeMic', micAec: true })
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toEqual({ action: 'probeMic' })
 
     emitNative({
       status: 'mic_probe_complete',
@@ -506,26 +547,18 @@ describe('audio recorder stop handoff', () => {
     }))
   })
 
-  /**
-   * 改动前 probe 只 resolve 一个 boolean，raw 兜底与 VPIO 生效同为 true，
-   * 收到用户日志也无法判断这台机器有没有系统回声消除
-   */
-  it('启动预检把 VPIO 放弃原因与声道数透传给调用方', async () => {
+  it('启动预检只透传 raw/capture 路线，不包含 VPIO 状态', async () => {
     const probe = recorder.probeMicCaptureStrategy()
 
     emitNative({
       status: 'mic_probe_complete',
       micStrategy: 'rawAudioEngine',
       micDeviceKey: 'device-key',
-      micVoiceProcessing: 'unstable-channel-layout',
-      micVoiceProcessingChannels: 7,
     })
 
     await expect(probe).resolves.toEqual({
       ready: true,
       strategy: 'rawAudioEngine',
-      voiceProcessing: 'unstable-channel-layout',
-      voiceProcessingChannels: 7,
     })
   })
 
@@ -538,7 +571,7 @@ describe('audio recorder stop handoff', () => {
     emitNative({
       status: 'recording',
       path: '/tmp/running.m4a',
-      micStrategy: 'voiceProcessed',
+      micStrategy: 'rawAudioEngine',
       micDeviceKey: 'device-key',
     })
 
@@ -548,15 +581,11 @@ describe('audio recorder stop handoff', () => {
       status: 'mic_route_changed',
       reason: 'default-input-changed',
       micStrategy: 'rawAudioEngine',
-      micVoiceProcessing: 'unstable-channel-layout',
-      micVoiceProcessingChannels: 7,
     })
 
     expect(routeChanged).toHaveBeenCalledWith({
       reason: 'default-input-changed',
-      strategy: 'rawAudioEngine',
-      voiceProcessing: 'unstable-channel-layout',
-      voiceProcessingChannels: 7,
+      micStrategy: 'rawAudioEngine',
     })
 
     /** 重挂已重新探测过路线，旧提示不能再拿去加速下一场 */
