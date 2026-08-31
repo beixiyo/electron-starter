@@ -1,3 +1,4 @@
+export * from './audio-lab'
 export * from './media'
 export * from './oauth'
 export * from './permission'

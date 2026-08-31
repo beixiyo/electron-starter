@@ -12,9 +12,12 @@ vi.mock('node:child_process', () => ({
   execFile: harness.execFile,
 }))
 
+vi.mock('@main/audio-lab/settings', () => ({
+  getAudioLabOutputArgs: () => [],
+}))
+
 vi.mock('@main/native-bridge', () => ({
   getNativeBinaryPath: () => '/mock/audio-recorder',
-  getMonoOutputArgs: () => [],
 }))
 
 vi.mock('@main/storage', () => ({
@@ -112,6 +115,25 @@ describe('录音资产恢复扫描', () => {
       '--validate-audio',
       paths.outputPath,
     ])
+  })
+
+  it('非活跃实时交付临时件会被删除且不进入恢复校验', async () => {
+    const realtimeTemp = join(harness.recoveryDir, `_realtime_${TASK_ID}.m4a`)
+    await writeFile(realtimeTemp, 'partial realtime m4a')
+
+    await expect(recovery.listRecoverableRecordings()).resolves.toEqual([])
+    await expect(access(realtimeTemp)).rejects.toThrow()
+    expect(harness.execFile).not.toHaveBeenCalled()
+  })
+
+  it('当前录音的实时交付临时件不会被恢复扫描删除', async () => {
+    const outputPath = join(harness.recoveryDir, `${TASK_ID}.m4a`)
+    const realtimeTemp = join(harness.recoveryDir, `_realtime_${TASK_ID}.m4a`)
+    await writeFile(realtimeTemp, 'active realtime m4a')
+
+    await expect(recovery.listRecoverableRecordings(outputPath)).resolves.toEqual([])
+    await expect(readFile(realtimeTemp, 'utf-8')).resolves.toBe('active realtime m4a')
+    expect(harness.execFile).not.toHaveBeenCalled()
   })
 
   it('原生媒体校验失败时不暴露或删除非零文件', async () => {

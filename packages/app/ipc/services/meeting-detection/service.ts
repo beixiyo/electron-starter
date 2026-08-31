@@ -1,6 +1,6 @@
 import type { MeetingDetectionContract } from './contract'
 import { createIpcService } from '@ipc/core'
-import { DEFAULT_REALTIME_AUDIO_PROCESSING, startRecording as startNativeRecorder } from '@main/audio-recorder'
+import { startRecording as startNativeRecorder } from '@main/audio-recorder'
 import { dismissSession, suppressSession } from '@main/meeting-detection/meeting-detector'
 import { failNativeRecordingStart, registerNativeRecordingHandlers } from '@main/native-recording'
 import { hasNativeRecordingSession, setNativeRecordingSession } from '@main/native-recording/session'
@@ -44,7 +44,6 @@ export const meetingDetectionService = createIpcService<MeetingDetectionContract
               pids: [pid],
               excludePids: getSelfProcessPids(),
               mic: true,
-              audioProcessing: DEFAULT_REALTIME_AUDIO_PROCESSING,
             }
           : undefined)
       }

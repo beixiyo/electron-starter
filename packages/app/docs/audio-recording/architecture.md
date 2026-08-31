@@ -10,14 +10,13 @@ Electron main ── NDJSON stdin/stdout ── audio-recorder (Swift)
         │                                  │
         │                                  ├─ Process Tap：指定会议 PID 的 system
         │                                  ├─ raw mic：裸采集，写 .mic.caf
-        │                                  └─ realtime AEC3：mic + system reference
-        │                                      └─ clean mic temporary sidecar
+        │                                  ├─ realtime AEC3：mic + system reference
+        │                                  └─ realtime delivery：system + clean/raw mic → temporary M4A
         ▼
 checkpoint / handoff / recovery
         │
-        ├─ clean promotion（成功且无缺口）
-        ├─ raw promotion（处理失败或不可信）
-        └─ AudioTrackMixer：system + mic → final M4A
+        ├─ realtime M4A 原子安装（成功且无丢块）
+        └─ AudioTrackMixer fallback：system + clean/raw sidecar → final M4A
 ```
 
 系统音频和麦克风的输入角色必须明确：正向路径中 `system` 是 AEC reference，`mic` 是 capture；不能把两者交换，也不能在 reference 缺失时用 mic 代替
@@ -39,13 +38,13 @@ checkpoint / handoff / recovery
 1. Core Audio callback 只复制 PCM、记录逻辑时间并尝试进入有界队列，不写 clean 文件
 2. 私有串行处理队列按时间线配对 mic 和 reference
 3. reference 缺失的单个 hop 喂零；队列背压或算法错误不阻塞采集
-4. AEC3 按固定处理块运行，由私有处理队列消费者将 clean mic 写入同目录临时 sidecar
-5. 只有整个 session 没有处理错误、没有丢块、输出长度通过校验时，clean 才允许 promotion
-6. 任何不可信条件都保留 raw `.mic.caf` 并回退 raw；正式录音不能因为实验处理失败变成 terminal error
+4. AEC3 按固定处理块运行，clean mic、raw fallback mic 与 system 按同一逻辑时间进入有界实时混音器
+5. 混音器在录制期间直接编码同目录临时 M4A；路由切换只冲刷已经到达的 PCM，随后重置相应轨道与 AEC 状态
+6. stop 最多补一个 100 ms 尾块，解码校验后原子安装；任何不可信条件都保留 raw `.mic.caf` 并回退旧混音路径
 
 ## 收尾与恢复
 
-停止时，Swift 先停止采集并排空处理队列，再关闭临时文件和 checkpoint。它不在 stop 关键路径重新读取整场录音做 AEC。成功的 clean 通过同目录临时文件原子替换；处理或提升失败时保留 raw，未提升的本轮 clean 临时文件会被清理，不能冒充恢复资产
+停止时，Swift 先排空采集与处理队列，再关闭实时 M4A、主 writer、sidecar 和 checkpoint。实时 M4A 可解码且没有输入丢块时原子替换正式产物；否则复用主 writer、raw sidecar 与 checkpoint 走原有恢复混音。helper 崩溃残留的 `_realtime_*.m4a` 不进入恢复列表，非活跃会话扫描时会被删除
 
 Electron 侧由 `NativeBridge` 负责进程通信，`RecorderHandoffCoordinator` 负责 terminal 代际，`native-recording` 负责按来源路由成功、失败、取消和恢复。helper 崩溃不是成功：必须等待 child exit 或匹配的 terminal handoff 事件
 

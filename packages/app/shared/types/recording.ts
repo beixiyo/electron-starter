@@ -31,7 +31,7 @@ export type RecordingSnapshot = {
 }
 
 /** 单次录音最长时长（毫秒），到点自动暂停并提示用户 */
-export const RECORDING_MAX_DURATION_MS = 2 * 60 * 60 * 1000
+export const RECORDING_MAX_DURATION_MS = 5 * 60 * 60 * 1000
 
 /** 录音状态机广播节拍（毫秒），驱动录音页计时刷新 */
 export const RECORDING_TICK_MS = 1000

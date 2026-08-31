@@ -36,6 +36,8 @@ export type RecorderSidebarProps = {
   }
   /** 音源多选条（原生 tap 录音模式下渲染在音频设置卡顶部，混入系统音频） */
   audioSourceBar?: ReactNode
+  /** Native 录音实验设置与当前处理状态。 */
+  audioLabPanel?: ReactNode
   errorMessage: string | null
   /**
    * 录制时长（秒）

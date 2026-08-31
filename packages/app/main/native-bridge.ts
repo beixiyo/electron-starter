@@ -16,20 +16,6 @@ export function getNativeBinaryPath(name: string): string {
   return path.join(__dirname, '../../resources', resourcePath)
 }
 
-/**
- * 最终录音产物是否写单声道
- *
- * 置 `ELECTRON_APP_MONO_OUTPUT=1` 开启，默认保持立体声成品。开关只影响 native helper
- * 写出的成品，采集侧仍按立体声进行，因此不影响系统音与麦克风分轨处理的可能
- * 返回值直接拼进命令行；关闭时为空数组，调用方参数保持原样
- */
-export function getMonoOutputArgs(): string[] {
-  const flag = process.env.ELECTRON_APP_MONO_OUTPUT
-  return flag === '1' || flag === 'true'
-    ? ['--mono-output']
-    : []
-}
-
 function getNativePlatformDir(): string {
   if (process.platform === 'darwin')
     return 'mac'
@@ -90,7 +76,10 @@ export class NativeBridge<T extends Record<string, any>> {
       return
 
     /** 局部捕获本次 spawn 的实例：exit/error 异步回调只清理自己这一代，避免 restart 后误清新 child */
-    const child = spawn(getNativeBinaryPath(this.config.binaryName ?? this.config.name), this.config.args ?? [], {
+    const args = typeof this.config.args === 'function'
+      ? this.config.args()
+      : this.config.args ?? []
+    const child = spawn(getNativeBinaryPath(this.config.binaryName ?? this.config.name), args, {
       stdio: [
         this.config.writable
           ? 'pipe'
@@ -384,7 +373,8 @@ type NativeBridgeConfig<T extends Record<string, any>> = {
   name: string
   /** 日志实例名与实际二进制名不同时显式指定，适用于隔离的一次性 helper */
   binaryName?: string
-  args?: string[]
+  /** 每次启动重新求值，供需要换代生效的进程级配置使用。 */
+  args?: string[] | (() => string[])
   writable?: boolean
   logStderr?: boolean
   /** stderr 逐行回调（logStderr 开启时生效），供产品接入自己的持久化诊断日志 */

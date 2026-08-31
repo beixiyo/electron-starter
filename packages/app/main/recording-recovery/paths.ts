@@ -38,6 +38,11 @@ export function getRecoveryOutputPath(taskId: string): string {
   return join(RECORDING_RECOVERY_DIR, `${taskId}.m4a`)
 }
 
+/** 录制期持续写入、stop 时原子替换正式产物的临时 M4A。 */
+export function getRealtimeDeliveryTempPath(taskId: string): string {
+  return join(RECORDING_RECOVERY_DIR, `_realtime_${assertTaskId(taskId)}.m4a`)
+}
+
 export function getRecoveryManifestPath(taskId: string): string {
   return join(RECORDING_RECOVERY_DIR, `${taskId}.json`)
 }

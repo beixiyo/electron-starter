@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PermissionModal, usePermissions } from '../../components/permission'
 import { AudioSourceBar } from './components/AudioSourceBar'
+import { AudioLabPanel } from './components/AudioLabPanel'
 import { PreviewPanel } from './components/PreviewPanel'
 import type { PreviewSummary } from './components/PreviewPanel/types'
 import { RecorderSidebar } from './components/RecorderSidebar'
@@ -523,6 +524,9 @@ export default function ElectronRecorderPage(): React.JSX.Element {
       audioCards={ audioCards }
       audioSourceBar={ nativeMode
         ? <AudioSourceBar />
+        : null }
+      audioLabPanel={ nativeMode
+        ? <AudioLabPanel />
         : null }
       errorMessage={ errorMessage }
       recordingDuration={ recordingDuration }

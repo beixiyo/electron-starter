@@ -50,6 +50,14 @@ public final class PCMBufferNormalizer: @unchecked Sendable {
     return try resample(monoBuffer)
   }
 
+  /** 输入设备或路由换代后丢弃旧格式转换器，避免跨设备复用转换状态。 */
+  public func resetInputFormat() {
+    inputConverter = nil
+    inputConverterFormat = nil
+    resampler = nil
+    resamplerRate = nil
+  }
+
   public static func copy(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
     guard buffer.frameLength > 0,
           let copied = AVAudioPCMBuffer(

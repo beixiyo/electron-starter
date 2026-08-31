@@ -6,7 +6,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-for command in swift lipo otool file awk shasum; do
+for command in swift lipo otool file awk shasum curl ditto; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "Missing required macOS build tool: $command" >&2
     exit 1
@@ -17,10 +17,14 @@ APP_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 NATIVE_DIR="$APP_DIR/native/mac"
 OUT_DIR="$APP_DIR/resources/native/mac"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/flowtica-native-build.XXXXXX")"
+BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/electron-starter-native-build.XXXXXX")"
 
 readonly ARM64_TRIPLE_PREFIX="arm64-apple-macos"
 readonly X86_64_TRIPLE_PREFIX="x86_64-apple-macos"
+readonly APM_RELEASE_TAG="recorder-apm-v1"
+readonly APM_RELEASE_ASSET="RecorderAPM-2.1-shim-v1-macos-universal.xcframework.zip"
+readonly APM_RELEASE_SHA256="4db25d7ddbbc55a63de6132b763e15bc254bcc0b455acc7b56bfcd121169ea99"
+readonly APM_RELEASE_URL="https://github.com/beixiyo/electron-starter/releases/download/$APM_RELEASE_TAG/$APM_RELEASE_ASSET"
 
 cleanup() {
   rm -rf "$BUILD_ROOT"
@@ -181,9 +185,66 @@ has_valid_apm_artifact() {
     archive_sha256
 }
 
+download_apm_artifact() {
+  local archive="$BUILD_ROOT/$APM_RELEASE_ASSET"
+  local extract_dir="$BUILD_ROOT/recorder-apm-release"
+  local extracted_framework="$extract_dir/RecorderAPM.xcframework"
+  local installing_framework="${APM_XCFRAMEWORK}.installing"
+
+  echo "RecorderAPM artifact is missing; downloading $APM_RELEASE_TAG"
+  if ! curl \
+    --fail \
+    --location \
+    --silent \
+    --show-error \
+    --connect-timeout 10 \
+    --max-time 180 \
+    --retry 2 \
+    "$APM_RELEASE_URL" \
+    -o "$archive"; then
+    return 1
+  fi
+
+  local actual_sha256
+  actual_sha256="$(shasum -a 256 "$archive" | awk '{print $1}')"
+  if [[ "$actual_sha256" != "$APM_RELEASE_SHA256" ]]; then
+    echo "Unexpected RecorderAPM release SHA256: $actual_sha256" >&2
+    return 2
+  fi
+
+  mkdir -p "$extract_dir"
+  if ! ditto -x -k "$archive" "$extract_dir" || [[ ! -d "$extracted_framework" ]]; then
+    echo "Invalid RecorderAPM release archive layout" >&2
+    return 2
+  fi
+
+  rm -rf -- "$installing_framework"
+  if ! cp -R "$extracted_framework" "$installing_framework"; then
+    echo "Failed to stage RecorderAPM release artifact" >&2
+    return 2
+  fi
+  rm -rf -- "$APM_XCFRAMEWORK"
+  if ! mv "$installing_framework" "$APM_XCFRAMEWORK"; then
+    echo "Failed to install RecorderAPM release artifact" >&2
+    return 2
+  fi
+  echo "RecorderAPM release installed: $APM_XCFRAMEWORK"
+}
+
 if ! has_valid_apm_artifact; then
-  echo "RecorderAPM artifact is missing; building it from pinned source"
-  bash "$SCRIPT_DIR/build-webrtc-apm.sh"
+  download_status=0
+  download_apm_artifact || download_status=$?
+  if [[ "$download_status" -eq 1 ]]; then
+    echo "RecorderAPM release is unavailable; building it from pinned source"
+    bash "$SCRIPT_DIR/build-webrtc-apm.sh"
+  elif [[ "$download_status" -ne 0 ]]; then
+    exit 1
+  fi
+
+  if ! has_valid_apm_artifact; then
+    echo "RecorderAPM artifact failed provenance validation" >&2
+    exit 1
+  fi
 fi
 
 APM_LICENSES_SOURCE="$NATIVE_DIR/audio-recorder/Vendor/RecorderAPM-LICENSES"

@@ -48,7 +48,7 @@ final class TapMicSidecarWriter {
   func append(
     _ buffer: AVAudioPCMBuffer,
     at logicalTime: CMTime
-  ) -> Bool {
+  ) -> AVAudioPCMBuffer? {
     do {
       if audioFile == nil {
         guard let sidecarFormat = AVAudioFormat(
@@ -61,7 +61,7 @@ final class TapMicSidecarWriter {
           if dropCount == 1 {
             log("tap: mic sidecar Float32 format unavailable")
           }
-          return false
+          return nil
         }
         audioFile = try AVAudioFile(
           forWriting: fileURL,
@@ -72,11 +72,11 @@ final class TapMicSidecarWriter {
         log("tap: mic sidecar started \(fileURL.path)")
       }
 
-      guard let audioFile else { return false }
+      guard let audioFile else { return nil }
       logSampleFormatIfNeeded(buffer)
       guard let writableBuffer = bufferForWrite(buffer, targetFormat: audioFile.processingFormat) else {
         dropCount += 1
-        return false
+        return nil
       }
 
       try appendTimelineSilenceIfNeeded(
@@ -87,7 +87,7 @@ final class TapMicSidecarWriter {
       signalProcessor.process(writableBuffer)
       try audioFile.write(from: writableBuffer)
       appendCount += 1
-      return true
+      return writableBuffer
     }
     catch {
       dropCount += 1
@@ -98,7 +98,7 @@ final class TapMicSidecarWriter {
       if dropCount == 1 {
         log("tap: mic sidecar write failed: \(describeError(error))")
       }
-      return false
+      return nil
     }
   }
 

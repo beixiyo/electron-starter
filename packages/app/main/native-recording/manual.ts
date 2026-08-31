@@ -1,6 +1,6 @@
 import type { AudioSourceCaptureOptions, AudioSourceCaptureResult, ManualRecordingPrefs } from '@ipc/services/recording/contract'
 import type { RecordingSnapshot } from '@shared'
-import { DEFAULT_REALTIME_AUDIO_PROCESSING, startRecording, updateRecording } from '@main/audio-recorder'
+import { startRecording, updateRecording } from '@main/audio-recorder'
 import { getPermissionStatus, getSystemAudioPermissionDetail, requestAudioCaptureIfNeverAsked, requestPermission } from '@main/permissions'
 import { createRecordingRecoverySession } from '@main/recording-recovery'
 import { recordingState } from '@main/recording-state'
@@ -111,9 +111,6 @@ export async function startManualRecording(): Promise<RecordingSnapshot> {
         pids: selectedPids,
         excludePids: getSelfProcessPids(),
         mic: micEnabled,
-        audioProcessing: systemAudioEnabled && micEnabled
-          ? DEFAULT_REALTIME_AUDIO_PROCESSING
-          : { processor: 'off' },
       })
     }
     catch (error) {

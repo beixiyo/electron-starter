@@ -12,6 +12,7 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
     actions,
     audioCards,
     audioSourceBar,
+    audioLabPanel,
     errorMessage,
     recordingDuration,
     isRecording,
@@ -133,6 +134,8 @@ export const RecorderSidebar = memo<RecorderSidebarProps>((props) => {
           </div>
         ) }
       </Card>
+
+      { audioLabPanel }
     </aside>
   )
 })

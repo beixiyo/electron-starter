@@ -12,7 +12,7 @@ struct AudioProcessingTests {
     #expect(options.processor == .off)
     #expect(options.delayMode == .auto)
     #expect(options.fixedDelayMS == 120)
-    #expect(options.noiseSuppression == .moderate)
+    #expect(options.noiseSuppression == .off)
     #expect(options.gainControl == .off)
     #expect(options.highPass)
   }
@@ -27,7 +27,7 @@ struct AudioProcessingTests {
     #expect(options.processor == .webrtcAec3)
     #expect(options.fixedDelayMS == 80)
     #expect(options.delayMode == .auto)
-    #expect(options.noiseSuppression == .moderate)
+    #expect(options.noiseSuppression == .off)
     #expect(options.gainControl == .off)
     #expect(options.highPass)
   }
@@ -240,6 +240,69 @@ struct AudioProcessingTests {
     #expect(cleanRMS < rawRMS * 0.8)
   }
 
+  @Test("realtime AEC3 route reset preserves continuous clean output")
+  func realtimeAEC3RouteResetPreservesCleanOutput() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let frameCount = 48_000 * 4
+    let chunkFrames = 4_800
+    let delayFrames = 48_000 * 120 / 1_000
+    var state: UInt64 = 0x6a09_e667_f3bc_c909
+    var referenceSamples = [Float](repeating: 0, count: frameCount)
+    for index in referenceSamples.indices {
+      state = state &* 6_364_136_223_846_793_005 &+ 1
+      let noise = Float(Int32(truncatingIfNeeded: state >> 32)) / Float(Int32.max)
+      referenceSamples[index] = 0.15 * noise
+        + 0.1 * Float(sin(2 * Double.pi * 370 * Double(index) / 48_000))
+    }
+
+    let callbackLock = NSLock()
+    var cleanCallbackFrames: Int64 = 0
+    let processor = try RealtimeEchoProcessor(
+      options: AudioProcessingOptions(
+        processor: .webrtcAec3,
+        delayMode: .fixed,
+        fixedDelayMS: 120,
+        noiseSuppression: .off,
+        gainControl: .off,
+        highPass: false
+      ),
+      cleanFileURL: directory.appendingPathComponent("clean.caf"),
+      didProduceClean: { buffer, _ in
+        callbackLock.lock()
+        cleanCallbackFrames += Int64(buffer.frameLength)
+        callbackLock.unlock()
+      }
+    )
+
+    for chunkStart in stride(from: 0, to: frameCount, by: chunkFrames) {
+      if chunkStart == frameCount / 2 {
+        processor.resetForRouteChange(reason: "test-system-process-switch")
+      }
+      let count = min(chunkFrames, frameCount - chunkStart)
+      let reference = try makeBuffer(
+        samples: Array(referenceSamples[chunkStart..<(chunkStart + count)])
+      )
+      let capture = try makeBuffer(samples: (0..<count).map { localIndex in
+        let index = chunkStart + localIndex
+        return index >= delayFrames ? referenceSamples[index - delayFrames] * 0.55 : 0
+      })
+      let logicalTime = Double(chunkStart) / 48_000
+      try #require(processor.submitReference(reference, logicalTimeSeconds: logicalTime))
+      try #require(processor.submitCapture(capture, logicalTimeSeconds: logicalTime))
+    }
+
+    let result = processor.finish()
+    callbackLock.lock()
+    let observedCleanFrames = cleanCallbackFrames
+    callbackLock.unlock()
+
+    #expect(result.canPromote, Comment(rawValue: result.errorDescription ?? "clean output was not promotable"))
+    #expect(result.inputSamples == Int64(frameCount))
+    #expect(result.outputSamples == Int64(frameCount))
+    #expect(observedCleanFrames == Int64(frameCount))
+  }
+
   @Test("queue backpressure prevents clean output promotion")
   func queueBackpressurePreventsPromotion() throws {
     let directory = try makeTemporaryDirectory()
@@ -274,6 +337,124 @@ struct AudioProcessingTests {
     #expect(result.errorDescription?.contains("backpressure") == true)
   }
 
+  @Test("realtime delivery uses clean mic after system audio is attached")
+  func realtimeDeliveryFollowsDynamicSourceBoundary() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let mixer = try makeRealtimeDeliveryMixer(
+      outputURL: directory.appendingPathComponent("final.m4a"),
+      initialSystemEnabled: false,
+      initialMicEnabled: true,
+      expectsPreferredMic: true
+    )
+    mixer.appendFallbackMic(
+      try makeBuffer(samples: Array(repeating: 0.4, count: 48_000)),
+      logicalTimeSeconds: 0
+    )
+    mixer.updateSourceActivity(
+      systemEnabled: true,
+      micEnabled: true,
+      systemChanged: true,
+      micChanged: false,
+      logicalTimeSeconds: 1
+    )
+    mixer.appendSystemPCM(
+      try makeBuffer(samples: Array(repeating: 0.05, count: 48_000)),
+      logicalTimeSeconds: 1
+    )
+    mixer.appendFallbackMic(
+      try makeBuffer(samples: Array(repeating: 0.5, count: 48_000)),
+      logicalTimeSeconds: 1
+    )
+    mixer.appendPreferredMic(
+      try makeBuffer(samples: Array(repeating: 0.05, count: 48_000)),
+      logicalTimeSeconds: 1
+    )
+
+    let result = mixer.finish(logicalDurationSeconds: 2)
+    let outputURL = URL(fileURLWithPath: try #require(result.filePath))
+
+    #expect(result.droppedInputBuffers == 0)
+    /** 若热挂后仍使用 raw fallback，后半段接近 0.55；正确 clean 路径约为 0.10。 */
+    #expect(try fileRMS(outputURL, frameRange: 48_000..<96_000) < 0.25)
+  }
+
+  @Test("route boundary flushes only PCM that already reached the mixer")
+  func routeBoundaryDoesNotCreatePrematureSilence() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let mixer = try makeRealtimeDeliveryMixer(
+      outputURL: directory.appendingPathComponent("final.m4a"),
+      initialSystemEnabled: false,
+      initialMicEnabled: true,
+      expectsPreferredMic: false
+    )
+    mixer.appendFallbackMic(
+      try makeBuffer(samples: Array(repeating: 0.4, count: 48_000)),
+      logicalTimeSeconds: 0
+    )
+    mixer.updateSourceActivity(
+      systemEnabled: true,
+      micEnabled: true,
+      systemChanged: true,
+      micChanged: false,
+      logicalTimeSeconds: 1.05
+    )
+    mixer.appendFallbackMic(
+      try makeBuffer(samples: Array(repeating: 0.4, count: 4_800)),
+      logicalTimeSeconds: 0.95
+    )
+    mixer.appendSystemPCM(
+      try makeBuffer(samples: Array(repeating: 0, count: 4_800)),
+      logicalTimeSeconds: 1.05
+    )
+
+    let result = mixer.finish(logicalDurationSeconds: 1.15)
+    let outputURL = URL(fileURLWithPath: try #require(result.filePath))
+
+    #expect(try fileRMS(outputURL, frameRange: 48_000..<50_400) > 0.25)
+  }
+
+  @Test("realtime delivery rejects synthetic silence when no callback arrived")
+  func realtimeDeliveryRejectsNoInput() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let mixer = try makeRealtimeDeliveryMixer(
+      outputURL: directory.appendingPathComponent("final.m4a"),
+      initialSystemEnabled: true,
+      initialMicEnabled: true,
+      expectsPreferredMic: true
+    )
+
+    let result = mixer.finish(logicalDurationSeconds: 30)
+
+    #expect(result.filePath == nil)
+    #expect(result.frameCount == 0)
+    #expect(result.errorDescription != nil)
+  }
+
+  @Test("stop bounds synthesis after a long input outage")
+  func realtimeDeliveryBoundsTrailingGap() throws {
+    let directory = try makeTemporaryDirectory()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let mixer = try makeRealtimeDeliveryMixer(
+      outputURL: directory.appendingPathComponent("final.m4a"),
+      initialSystemEnabled: false,
+      initialMicEnabled: true,
+      expectsPreferredMic: false
+    )
+    mixer.appendFallbackMic(
+      try makeBuffer(samples: Array(repeating: 0.2, count: 4_800)),
+      logicalTimeSeconds: 0
+    )
+
+    let result = mixer.finish(logicalDurationSeconds: 30)
+
+    #expect(result.filePath != nil)
+    #expect(result.frameCount == 9_600)
+    #expect(result.omittedTrailingFrames == 48_000 * 30 - 9_600)
+  }
+
   private func makeTemporaryDirectory() throws -> URL {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("audio-processing-tests-\(UUID().uuidString)")
@@ -299,6 +480,37 @@ struct AudioProcessingTests {
       destination.update(from: source.baseAddress!, count: samples.count)
     }
     return buffer
+  }
+
+  private func makeRealtimeDeliveryMixer(
+    outputURL: URL,
+    initialSystemEnabled: Bool,
+    initialMicEnabled: Bool,
+    expectsPreferredMic: Bool
+  ) throws -> RealtimeDeliveryMixer {
+    try RealtimeDeliveryMixer(
+      outputPath: outputURL.path,
+      outputSettings: [
+        AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+        AVSampleRateKey: 48_000,
+        AVNumberOfChannelsKey: 1,
+        AVEncoderBitRateKey: 160_000,
+      ],
+      initialSystemEnabled: initialSystemEnabled,
+      initialMicEnabled: initialMicEnabled,
+      expectsPreferredMic: expectsPreferredMic
+    )
+  }
+
+  private func fileRMS(_ url: URL, frameRange: Range<Int>) throws -> Double {
+    let file = try AVAudioFile(forReading: url)
+    let capacity = AVAudioFrameCount(file.length)
+    let buffer = try #require(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: capacity))
+    try file.read(into: buffer)
+    let samples = try #require(buffer.floatChannelData?[0])
+    let lower = min(max(0, frameRange.lowerBound), Int(buffer.frameLength))
+    let upper = min(max(lower, frameRange.upperBound), Int(buffer.frameLength))
+    return rms(UnsafeBufferPointer(start: samples.advanced(by: lower), count: upper - lower))
   }
 
   private func rms<S: Collection>(_ samples: S) -> Double where S.Element == Float {

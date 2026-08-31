@@ -18,6 +18,16 @@ const harness = vi.hoisted(() => {
   }
 
   return {
+    audioLabSettings: {
+      outputChannels: 2 as 1 | 2,
+      echoCancellation: 'auto' as 'auto' | 'off',
+      delayMode: 'auto' as 'auto' | 'fixed' | 'hybrid',
+      fixedDelayMs: 120,
+      noiseSuppression: 'off' as 'off' | 'low' | 'moderate' | 'high' | 'very-high',
+      gainControl: 'off' as 'off' | 'agc1-adaptive-digital' | 'agc1-fixed' | 'agc2',
+      highPass: true,
+      meetingDetectionEnabled: true,
+    },
     bridge: null as MockBridge | null,
     config: null as MockBridgeConfig | null,
     events,
@@ -36,9 +46,15 @@ vi.mock('node:child_process', () => ({
   execFile: harness.execFile,
 }))
 
+vi.mock('@main/audio-lab/settings', () => ({
+  getAudioLabOutputArgs: () => harness.audioLabSettings.outputChannels === 1
+    ? ['--mono-output']
+    : [],
+  getAudioLabSettings: () => ({ ...harness.audioLabSettings }),
+}))
+
 vi.mock('../native-bridge', () => ({
   getNativeBinaryPath: () => '/mock/audio-recorder',
-  getMonoOutputArgs: () => [],
   NativeBridge: class {
     private generation = 0
     private readonly pendingHandoffs: number[] = []
@@ -145,6 +161,16 @@ describe('audio recorder stop handoff', () => {
     vi.useFakeTimers()
     harness.bridge = null
     harness.config = null
+    Object.assign(harness.audioLabSettings, {
+      outputChannels: 2,
+      echoCancellation: 'auto',
+      delayMode: 'auto',
+      fixedDelayMs: 120,
+      noiseSuppression: 'off',
+      gainControl: 'off',
+      highPass: true,
+      meetingDetectionEnabled: true,
+    })
     harness.events.clear()
     harness.execFile.mockReset()
     harness.execFile.mockImplementation((...args: unknown[]) => {
@@ -177,7 +203,7 @@ describe('audio recorder stop handoff', () => {
     })
   })
 
-  it('默认 tap 录音不附加软件音频处理配置', () => {
+  it('mic-only tap 开录也预备 AEC3，系统音热挂后无需重启 helper', () => {
     recorder.startRecording('/tmp/mic-only.m4a', {
       engine: 'tap',
       tapEnabled: false,
@@ -186,7 +212,64 @@ describe('audio recorder stop handoff', () => {
 
     const command = JSON.parse(harness.send.mock.calls.at(-1)![0])
     expect(command).not.toHaveProperty('micAec')
-    expect(command).not.toHaveProperty('audioProcessing')
+    expect(command.audioProcessing).toMatchObject({
+      processor: 'webrtcAec3',
+      noiseSuppression: 'off',
+    })
+  })
+
+  it('tap 录音显式关闭处理时不被默认配置覆盖', () => {
+    recorder.startRecording('/tmp/raw.m4a', {
+      engine: 'tap',
+      tapEnabled: true,
+      mic: true,
+      audioProcessing: { processor: 'off' },
+    })
+
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toMatchObject({
+      audioProcessing: { processor: 'off' },
+    })
+  })
+
+  it('tap 默认处理按音频实验设置生成完整 AEC3 配置', () => {
+    Object.assign(harness.audioLabSettings, {
+      delayMode: 'hybrid',
+      fixedDelayMs: 180,
+      noiseSuppression: 'high',
+      gainControl: 'agc2',
+      highPass: false,
+    })
+
+    recorder.startRecording('/tmp/lab.m4a', {
+      engine: 'tap',
+      tapEnabled: true,
+      mic: true,
+    })
+
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toMatchObject({
+      audioProcessing: {
+        processor: 'webrtcAec3',
+        delayMode: 'hybrid',
+        fixedDelayMs: 180,
+        noiseSuppression: 'high',
+        gainControl: 'agc2',
+        highPass: false,
+      },
+    })
+  })
+
+  it('实验设置关闭回声处理时默认 start 明确下发 off', () => {
+    harness.audioLabSettings.echoCancellation = 'off'
+
+    recorder.startRecording('/tmp/lab-off.m4a', {
+      engine: 'tap',
+      tapEnabled: true,
+      mic: true,
+    })
+
+    expect(JSON.parse(harness.send.mock.calls.at(-1)![0])).toMatchObject({
+      audioProcessing: { processor: 'off' },
+    })
   })
 
   it('tap 录音显式传入 AEC3 配置并保留完整进程选择', () => {

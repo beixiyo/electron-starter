@@ -91,6 +91,83 @@
     "permissionDenied": "System audio recording permission denied",
     "recordFailed": "Failed to switch audio source"
   },
+  "audioLab": {
+    "title": "Audio Lab",
+    "description": "Settings are persisted and apply from the next native recording.",
+    "status": {
+      "allApps": "All system audio",
+      "selectedApps": "{{count}} apps",
+      "micAndSystem": "Microphone + {{system}}",
+      "micOnly": "Microphone only",
+      "noSource": "No source selected",
+      "echoActive": "AEC3 processing",
+      "echoArmed": "AEC3 armed",
+      "echoOff": "Echo cancellation off",
+      "echoNotApplicable": "No microphone, AEC inactive",
+      "channels1": "Mono",
+      "channels2": "Stereo",
+      "meetingOn": "Meeting detection on",
+      "meetingOff": "Meeting detection off"
+    },
+    "outputChannels": {
+      "title": "Output channels",
+      "description": "Mono suits speech and long recordings; stereo preserves media imaging.",
+      "mono": "Mono",
+      "stereo": "Stereo"
+    },
+    "echoCancellation": {
+      "title": "Echo cancellation",
+      "description": "Auto uses WebRTC AEC3 when microphone and system audio are both present.",
+      "auto": "Auto (AEC3)",
+      "off": "Off"
+    },
+    "meetingDetection": {
+      "title": "Automatic meeting detection",
+      "description": "Show a recording prompt when a meeting app uses audio input and output."
+    },
+    "advanced": {
+      "title": "AEC3 advanced settings"
+    },
+    "delayMode": {
+      "title": "Delay mode",
+      "description": "Controls how AEC3 receives the speaker-to-microphone delay hint.",
+      "auto": "Auto",
+      "fixed": "Fixed",
+      "hybrid": "Hybrid"
+    },
+    "fixedDelay": {
+      "title": "Fixed delay",
+      "description": "Used directly in fixed mode and as the initial value in hybrid mode (0–500 ms)."
+    },
+    "noiseSuppression": {
+      "title": "Noise suppression",
+      "description": "Applied to near-end microphone speech; high levels may change timbre."
+    },
+    "levels": {
+      "off": "Off",
+      "low": "Low",
+      "moderate": "Moderate",
+      "high": "High",
+      "veryHigh": "Very high"
+    },
+    "gainControl": {
+      "title": "Gain control",
+      "description": "Adjusts microphone loudness; monitor near-end timbre and breathing artifacts.",
+      "off": "Off",
+      "agc1Adaptive": "AGC1 adaptive",
+      "agc1Fixed": "AGC1 fixed",
+      "agc2": "AGC2"
+    },
+    "highPass": {
+      "title": "High-pass filter",
+      "description": "Reduces low-frequency rumble and desk vibration."
+    },
+    "messages": {
+      "loadFailed": "Could not load audio lab settings",
+      "saveFailed": "The setting was not applied. Make sure no recording is still finalizing.",
+      "disabledWhileRecording": "Settings are locked while recording or finalizing so the UI matches the active helper."
+    }
+  },
   "recordError": {
     "captureInterrupted": "Audio capture was interrupted. The recording ended automatically and audio before the interruption was saved",
     "noAudioContent": "No audio content captured: the selected source produced no sound",

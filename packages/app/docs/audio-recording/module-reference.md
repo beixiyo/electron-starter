@@ -22,11 +22,12 @@
 | --- | --- |
 | `Commands.swift` | stdin 命令解码与参数校验 |
 | `RecorderCoordinator.swift` | helper 内录音状态和引擎选择 |
-| `TapRecorder.swift` | Process Tap 主轨、mic sidecar、暂停/停止生命周期 |
+| `TapRecorder.swift` | Process Tap 主轨、mic sidecar、动态路由、暂停/停止与实时交付编排 |
 | `TapProcessCapture.swift` | PID 过滤、Process Tap/聚合设备和系统音频 callback |
 | `TapMicCapture.swift` | 裸 mic 采集、首帧探测、设备变化和降级路线 |
 | `TapMicSidecarWriter.swift` | mic PCM sidecar、逻辑时间线和格式归一 |
-| `AudioProcessing/` | realtime AEC3、reference 配对、有界队列和 clean/raw promotion |
+| `AudioProcessing/RealtimeEchoProcessor.swift` | realtime AEC3、reference 配对、路由 reset 与 clean mic |
+| `AudioProcessing/RealtimeDeliveryMixer.swift` | system、clean/raw mic 的有界时间轴与录制期 AAC 成品 |
 | `AudioTrackMixer.swift` | 系统音频与 mic 的最终混音、限幅和原子安装 |
 | `MicSidecarTransaction.swift` / `MicSidecarRecovery.swift` | sidecar 事务和恢复 |
 | `Checkpoint.swift` / `CheckpointRecovery.swift` | 系统音频 checkpoint 分片和合并 |

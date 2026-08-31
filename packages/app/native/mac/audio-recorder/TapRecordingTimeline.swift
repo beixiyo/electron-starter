@@ -67,6 +67,18 @@ final class TapRecordingTimeline {
     return paused
   }
 
+  /** 当前 host time 对应的去暂停录音时间，供动态路由建立跨轨一致边界。 */
+  func currentLogicalTime() -> CMTime? {
+    lock.lock()
+    defer { lock.unlock() }
+    guard let recordingStartHostTime else { return nil }
+    let now = pauseStartHostTime ?? CMClockGetTime(CMClockGetHostTimeClock())
+    return CMTimeMaximum(
+      .zero,
+      CMTimeSubtract(CMTimeSubtract(now, recordingStartHostTime), pauseOffset)
+    )
+  }
+
   /** 标记从当前 host time 起允许写入麦克风样本 */
   func markMicAcceptanceBoundary() {
     lock.lock()

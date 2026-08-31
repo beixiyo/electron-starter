@@ -2,6 +2,7 @@ import type { RecordingStatePayload } from '@ipc/services/meeting-detection/cont
 import type { BrowserWindow } from 'electron'
 import type { MeetingSession } from './meeting-detector'
 import { meetingDetectionService } from '@ipc/services/meeting-detection/service'
+import { getAudioLabSettings } from '@main/audio-lab/settings'
 import { onRecorderEvent, stopRecorder } from '@main/audio-recorder'
 import { initNativeRecordingPipeline } from '@main/native-recording'
 import { recordingState } from '@main/recording-state'
@@ -127,5 +128,6 @@ export function initMeetingDetection(): void {
     /** 错误收尾统一由 native-recording 管线处理，避免重复 stop 或提前关闭 toast */
   })
 
-  startMeetingDetector()
+  if (getAudioLabSettings().meetingDetectionEnabled)
+    startMeetingDetector()
 }

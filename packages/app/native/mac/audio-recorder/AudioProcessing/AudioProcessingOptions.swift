@@ -59,7 +59,7 @@ public struct AudioProcessingOptions: Codable, Equatable, Sendable {
     processor: AudioProcessorKind = .off,
     delayMode: AudioDelayMode = .auto,
     fixedDelayMS: Int = 120,
-    noiseSuppression: AudioNoiseSuppressionLevel = .moderate,
+    noiseSuppression: AudioNoiseSuppressionLevel = .off,
     gainControl: AudioGainControlMode = .off,
     highPass: Bool = true
   ) {
@@ -87,7 +87,7 @@ public struct AudioProcessingOptions: Codable, Equatable, Sendable {
     noiseSuppression = try container.decodeIfPresent(
       AudioNoiseSuppressionLevel.self,
       forKey: .noiseSuppression
-    ) ?? .moderate
+    ) ?? .off
     gainControl = try container.decodeIfPresent(
       AudioGainControlMode.self,
       forKey: .gainControl

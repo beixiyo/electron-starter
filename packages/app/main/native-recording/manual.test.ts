@@ -10,14 +10,6 @@ const harness = vi.hoisted(() => ({
 }))
 
 vi.mock('@main/audio-recorder', () => ({
-  DEFAULT_REALTIME_AUDIO_PROCESSING: {
-    processor: 'webrtcAec3',
-    delayMode: 'auto',
-    fixedDelayMs: 120,
-    noiseSuppression: 'moderate',
-    gainControl: 'off',
-    highPass: true,
-  },
   startRecording: harness.startRecording,
   updateRecording: harness.updateRecording,
 }))
@@ -80,7 +72,7 @@ describe('手动系统音频录音启动', () => {
     harness.initNativeRecordingPipeline.mockClear()
   })
 
-  it('默认只录麦克风且不启动回声处理', async () => {
+  it('默认只录麦克风，处理策略由 recorder 公共边界统一补齐', async () => {
     const { startManualRecording } = await import('./manual')
 
     await startManualRecording()
@@ -92,12 +84,11 @@ describe('手动系统音频录音启动', () => {
         tapEnabled: false,
         pids: [],
         mic: true,
-        audioProcessing: { processor: 'off' },
       }),
     )
   })
 
-  it('系统音频开启且 PID 为空时传递空数组，表示捕获所有软件并启用 AEC3', async () => {
+  it('系统音频开启且 PID 为空时传递空数组，处理策略由 recorder 公共边界统一补齐', async () => {
     const { setManualRecordingPrefs, startManualRecording } = await import('./manual')
     setManualRecordingPrefs({ micEnabled: true, mixSystemAudio: true, pids: [] })
 
@@ -110,12 +101,11 @@ describe('手动系统音频录音启动', () => {
         tapEnabled: true,
         pids: [],
         mic: true,
-        audioProcessing: expect.objectContaining({ processor: 'webrtcAec3' }),
       }),
     )
   })
 
-  it('系统音频指定 PID 时只传递所选进程并启用 AEC3', async () => {
+  it('系统音频指定 PID 时只传递所选进程', async () => {
     const { setManualRecordingPrefs, startManualRecording } = await import('./manual')
     setManualRecordingPrefs({ micEnabled: true, mixSystemAudio: true, pids: [42, 84] })
 
@@ -128,7 +118,6 @@ describe('手动系统音频录音启动', () => {
         tapEnabled: true,
         pids: [42, 84],
         mic: true,
-        audioProcessing: expect.objectContaining({ processor: 'webrtcAec3' }),
       }),
     )
   })

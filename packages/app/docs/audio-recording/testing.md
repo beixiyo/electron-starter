@@ -25,7 +25,7 @@
 
 - 五次背靠背 start/stop，不应有设备争用、残留 partial 或 helper 代际错配
 - pause/resume、会议中途热挂/卸 system、输入设备切换和蓝牙断开重连
-- 一小时等效或真实长录音，记录平均/p95 CPU、RSS、磁盘增长和 stop→stopped 时间
+- 真实五小时录音，记录平均/p95 CPU、RSS、磁盘增长、成品时长和 stop→stopped 时间
 - 人为制造权限拒绝、system tap 无 callback、mic 掉线、处理队列背压和 helper crash，确认正式 raw 资产可交付
 
 ## 必须收集的日志和产物
@@ -35,6 +35,6 @@
 - 权限结果、设备格式、首帧时间、system/mic callback/appends/drops；
 - AEC3 处理帧数、reference 缺失 hop、估计 delay、clean promotion 或 fallback 原因；
 - stop/handoff generation、child exit、watchdog、checkpoint 和 recovery 结果；
-- 最终 M4A、raw `.mic.caf`、helper 与 Electron 日志，以及关键文件的 SHA256；若未来增加显式诊断产物，再连同其 schema 版本一起保存
+- 最终 M4A、必要的 recovery 资产、helper 与 Electron 日志，以及关键文件的 SHA256
 
 日志要能回答“哪个会话、哪个 helper、哪条音轨、哪个 PID、哪个阶段”，但不要把整段 PCM 或隐私内容写进日志

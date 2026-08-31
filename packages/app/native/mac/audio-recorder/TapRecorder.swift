@@ -1,4 +1,4 @@
-// 编排 process tap 系统音、麦克风 sidecar、恢复和最终混音生命周期
+// 编排 process tap 系统音、麦克风 sidecar、实时交付与恢复生命周期
 
 import AVFoundation
 import AudioProcessing
@@ -16,7 +16,7 @@ import CoreMedia
 //
 // 流程:pid → AudioObjectID → CATapDescription → AudioHardwareCreateProcessTap
 //     → 私有聚合设备(默认输出为 main sub-device,tap 挂 TapList,AudioCap 同配方)
-//     → IOProc 读 PCM → CMSampleBuffer → AVAssetWriter;停止后复用 mixTracks 混单轨 M4A
+//     → IOProc 读 PCM → 实时 AEC3 / 单声道 AAC；异常时回退 sidecar + mixTracks
 
 struct TapRecorderError: Error {
   let message: String
@@ -90,6 +90,9 @@ class TapRecorder: NSObject {
   private var micSidecarWriter: TapMicSidecarWriter?
   /** 在线 AEC3 的唯一状态所有者；stop 只排空该队列，不重新读取整场 raw sidecar */
   private var realtimeEchoProcessor: RealtimeEchoProcessor?
+  /** 录制期持续生成的单声道 AAC 成品；主 writer、sidecar 与 checkpoint 始终保留作恢复资产 */
+  private var realtimeDeliveryMixer: RealtimeDeliveryMixer?
+  private var expectsRealtimeProcessedMic = false
   /** host time、暂停偏移、样本 cutoff 和系统音连续片段的唯一状态所有者 */
   private let recordingTimeline = TapRecordingTimeline()
   /** 当前录音明确选择的实时音频处理；缺省为 off */
@@ -113,6 +116,8 @@ class TapRecorder: NSObject {
    */
   private var sysLastSampleAt: Date?
   private var micLastSampleAt: Date?
+  /** 用户仍请求的任一音源最近一次真实推进；物理 detach 后也保留，防止整体断流 watchdog 失明 */
+  private var lastCaptureProgressAt: Date?
 
   /**
    * mic「用户意图」与「引擎实挂」分离:
@@ -191,18 +196,23 @@ class TapRecorder: NSObject {
     self.outputPath = outputPath
     self.micRequested = withMic
     self.tapRequested = tapEnabled
+    expectsRealtimeProcessedMic = audioProcessing.processor == .webrtcAec3
     sampleQueue.sync {
       micSidecarWriter = TapMicSidecarWriter(outputPath: outputPath)
-      if audioProcessing.processor == .webrtcAec3 {
+      if expectsRealtimeProcessedMic {
         do {
           realtimeEchoProcessor = try RealtimeEchoProcessor(
             options: audioProcessing,
             cleanFileURL: realtimeCleanURL(outputPath: outputPath),
+            didProduceClean: { [weak self] buffer, startFrame in
+              self?.appendRealtimeCleanMic(buffer, startFrame: startFrame)
+            },
             logger: { message in log("tap: \(message)") }
           )
         }
         catch {
           realtimeEchoProcessor = nil
+          expectsRealtimeProcessedMic = false
           log("tap: realtime audio processing unavailable, retaining raw mic: \(error)")
         }
       }
@@ -241,7 +251,9 @@ class TapRecorder: NSObject {
       startTime = Date()
       recordingTimeline.begin()
       /** attach 的首帧探测发生在 writer 就绪前，先排空探测期间排队的 callback 再开放写入 */
-      sampleQueue.sync {}
+      sampleQueue.sync {
+        lastCaptureProgressAt = Date()
+      }
       setTapSampleGate(tapEnabled)
       if withMic {
         enableMicSampleGate()
@@ -293,14 +305,16 @@ class TapRecorder: NSObject {
     micRequested = micEnabled
     tapRequested = tapEnabled
     setMicRecoveryRequested(micEnabled)
-    if micEnabled, !recordingTimeline.isPaused {
+    if micEnabled, isMicActive(), !recordingTimeline.isPaused {
       enableMicSampleGate()
     }
     else {
       disableMicSampleGate()
       cancelScheduledMicRecovery()
     }
-    setTapSampleGate(tapEnabled && !recordingTimeline.isPaused)
+    if !tapEnabled || recordingTimeline.isPaused {
+      setTapSampleGate(false)
+    }
 
     let generation = currentRecordingGeneration()
     captureUpdateLock.lock()
@@ -333,11 +347,30 @@ class TapRecorder: NSObject {
     guard isRecordingGenerationCurrent(generation) else { return }
 
     if micEnabled, !isMicActive() {
+      let boundary = prepareRealtimeRouteChange(
+        systemEnabled: tapCapture.isActive,
+        micEnabled: true,
+        systemChanged: false,
+        micChanged: true,
+        reason: "mic-attaching"
+      )
       guard resetMicRecoveryBackoff(for: generation) else { return }
       if attachMic(generation: generation) != nil {
+        if !recordingTimeline.isPaused {
+          enableMicSampleGate()
+        }
+        completeRealtimeRouteChange(boundary: boundary, reason: "mic-attached")
         log("mic attached")
       }
       else {
+        let failureBoundary = prepareRealtimeRouteChange(
+          systemEnabled: tapCapture.isActive,
+          micEnabled: false,
+          systemChanged: false,
+          micChanged: false,
+          reason: "mic-attach-failed"
+        )
+        completeRealtimeRouteChange(boundary: failureBoundary, reason: "mic-attach-failed")
         log("mic attach failed, no mic capture")
       }
       guard isRecordingGenerationCurrent(generation) else {
@@ -345,14 +378,32 @@ class TapRecorder: NSObject {
       }
     }
     else if !micEnabled, isMicActive() {
+      disableMicSampleGate()
+      let boundary = prepareRealtimeRouteChange(
+        systemEnabled: tapCapture.isActive,
+        micEnabled: false,
+        systemChanged: false,
+        micChanged: true,
+        reason: "mic-detaching"
+      )
       detachMic()
+      completeRealtimeRouteChange(boundary: boundary, reason: "mic-detached")
       log("mic detached")
     }
 
     if !tapEnabled {
       guard isRecordingGenerationCurrent(generation) else { return }
       if tapCapture.isActive {
+        setTapSampleGate(false)
+        let boundary = prepareRealtimeRouteChange(
+          systemEnabled: false,
+          micEnabled: isMicActive(),
+          systemChanged: true,
+          micChanged: false,
+          reason: "tap-detaching"
+        )
         tapCapture.teardown()
+        completeRealtimeRouteChange(boundary: boundary, reason: "tap-detached")
         log("tap detached")
       }
       return
@@ -370,6 +421,14 @@ class TapRecorder: NSObject {
     }
 
     guard isRecordingGenerationCurrent(generation) else { return }
+    setTapSampleGate(false)
+    let boundary = prepareRealtimeRouteChange(
+      systemEnabled: true,
+      micEnabled: isMicActive(),
+      systemChanged: true,
+      micChanged: false,
+      reason: tapCapture.isActive ? "tap-switching" : "tap-attaching"
+    )
     if tapCapture.isActive {
       tapCapture.teardown()
     }
@@ -386,13 +445,25 @@ class TapRecorder: NSObject {
         tapCapture.teardown()
         return
       }
+      if !recordingTimeline.isPaused {
+        setTapSampleGate(true)
+      }
+      completeRealtimeRouteChange(boundary: boundary, reason: "tap-attached")
       log("tap attached: pids=[\(pids.map(String.init).joined(separator: ","))]")
     }
     catch {
       /** 罕见:旧管线已拆、新管线失败——mic 轨继续录,系统音轨静默缺失,只能日志留痕
        * 分阶段失败(tap 建成后 aggregate/IOProc 抛错)会留下半建的内核对象句柄,
-       * 必须拆干净(teardown 对 kAudioObjectUnknown 幂等),否则下次重试覆盖 ID 永久泄漏 */
+      * 必须拆干净(teardown 对 kAudioObjectUnknown 幂等),否则下次重试覆盖 ID 永久泄漏 */
       tapCapture.teardown()
+      let failureBoundary = prepareRealtimeRouteChange(
+        systemEnabled: false,
+        micEnabled: isMicActive(),
+        systemChanged: false,
+        micChanged: false,
+        reason: "tap-attach-failed"
+      )
+      completeRealtimeRouteChange(boundary: failureBoundary, reason: "tap-attach-failed")
       let detail = (error as? TapRecorderError)?.message ?? error.localizedDescription
       log("tap update failed after teardown: \(detail)")
       emitTapAttachFailed(phase: "prepare-or-start", detail: detail)
@@ -434,7 +505,15 @@ class TapRecorder: NSObject {
     _ = consumeMicDeviceChangedWhilePaused()
     pausedAt = Date()
     /** 排空 pause 边界前已投递的 mic callback，防止 resume 后按新 gate 误收旧样本 */
-    sampleQueue.sync {}
+    _ = sampleQueue.sync {
+      markRealtimeRouteChangeOnSampleQueue(
+        systemEnabled: false,
+        micEnabled: false,
+        systemChanged: tapRequested,
+        micChanged: micRequested,
+        reason: "pause"
+      )
+    }
     emitStatus("paused", path: outputPath)
   }
 
@@ -445,6 +524,15 @@ class TapRecorder: NSObject {
       pausedAt = nil
     }
     recordingTimeline.resume()
+    _ = sampleQueue.sync {
+      markRealtimeRouteChangeOnSampleQueue(
+        systemEnabled: tapRequested,
+        micEnabled: micRequested,
+        systemChanged: tapRequested,
+        micChanged: micRequested,
+        reason: "resume"
+      )
+    }
     if micRequested {
       enableMicSampleGate()
       /**
@@ -468,6 +556,7 @@ class TapRecorder: NSObject {
     sampleQueue.sync {
       sysLastSampleAt = resumedAt
       micLastSampleAt = resumedAt
+      lastCaptureProgressAt = resumedAt
     }
     if !sessionStarted {
       startFirstSampleWatchdog()
@@ -488,6 +577,8 @@ class TapRecorder: NSObject {
     if recordingTimeline.isPaused, let pa = pausedAt {
       totalPausedDuration += Date().timeIntervalSince(pa)
     }
+    let logicalDurationAtStop = recordingTimeline.currentLogicalTime()?.seconds
+      ?? max(0, (startTime.map { Date().timeIntervalSince($0) } ?? 0) - totalPausedDuration)
 
     /** cleanup 会清空 mic 用户意图，零样本收尾前必须先快照 */
     let hadMicAtStop = micRequested
@@ -563,14 +654,52 @@ class TapRecorder: NSObject {
       sidecar?.finish()
       return summary
     }
+    let realtimeDeliveryResult = realtimeDeliveryMixer?.finish(
+      logicalDurationSeconds: logicalDurationAtStop
+    )
+    var realtimeDeliveryCommitted = false
+    if let deliveryPath = realtimeDeliveryResult?.filePath,
+       realtimeDeliveryResult?.droppedInputBuffers == 0 {
+      let deliveryURL = URL(fileURLWithPath: deliveryPath)
+      if await hasDecodableAudioSamples(deliveryURL) {
+        do {
+          try replaceOutputAtomically(
+            at: URL(fileURLWithPath: outputPath),
+            with: deliveryURL
+          )
+          realtimeDeliveryCommitted = true
+          log(
+            "tap: realtime delivery committed frames=\(realtimeDeliveryResult?.frameCount ?? 0) "
+              + "omittedTrailingFrames=\(realtimeDeliveryResult?.omittedTrailingFrames ?? 0)"
+          )
+        }
+        catch {
+          log("tap: realtime delivery install failed, retaining recovery mix: \(describeError(error))")
+        }
+      }
+      else {
+        log("tap: realtime delivery decode validation failed, retaining recovery mix")
+      }
+    }
+    else if let realtimeDeliveryResult {
+      log(
+        "tap: realtime delivery unavailable, retaining recovery mix: "
+          + "drops=\(realtimeDeliveryResult.droppedInputBuffers) "
+          + "omittedTrailingFrames=\(realtimeDeliveryResult.omittedTrailingFrames) "
+          + "error=\(realtimeDeliveryResult.errorDescription ?? "none")"
+      )
+    }
     let finalizedSystemTimeline = recordingTimeline.snapshotSystemSegments()
-    let hasStorageWriteError = isStorageInsufficientError(writer?.error)
-      || isStorageInsufficientError(sidecarSummary.writeError)
+    let hasStorageWriteError = !realtimeDeliveryCommitted
+      && (
+        isStorageInsufficientError(writer?.error)
+          || isStorageInsufficientError(sidecarSummary.writeError)
+      )
     let storageWriteError = isStorageInsufficientError(writer?.error)
       ? writerError
       : describeError(sidecarSummary.writeError)
     var micSidecarPath = sidecarSummary.filePath
-    if let realtimeResult {
+    if !realtimeDeliveryCommitted, let realtimeResult {
       var promoted = false
       if realtimeResult.canPromote, let rawSidecarPath = sidecarSummary.filePath {
         promoted = promoteRealtimeClean(
@@ -599,7 +728,8 @@ class TapRecorder: NSObject {
     }
     let hasMicSidecarSamples = micSidecarDuration > .zero
     let tapStatistics = tapCapture.statistics
-    let didWriteSamples = (tapStatistics.appendCount + sidecarSummary.appendCount) > 0
+    let didWriteSamples = realtimeDeliveryCommitted
+      || (tapStatistics.appendCount + sidecarSummary.appendCount) > 0
     if let writer, writer.status == .failed {
       log("tap: writer finish failed: \(writerError)")
     }
@@ -619,7 +749,17 @@ class TapRecorder: NSObject {
     )
 
     let elapsed = startTime.map { Date().timeIntervalSince($0) } ?? 0
-    let duration = max(0, elapsed - totalPausedDuration)
+    let wallClockDuration = max(0, elapsed - totalPausedDuration)
+    let duration = realtimeDeliveryCommitted
+      ? Double(realtimeDeliveryResult?.frameCount ?? 0) / Double(AUDIO_PROCESSING_SAMPLE_RATE)
+      : wallClockDuration
+    if realtimeDeliveryCommitted, abs(wallClockDuration - duration) >= 0.1 {
+      log(
+        "tap: realtime delivery duration differs from wall clock "
+          + "media=\(String(format: "%.3f", duration))s "
+          + "wall=\(String(format: "%.3f", wallClockDuration))s"
+      )
+    }
     let savedPath = outputPath
 
     cleanup(preservePhysicalCapture: true)
@@ -641,14 +781,16 @@ class TapRecorder: NSObject {
       return
     }
 
-    if writerStatus != .completed && !hasMicSidecarSamples {
+    if !realtimeDeliveryCommitted,
+       writerStatus != .completed,
+       !hasMicSidecarSamples {
       log("tap: writer finish failed: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
       try? FileManager.default.removeItem(atPath: savedPath)
       emitRecycleRequired(handoffId: handoffId)
       emitTerminalError("writer_failed", path: savedPath, detail: writerError, handoffId: handoffId)
       return
     }
-    if writerStatus != .completed {
+    if !realtimeDeliveryCommitted, writerStatus != .completed {
       log("tap: writer finish failed but mic sidecar exists (\(formatCMTimeSeconds(micSidecarDuration))s), trying sidecar mix: status=\(writerStatus?.rawValue ?? -1) error=\(writerError)")
     }
 
@@ -660,7 +802,10 @@ class TapRecorder: NSObject {
       && (hasDetectedMicSignal || writerStatus != .completed)
     emitStatus("mixing", path: savedPath)
     let mixed: Bool
-    if let micSidecarPath, shouldMixMicSidecar {
+    if realtimeDeliveryCommitted {
+      mixed = true
+    }
+    else if let micSidecarPath, shouldMixMicSidecar {
       mixed = await mergeMicSidecar(
         sidecarPath: micSidecarPath,
         outputPath: savedPath,
@@ -689,7 +834,7 @@ class TapRecorder: NSObject {
       emitTerminalError("writer_failed", path: savedPath, detail: detail, handoffId: handoffId)
       return
     }
-    if let micSidecarPath, !shouldMixMicSidecar {
+    if let micSidecarPath, !shouldMixMicSidecar, !realtimeDeliveryCommitted {
       removeMicSidecarFile(URL(fileURLWithPath: micSidecarPath), context: "tap stop")
     }
 
@@ -781,11 +926,11 @@ class TapRecorder: NSObject {
           }
 
           /** 整体断流:所有在挂音源都超时无样本才判致命(任一源仍出样即视为录音存活,不误报) */
-          if let latestActive = self.mostRecentActiveSampleAt(),
-             now.timeIntervalSince(latestActive) >= AUDIO_SAMPLE_GAP_TIMEOUT,
+          if let latestProgress = self.mostRecentRequestedSampleAt(),
+             now.timeIntervalSince(latestProgress) >= AUDIO_SAMPLE_GAP_TIMEOUT,
              !self.sampleGapErrorEmitted {
             self.sampleGapErrorEmitted = true
-            let gap = Int(now.timeIntervalSince(latestActive))
+            let gap = Int(now.timeIntervalSince(latestProgress))
             log("tap: audio sample gap timeout (gap=\(gap)s)")
             self.emitWatchdogError(
               "audio_sample_timeout",
@@ -828,16 +973,10 @@ class TapRecorder: NSObject {
     output()
   }
 
-  /** 在挂音源中最近一次出样时刻(取 tap / mic 两轨较新者);无任何在挂源返回 nil */
-  private func mostRecentActiveSampleAt() -> Date? {
-    var latest: Date?
-    if tapCapture.isActive, let sys = sysLastSampleAt {
-      latest = latest.map { max($0, sys) } ?? sys
-    }
-    if isMicActive(), let mic = micLastSampleAt {
-      latest = latest.map { max($0, mic) } ?? mic
-    }
-    return latest
+  /** 用户仍请求至少一路时返回最近真实推进；引擎掉线后不能因 active=false 把 watchdog 一起关掉。 */
+  private func mostRecentRequestedSampleAt() -> Date? {
+    guard tapRequested || micRequested else { return nil }
+    return lastCaptureProgressAt ?? startTime
   }
 
   // ── mic 单轨自愈(设备掉线/切换后重挂) ──
@@ -1043,6 +1182,59 @@ class TapRecorder: NSObject {
     micRecoveryLock.unlock()
   }
 
+  /** lifecycle queue 先排空 sampleQueue，再让 AEC 与实时成品在同一逻辑帧换代。 */
+  @discardableResult
+  private func prepareRealtimeRouteChange(
+    systemEnabled: Bool,
+    micEnabled: Bool,
+    systemChanged: Bool,
+    micChanged: Bool,
+    reason: String
+  ) -> Double {
+    sampleQueue.sync {
+      markRealtimeRouteChangeOnSampleQueue(
+        systemEnabled: systemEnabled,
+        micEnabled: micEnabled,
+        systemChanged: systemChanged,
+        micChanged: micChanged,
+        reason: reason
+      )
+    }
+  }
+
+  /** 只在 sampleQueue 调用，保证 route reset 与边界前后的 PCM enqueue 顺序稳定。 */
+  @discardableResult
+  private func markRealtimeRouteChangeOnSampleQueue(
+    systemEnabled: Bool,
+    micEnabled: Bool,
+    systemChanged: Bool,
+    micChanged: Bool,
+    reason: String
+  ) -> Double {
+    let logicalSeconds = recordingTimeline.currentLogicalTime()?.seconds ?? 0
+    if systemChanged || micChanged {
+      realtimeEchoProcessor?.resetForRouteChange(reason: reason)
+    }
+    realtimeDeliveryMixer?.updateSourceActivity(
+      systemEnabled: systemEnabled,
+      micEnabled: micEnabled,
+      systemChanged: systemChanged,
+      micChanged: micChanged,
+      logicalTimeSeconds: logicalSeconds
+    )
+    if systemEnabled || micEnabled {
+      lastCaptureProgressAt = Date()
+    }
+    return logicalSeconds
+  }
+
+  private func completeRealtimeRouteChange(boundary: Double, reason: String) {
+    log(
+      "tap: realtime route change completed reason=\(reason) "
+        + "logical=\(String(format: "%.3f", boundary))s"
+    )
+  }
+
   private func isRecordingGenerationCurrent(_ generation: UUID) -> Bool {
     micRecoveryLock.lock()
     defer { micRecoveryLock.unlock() }
@@ -1110,6 +1302,14 @@ class TapRecorder: NSObject {
     let dropoutSec = lastMicSampleAt.map { Int(Date().timeIntervalSince($0)) }
     /** 落设备拓扑快照:与开录快照一 diff 即可归因(蓝牙掉线切内置 / 切设备 / 采样率变更) */
     log("tap: mic recovery start (\(reason)), devices: \(describeDefaultAudioDevices())")
+    disableMicSampleGate()
+    let routeBoundary = prepareRealtimeRouteChange(
+      systemEnabled: tapCapture.isActive,
+      micEnabled: true,
+      systemChanged: false,
+      micChanged: true,
+      reason: "mic-recovery-\(reason)"
+    )
 
     /** 僵尸引擎先拆再建;上一次已丢麦(micActive=false)则直接重挂 */
     if isMicActive() {
@@ -1130,6 +1330,10 @@ class TapRecorder: NSObject {
       return
     }
     if recovered {
+      if !recordingTimeline.isPaused {
+        enableMicSampleGate()
+      }
+      completeRealtimeRouteChange(boundary: routeBoundary, reason: "mic-recovered")
       /** attachMic 成功路径已清零 micRecoveryAttempts / micDegradedEmitted */
       log("tap: mic recovery succeeded (micCb=\(micCapture.callbackCount)), devices: \(describeDefaultAudioDevices())")
       emitMicRouteChanged(
@@ -1138,6 +1342,8 @@ class TapRecorder: NSObject {
       )
       return
     }
+
+    completeRealtimeRouteChange(boundary: routeBoundary, reason: "mic-recovery-failed")
 
     guard let (attempts, shouldEmitDegraded) = recordMicRecoveryFailure(for: generation) else {
       log("tap: stale mic recovery failure discarded (\(reason))")
@@ -1249,6 +1455,28 @@ class TapRecorder: NSObject {
 
     writer = w
     systemInput = sysInput
+    if AUDIO_OUTPUT_CHANNEL_COUNT == 1 {
+      do {
+        realtimeDeliveryMixer = try RealtimeDeliveryMixer(
+          outputPath: outputPath,
+          outputSettings: aacSystemAudioSettings(
+            sampleRate: Double(AUDIO_PROCESSING_SAMPLE_RATE),
+            channels: 1
+          ),
+          initialSystemEnabled: tapRequested,
+          initialMicEnabled: micRequested,
+          expectsPreferredMic: expectsRealtimeProcessedMic,
+          logger: log
+        )
+      }
+      catch {
+        realtimeDeliveryMixer = nil
+        log("tap: realtime delivery unavailable, retaining stop-time recovery mix: \(describeError(error))")
+      }
+    }
+    else {
+      log("tap: realtime delivery requires mono output; retaining stop-time stereo mix")
+    }
     checkpointWriter = AudioCheckpointWriter(
       outputPath: outputPath,
       systemSettings: systemSettings,
@@ -1312,9 +1540,23 @@ class TapRecorder: NSObject {
        !realtimeEchoProcessor.submitCapture(buffer, logicalTimeSeconds: logicalTime.seconds) {
       log("tap: realtime capture submission rejected; raw sidecar retained")
     }
-    if micSidecarWriter?.append(buffer, at: logicalTime) == true {
+    if let deliveryMic = micSidecarWriter?.append(buffer, at: logicalTime) {
+      realtimeDeliveryMixer?.appendFallbackMic(
+        deliveryMic,
+        logicalTimeSeconds: logicalTime.seconds
+      )
       micLastSampleAt = Date()
+      lastCaptureProgressAt = micLastSampleAt
     }
+  }
+
+  /** AEC 输出已完成正式电平处理；按其原始逻辑帧投递到实时成品。 */
+  private func appendRealtimeCleanMic(_ buffer: AVAudioPCMBuffer, startFrame: Int64) {
+    guard expectsRealtimeProcessedMic else { return }
+    realtimeDeliveryMixer?.appendPreferredMic(
+      buffer,
+      logicalTimeSeconds: Double(startFrame) / Double(AUDIO_PROCESSING_SAMPLE_RATE)
+    )
   }
 
   /**
@@ -1338,9 +1580,10 @@ class TapRecorder: NSObject {
 
     /** 统一到录音逻辑时间；记录有效片段，暂停时段从两轨共同剔除 */
     guard let adjusted = recordingTimeline.retimeSystemSample(sampleBuffer) else { return .ignored }
+    let logicalTime = CMSampleBufferGetPresentationTimeStamp(adjusted).seconds
+    realtimeDeliveryMixer?.appendSystem(adjusted, logicalTimeSeconds: logicalTime)
 
     if let realtimeEchoProcessor {
-      let logicalTime = CMSampleBufferGetPresentationTimeStamp(adjusted).seconds
       if !realtimeEchoProcessor.submitReference(adjusted, logicalTimeSeconds: logicalTime) {
         log("tap: realtime reference submission rejected; raw sidecar retained")
       }
@@ -1361,6 +1604,7 @@ class TapRecorder: NSObject {
       checkpointWriter?.append(adjusted, track: .system)
       recordingTimeline.recordSystemSample(adjusted)
       sysLastSampleAt = Date()
+      lastCaptureProgressAt = sysLastSampleAt
       return .appended
     }
 
@@ -1421,6 +1665,9 @@ class TapRecorder: NSObject {
     micSidecarWriter = nil
     realtimeEchoProcessor?.cancel()
     realtimeEchoProcessor = nil
+    realtimeDeliveryMixer?.discardOutput()
+    realtimeDeliveryMixer = nil
+    expectsRealtimeProcessedMic = false
     startTime = nil
     totalPausedDuration = 0
     pausedAt = nil
@@ -1432,6 +1679,7 @@ class TapRecorder: NSObject {
     sampleGapErrorEmitted = false
     sysLastSampleAt = nil
     micLastSampleAt = nil
+    lastCaptureProgressAt = nil
     unregisterDefaultInputDeviceListener()
     micRequested = false
     tapRequested = false

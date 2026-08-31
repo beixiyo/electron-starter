@@ -2,7 +2,8 @@
 
 import { execFile } from 'node:child_process'
 import { readdir, stat } from 'node:fs/promises'
-import { getMonoOutputArgs, getNativeBinaryPath } from '@main/native-bridge'
+import { getAudioLabOutputArgs } from '@main/audio-lab/settings'
+import { getNativeBinaryPath } from '@main/native-bridge'
 import {
   getRecoveryCheckpointDir,
   getRecoveryMicBackupPath,
@@ -105,7 +106,7 @@ async function recoverCheckpointIfNeeded(taskId: string): Promise<boolean> {
   if (!hasCheckpointSegment)
     return true
 
-  return runRecoveryCommand(['--merge-checkpoints', segmentDir, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
+  return runRecoveryCommand(['--merge-checkpoints', segmentDir, getRecoveryOutputPath(taskId), ...getAudioLabOutputArgs()])
 }
 
 async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
@@ -114,7 +115,7 @@ async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
 
   /** marker / backup 会保留到 renderer 导入成功；helper 只判定并完成事务 */
   if (hasTransaction)
-    return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
+    return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getAudioLabOutputArgs()])
 
   let sidecar
   try {
@@ -130,7 +131,7 @@ async function recoverMicSidecarIfNeeded(taskId: string): Promise<boolean> {
   if (!sidecar.isFile())
     return false
 
-  return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getMonoOutputArgs()])
+  return runRecoveryCommand(['--recover-mic-sidecar', sidecarPath, getRecoveryOutputPath(taskId), ...getAudioLabOutputArgs()])
 }
 
 async function hasMicSidecarTransaction(taskId: string): Promise<boolean> {

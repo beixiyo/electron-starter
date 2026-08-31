@@ -3,9 +3,10 @@ import { execFile } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { formatDate } from '@jl-org/tool'
+import { getAudioLabOutputArgs, getAudioLabSettings } from '@main/audio-lab/settings'
 import { createMainDiagnosticLogger } from '@main/logging'
 import { app } from 'electron'
-import { getMonoOutputArgs, getNativeBinaryPath, NativeBridge } from '../native-bridge'
+import { getNativeBinaryPath, NativeBridge } from '../native-bridge'
 import { RecorderHandoffCoordinator } from './handoff-coordinator'
 import { parseRecorderMessage } from './protocol'
 
@@ -17,7 +18,7 @@ const bridge = new NativeBridge<RecorderEvents>({
   name: 'audio-recorder',
   writable: true,
   logStderr: true,
-  args: getMonoOutputArgs(),
+  args: getAudioLabOutputArgs,
   onStderrLine: line => nativeLog.debug('native.stderr', line),
   onUnexpectedExit: (code, signal) => {
     preferredMicStrategyHint = null
@@ -267,10 +268,22 @@ export function startRecording(outputPath?: string, options?: StartRecordingOpti
   const micHint = options?.engine === 'tap' && options.mic !== false
     ? preferredMicStrategyHint
     : null
+  /**
+   * tap + mic 统一预备实时 AEC3，即使系统音稍后才热挂也无需重启 helper
+   * 显式传入 audioProcessing（包括 off）始终优先，调用方仍可关闭处理
+   */
+  const audioProcessing = options?.engine === 'tap'
+    && options.mic !== false
+    && options.audioProcessing === undefined
+    ? getDefaultRealtimeAudioProcessing()
+    : options?.audioProcessing
   return bridge.send(JSON.stringify({
     action: 'start',
     outputPath: filePath,
     ...options,
+    ...(audioProcessing
+      ? { audioProcessing }
+      : {}),
     ...(micHint
       ? {
           preferredMicStrategy: micHint.strategy,
@@ -339,7 +352,7 @@ export type StartRecordingOptions = {
    * @default true
    */
   mic?: boolean
-  /** tap 引擎的软件音频处理；未提供时关闭 */
+  /** tap 引擎的软件音频处理；mic 开启时缺省使用实时 AEC3，显式 off 可关闭 */
   audioProcessing?: AudioProcessingOptions
 }
 
@@ -369,7 +382,7 @@ export type AudioProcessingOptions = {
   delayMode?: 'auto' | 'fixed' | 'hybrid'
   /** 固定/混合模式的初始延迟，单位毫秒；@default 120 */
   fixedDelayMs?: number
-  /** @default 'moderate' */
+  /** @default 'off' */
   noiseSuppression?: 'off' | 'low' | 'moderate' | 'high' | 'very-high'
   /** @default 'off' */
   gainControl?: 'off' | 'agc1-adaptive-digital' | 'agc1-fixed' | 'agc2'
@@ -377,12 +390,17 @@ export type AudioProcessingOptions = {
   highPass?: boolean
 }
 
-/** 会议与手动混音共用的实时 AEC3 默认配置；构建模式不改变它。 */
-export const DEFAULT_REALTIME_AUDIO_PROCESSING: AudioProcessingOptions = {
-  processor: 'webrtcAec3',
-  delayMode: 'auto',
-  fixedDelayMs: 120,
-  noiseSuppression: 'moderate',
-  gainControl: 'off',
-  highPass: true,
+/** 会议与手动录音共用的实时处理配置；每场 start 都读取当前实验设置。 */
+export function getDefaultRealtimeAudioProcessing(): AudioProcessingOptions {
+  const settings = getAudioLabSettings()
+  return {
+    processor: settings.echoCancellation === 'auto'
+      ? 'webrtcAec3'
+      : 'off',
+    delayMode: settings.delayMode,
+    fixedDelayMs: settings.fixedDelayMs,
+    noiseSuppression: settings.noiseSuppression,
+    gainControl: settings.gainControl,
+    highPass: settings.highPass,
+  }
 }

@@ -1,4 +1,5 @@
 import { electronAPI } from '@electron-toolkit/preload'
+import { audioLabClient } from '@ipc/services/audio-lab/client'
 import { fnClient } from '@ipc/services/fn/client'
 import { focusClient } from '@ipc/services/focus/client'
 import { globalToastClient } from '@ipc/services/global-toast/client'
@@ -22,6 +23,7 @@ import { exposeLogBridge, JL_LOG_BRIDGE_KEY, JL_LOG_IPC_CHANNEL } from '@jl-org/
 import { contextBridge, ipcRenderer } from 'electron'
 
 export const ipc = {
+  audioLab: audioLabClient,
   media: mediaClient,
   window: windowClient,
   focus: focusClient,

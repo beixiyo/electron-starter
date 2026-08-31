@@ -1,6 +1,6 @@
 import type { AudioProcess } from './audio-monitor-bridge'
 import { getSelfProcessPids } from '@main/utils/self-pids'
-import { onAudioProcessChange, startAudioMonitor, stopAudioMonitor } from './audio-monitor-bridge'
+import { getAudioProcessSnapshot, onAudioProcessChange, startAudioMonitor } from './audio-monitor-bridge'
 import { isIgnoredApp, loadIgnoreOverrides, matchApp } from './meeting-apps'
 
 export type MeetingSession = {
@@ -80,6 +80,8 @@ export function startMeetingDetector(): void {
   loadIgnoreOverrides()
   startAudioMonitor()
   unsubAudioMonitor = onAudioProcessChange(handleProcessUpdate)
+  /** monitor 可能已由录音页启动；立即消费现有快照，不能等下一次进程变化才恢复检测。 */
+  handleProcessUpdate(getAudioProcessSnapshot())
 }
 
 export function stopMeetingDetector(): void {
@@ -87,7 +89,10 @@ export function stopMeetingDetector(): void {
     unsubAudioMonitor()
     unsubAudioMonitor = null
   }
-  stopAudioMonitor()
+  /** audio monitor 同时服务录音页的「当前发声应用」列表，停检测不能把共享数据源关掉。 */
+  for (const session of sessions.values()) {
+    emitEvent({ type: 'meeting-ended', session })
+  }
   sessions.clear()
 }
 

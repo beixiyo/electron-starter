@@ -91,6 +91,83 @@
     "permissionDenied": "系统音频录制权限被拒绝",
     "recordFailed": "音源切换失败，请重试"
   },
+  "audioLab": {
+    "title": "音频实验场",
+    "description": "设置会持久化，并从下一场原生录音开始生效。",
+    "status": {
+      "allApps": "全部系统音频",
+      "selectedApps": "{{count}} 个应用",
+      "micAndSystem": "麦克风 + {{system}}",
+      "micOnly": "仅麦克风",
+      "noSource": "未选择音源",
+      "echoActive": "AEC3 处理中",
+      "echoArmed": "AEC3 待命",
+      "echoOff": "回声消除关闭",
+      "echoNotApplicable": "无麦克风，不启用 AEC",
+      "channels1": "单声道",
+      "channels2": "立体声",
+      "meetingOn": "会议检测开启",
+      "meetingOff": "会议检测关闭"
+    },
+    "outputChannels": {
+      "title": "输出声道",
+      "description": "单声道适合语音和长录音；立体声保留媒体空间感。",
+      "mono": "单声道",
+      "stereo": "立体声"
+    },
+    "echoCancellation": {
+      "title": "回声消除",
+      "description": "自动模式在麦克风与系统音频同时存在时使用 WebRTC AEC3。",
+      "auto": "自动（AEC3）",
+      "off": "关闭"
+    },
+    "meetingDetection": {
+      "title": "自动会议检测",
+      "description": "检测到同时使用输入和输出的会议软件时显示录音提示。"
+    },
+    "advanced": {
+      "title": "AEC3 高级参数"
+    },
+    "delayMode": {
+      "title": "延迟模式",
+      "description": "控制 AEC3 如何获得扬声器到麦克风的延迟提示。",
+      "auto": "自动",
+      "fixed": "固定",
+      "hybrid": "混合"
+    },
+    "fixedDelay": {
+      "title": "固定延迟",
+      "description": "固定模式直接使用；混合模式作为初始值，范围 0–500 ms。"
+    },
+    "noiseSuppression": {
+      "title": "降噪",
+      "description": "作用于麦克风近端语音；过高可能损伤音色。"
+    },
+    "levels": {
+      "off": "关闭",
+      "low": "低",
+      "moderate": "中",
+      "high": "高",
+      "veryHigh": "很高"
+    },
+    "gainControl": {
+      "title": "增益控制",
+      "description": "自动调整麦克风响度，实验时注意近端音色和呼吸感。",
+      "off": "关闭",
+      "agc1Adaptive": "AGC1 自适应",
+      "agc1Fixed": "AGC1 固定",
+      "agc2": "AGC2"
+    },
+    "highPass": {
+      "title": "高通滤波",
+      "description": "削弱低频轰鸣和桌面震动。"
+    },
+    "messages": {
+      "loadFailed": "无法读取音频实验设置",
+      "saveFailed": "设置未生效，请确认当前没有录音正在收尾",
+      "disabledWhileRecording": "录制或收尾期间设置已锁定，避免当前 helper 与界面配置不一致。"
+    }
+  },
   "recordError": {
     "captureInterrupted": "音频采集中断，录音已自动结束，中断前的音频已保存",
     "noAudioContent": "没有录到音频内容：所选音源没有产生声音",

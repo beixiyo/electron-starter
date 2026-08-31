@@ -2,6 +2,7 @@ import type { NativeRecordingSource } from '@shared'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import {
   assertTaskId,
   collectTaskIds,
@@ -11,6 +12,7 @@ import {
   getRecoveryMicPendingPath,
   getRecoveryMicSidecarPath,
   getRecoveryOutputPath,
+  getRealtimeDeliveryTempPath,
   RECORDING_RECOVERY_DIR,
 } from './paths'
 import { recoverRecordingTask, waitForRecoveryTask } from './recovery-engine'
@@ -49,6 +51,13 @@ export async function listRecoverableRecordings(activeOutputPath?: string): Prom
   await mkdirRecoveryDir()
 
   const entries = await readdir(RECORDING_RECOVERY_DIR, { withFileTypes: true })
+  const activeRealtimeTempName = activeOutputPath
+    ? `_realtime_${basename(activeOutputPath)}`
+    : null
+  await Promise.all(entries
+    .filter(entry => entry.isFile() && entry.name.startsWith('_realtime_') && entry.name.endsWith('.m4a'))
+    .filter(entry => entry.name !== activeRealtimeTempName)
+    .map(entry => rm(join(RECORDING_RECOVERY_DIR, entry.name), { force: true })))
   const taskIds = collectTaskIds(entries.map(entry => entry.name))
   const recordings: RecoverableRecording[] = []
 
@@ -95,6 +104,7 @@ export async function deleteRecoveryRecording(taskId: string): Promise<void> {
     rm(getRecoveryMicBackupPath(safeTaskId), { force: true }),
     rm(getRecoveryMicPendingPath(safeTaskId), { force: true }),
     rm(getRecoveryCheckpointDir(safeTaskId), { recursive: true, force: true }),
+    rm(getRealtimeDeliveryTempPath(safeTaskId), { force: true }),
   ])
 }
 

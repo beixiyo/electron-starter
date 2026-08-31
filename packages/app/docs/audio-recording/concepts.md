@@ -13,13 +13,15 @@
 - **render / reference**：提供给回声消除器的参考流。它描述“扬声器或系统正在播放什么”，不是“麦克风听到了什么”
 - **clean**：处理器输出的音频，例如去掉可预测回声后的麦克风轨
 - **delivery**：最终交付给转写或用户播放的音轨。它可能是 clean，也可能是失败后的 raw 回退
-- **raw**：未经 AEC 的原始麦克风 sidecar。它是最重要的恢复资产，任何实验处理失败都不能把它删除或覆盖
+- **raw**：未经 AEC 的原始麦克风 sidecar。它是最重要的恢复资产，任何增强处理失败都不能把它删除或覆盖
 
 ## AEC、AEC3 与 AES
 
 - **AEC（Acoustic Echo Cancellation）** 是声学回声消除：估计扬声器声音如何通过空间进入麦克风，再从 mic 中减掉可预测部分
 - **AEC3** 是 WebRTC Audio Processing Module 中的一套 AEC 实现，名字里的“3”是实现代际，不是三路音频
 - **AES** 通常指 Advanced Encryption Standard（加密标准），不是这里的回声消除。本文所有“回声”均指 AEC，不是 AES
+
+本项目没有自行实现 AEC3 算法。算法来自 [Google WebRTC Audio Processing Module](https://webrtc.googlesource.com/src/+/refs/heads/main/modules/audio_processing/)，构建时使用 [Freedesktop `webrtc-audio-processing`](https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing) 项目发布的 2.1 源码（WebRTC M131 基线）。`RecorderAPM` 是本项目自己的窄 C ABI shim，只负责把 Swift 所需的少量配置和帧处理接口桥接到上游 C++ API，不是另一个回声消除算法
 
 AEC 需要两路不同角色的信号：reference 是播放端，capture 是麦克风端。没有 reference 时，安全行为是给该 hop 喂数字静音；绝不能把 mic 自己当 reference，否则可能把本地说话声一起抵消
 
@@ -52,7 +54,7 @@ AEC 需要两路不同角色的信号：reference 是播放端，capture 是麦�
 
 ## 实时处理与停止后处理
 
-- **实时处理**：录音期间每个小块进入私有处理队列，由消费者送入 AEC3 并逐步写入临时 clean sidecar。停止时只需要排空、关闭并原子提升文件，不能再按整场录音做耗时算法
+- **实时处理**：录音期间每个小块进入私有处理队列，由消费者送入 AEC3；system 与 clean/raw mic 同步写入临时 M4A。停止时只排空有界尾部、关闭并原子安装文件
 - **停止后处理**：停止后读取整份 raw 再处理。实现简单，但会把停止时间变成录音时长的函数，并可能撞 handoff watchdog；正式路径不采用它
 
 ## 失败相关概念

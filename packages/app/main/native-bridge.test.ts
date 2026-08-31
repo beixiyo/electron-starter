@@ -33,6 +33,7 @@ describe('native bridge 重启生命周期', () => {
     vi.restoreAllMocks()
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     harness.children.length = 0
+    harness.spawn.mockClear()
     harness.spawn.mockImplementation(() => {
       const child = createChild(harness.children.length + 1)
       harness.children.push(child)
@@ -163,6 +164,28 @@ describe('native bridge 重启生命周期', () => {
       expect.any(Object),
     )
     expect(harness.children[0].kill).toHaveBeenCalledWith('SIGKILL')
+  })
+
+  it('helper 换代时重新读取进程参数，而不是复用首次启动快照', async () => {
+    let outputChannels: 1 | 2 = 2
+    const bridge = new NativeBridge<{ event: string }>({
+      name: 'audio-recorder',
+      args: () => outputChannels === 1
+        ? ['--mono-output']
+        : [],
+      parseLine: () => {},
+    })
+
+    bridge.start()
+    expect(harness.spawn.mock.calls[0]?.[1]).toEqual([])
+
+    outputChannels = 1
+    const oldChild = harness.children[0]
+    const restart = bridge.forceRestart()
+    oldChild.emit('exit', null, 'SIGKILL')
+    await restart
+
+    expect(harness.spawn.mock.calls[1]?.[1]).toEqual(['--mono-output'])
   })
 })
 

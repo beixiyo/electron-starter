@@ -45,6 +45,7 @@ public final class RealtimeEchoProcessor: @unchecked Sendable {
   private let options: AudioProcessingOptions
   private let cleanFileURL: URL
   private let logger: (String) -> Void
+  private let didProduceClean: ((AVAudioPCMBuffer, Int64) -> Void)?
   private let processingQueue = DispatchQueue(
     label: "audio-processing-realtime",
     qos: .userInitiated
@@ -88,6 +89,7 @@ public final class RealtimeEchoProcessor: @unchecked Sendable {
   public init(
     options: AudioProcessingOptions,
     cleanFileURL: URL,
+    didProduceClean: ((AVAudioPCMBuffer, Int64) -> Void)? = nil,
     logger: @escaping (String) -> Void = { _ in }
   ) throws {
     guard options.processor == .webrtcAec3 else {
@@ -99,6 +101,7 @@ public final class RealtimeEchoProcessor: @unchecked Sendable {
     self.options = options
     self.cleanFileURL = cleanFileURL
     self.logger = logger
+    self.didProduceClean = didProduceClean
     self.captureNormalizer = try PCMBufferNormalizer(downmixMode: .average)
     self.referenceNormalizer = try PCMBufferNormalizer(downmixMode: .average)
     self.outputFormat = captureNormalizer.outputFormat
@@ -222,6 +225,40 @@ public final class RealtimeEchoProcessor: @unchecked Sendable {
     let final = result ?? makeUnavailableResult(error: "realtime audio processing did not finish")
     stateLock.unlock()
     return final
+  }
+
+  /**
+   * 物理麦克风、系统进程或暂停边界换代时切断旧 AEC 自适应状态
+   *
+   * 先同步排空旧 epoch，保证旧 clean 不会在新路由边界之后才交给实时成品混音器
+   */
+  public func resetForRouteChange(reason: String) {
+    stateLock.lock()
+    let mayReset = acceptingSubmissions && !finished
+    stateLock.unlock()
+    guard mayReset else { return }
+
+    processingQueue.sync {
+      guard processingError == nil else { return }
+      do {
+        try processAvailable(finishing: true)
+        try flushPendingCleanSamples()
+        processor = try WebRTCAPMProcessor(options: options)
+        currentDelayMS = max(0, min(AUDIO_PROCESSING_MAX_DELAY_MS, options.fixedDelayMS))
+        lastDelayUpdateFrame = inputSamples
+        captureEnvelope.removeAll(keepingCapacity: true)
+        referenceEnvelope.removeAll(keepingCapacity: true)
+        latestDelayCorrelation = nil
+        captureTimeline.reset(at: nextCaptureFrame)
+        referenceTimeline.reset(at: nextCaptureFrame)
+        captureNormalizer.resetInputFormat()
+        referenceNormalizer.resetInputFormat()
+        logger("audio processing route reset frame=\(nextCaptureFrame) reason=\(reason)")
+      }
+      catch {
+        recordProcessingError("route reset failed: \(error)")
+      }
+    }
   }
 
   /** 启动失败或录音取消时关闭并删除未提升的 clean 临时文件。 */
@@ -480,6 +517,7 @@ public final class RealtimeEchoProcessor: @unchecked Sendable {
       )
     }
     try cleanFile?.write(from: buffer)
+    didProduceClean?(buffer, outputSamples)
     outputSamples += Int64(count)
     pendingCleanSamples.removeFirst(count)
   }
@@ -616,6 +654,12 @@ private struct SampleTimeline {
     storage.removeFirst(discardCount)
     availability.removeFirst(discardCount)
     baseFrame += Int64(discardCount)
+  }
+
+  mutating func reset(at frame: Int64) {
+    storage.removeAll(keepingCapacity: true)
+    availability.removeAll(keepingCapacity: true)
+    baseFrame = frame
   }
 }
 

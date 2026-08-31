@@ -4,6 +4,7 @@
  * 只有 `rendererOn` 的模块用 `toRenderer.ts`，不注册 handler，因此不进本 barrel
  * 例外：shortcut-config 是工厂函数（createShortcutConfigService），由 main/index.ts 显式创建
  */
+import './audio-lab/service'
 import './global-toast/service'
 import './logical-window/service'
 import './media/service'

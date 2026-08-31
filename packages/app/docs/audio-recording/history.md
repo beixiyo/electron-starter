@@ -30,4 +30,4 @@ VPIO 的设备布局、参考流、host time 和资源释放问题多次造成�
 
 ## 如何使用历史
 
-历史条目用于解释为什么存在 sidecar、checkpoint、首帧探测、原子安装和 raw fallback。它不能用于推断模板当前仍支持 `micAec`、环境变量配置、POC CLI 或 VPIO
+历史条目用于解释为什么存在 sidecar、checkpoint、首帧探测、原子安装和 raw fallback。它不能用于推断模板当前仍支持旧参数、隐式配置入口或 VPIO
