@@ -1,5 +1,7 @@
 import type {
+  KeyboardModifierCode,
   KeyboardShortcutChord,
+  KeyboardShortcutModifier,
   ShortcutBinding,
   ShortcutGestureRuntimeEntry,
   ShortcutGestureType,
@@ -7,14 +9,23 @@ import type {
   ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
-import { createShortcutGestureEngine, KEYBOARD_MODIFIER_BY_CODE } from '@shared/shortcuts'
+import {
+  createShortcutGestureEngine,
+  isKeyboardModifierCode,
+  KEYBOARD_MODIFIER_CODES,
+  keyboardShortcutChordMatchesModifierState,
+} from '@shared/shortcuts'
 import { createMainDiagnosticLogger } from '../../logging'
 import { resolveKeyGroup } from '../hold/resolve-key-group'
-import { isShortcutRuntimeSuspended } from '../suspension'
+import {
+  addShortcutRuntimeSuspensionListener,
+  isShortcutRuntimeSuspended,
+} from '../suspension'
 import { acquireHook, addUiohookKeyboardListeners, releaseHook } from '../uiohook-lifecycle'
 
 /** action id → 已解析的 keyboard gesture 注册项 */
 const registeredShortcuts = new Map<string, RegisteredKeyboardGestureShortcut>()
+const pressedKeycodes = new Set<number>()
 const log = createMainDiagnosticLogger('shortcut.runtime')
 
 /** 当前 backend 是否已经占用 uIOhook lifecycle 引用计数 */
@@ -29,8 +40,14 @@ const gestureEngine = createShortcutGestureEngine<KeyboardGestureBinding>({
   emit: emitKeyboardGestureEvent,
 })
 
+/** backend 与应用同生命周期；暂停只清输入状态，不改 uiohook listener/refcount */
+addShortcutRuntimeSuspensionListener(() => {
+  pressedKeycodes.clear()
+  gestureEngine.cancelActiveGestures()
+})
+
 /**
- * 注册键盘手势快捷键。
+ * 注册键盘手势快捷键
  * 当前实现用 uIOhook 捕获真实 keydown/keyup，后续可在同一接口下替换为平台 native backend
  */
 export function registerKeyboardGestureShortcut(config: KeyboardGestureShortcutConfig): boolean {
@@ -65,11 +82,12 @@ export function registerKeyboardGestureShortcut(config: KeyboardGestureShortcutC
 export function unregisterKeyboardGestureShortcuts(): void {
   gestureEngine.updateEntries([])
   registeredShortcuts.clear()
+  pressedKeycodes.clear()
   maybeStopHook()
 }
 
 /**
- * 清理键盘手势快捷键状态。
+ * 清理键盘手势快捷键状态
  * 用于应用退出或重注册前释放 timer / uIOhook listener
  */
 export function resetKeyboardGestureShortcutStates(): void {
@@ -77,14 +95,22 @@ export function resetKeyboardGestureShortcutStates(): void {
 }
 
 function handleKeyDown(event: UiohookKeyboardEvent): void {
-  if (isShortcutRuntimeSuspended()) {
-    gestureEngine.cancelActiveGestures()
+  if (isShortcutRuntimeSuspended())
     return
-  }
 
+  pressedKeycodes.add(event.keycode)
   const timestamp = Date.now()
+  const modifierState = getModifierState(event)
   for (const shortcut of registeredShortcuts.values()) {
-    if (!matchesShortcut(event, shortcut.match))
+    if (!keyboardShortcutChordMatchesModifierState(
+      shortcut.binding.chord,
+      modifierState.physical,
+      modifierState.logical,
+    )) {
+      gestureEngine.cancelChord(shortcut.binding.chord)
+      continue
+    }
+    if (!isKeyWithinGroups(event.keycode, shortcut.match.mainKeyGroup))
       continue
 
     gestureEngine.handle({
@@ -96,16 +122,32 @@ function handleKeyDown(event: UiohookKeyboardEvent): void {
 }
 
 function handleKeyUp(event: UiohookKeyboardEvent): void {
-  const timestamp = Date.now()
-  for (const shortcut of registeredShortcuts.values()) {
-    if (!isKeyWithinGroups(event.keycode, shortcut.match.mainKeyGroup))
-      continue
+  if (isShortcutRuntimeSuspended())
+    return
 
-    gestureEngine.handle({
-      phase: 'up',
-      chord: shortcut.binding.chord,
-      timestamp,
-    })
+  pressedKeycodes.delete(event.keycode)
+  const timestamp = Date.now()
+  const modifierState = getModifierState(event)
+  for (const shortcut of registeredShortcuts.values()) {
+    const modifiersMatch = keyboardShortcutChordMatchesModifierState(
+      shortcut.binding.chord,
+      modifierState.physical,
+      modifierState.logical,
+    )
+    const mainKeyReleased = isKeyWithinGroups(event.keycode, shortcut.match.mainKeyGroup)
+    const modifierReleased = !modifiersMatch
+      && isKeyWithinGroups(event.keycode, shortcut.match.modifierKeyGroup)
+
+    if (mainKeyReleased || modifierReleased) {
+      gestureEngine.handle({
+        phase: 'up',
+        chord: shortcut.binding.chord,
+        timestamp,
+      })
+    }
+
+    if (!modifiersMatch)
+      gestureEngine.cancelChord(shortcut.binding.chord)
   }
 }
 
@@ -133,56 +175,67 @@ function syncGestureEngineEntries(): void {
 }
 
 function createChordMatch(chord: KeyboardShortcutChord): KeyboardChordMatch {
-  const mainKeyModifier = KEYBOARD_MODIFIER_BY_CODE[chord.key]
-  if (mainKeyModifier) {
-    const modifiers = [mainKeyModifier, ...chord.modifiers]
+  const modifierKeyGroup = resolveModifierKeyGroup(chord.modifiers)
+
+  if (isKeyboardModifierCode(chord.key)) {
     return {
-      mainKeyGroup: Array.from(new Set(modifiers.flatMap(modifier => resolveKeyGroup(modifier)))),
-      requiredModifiers: createRequiredModifiers(modifiers),
+      /** 纯修饰键组合由最后按下的任一成员完成，同时每个物理成员仍严格匹配侧别 */
+      mainKeyGroup: resolveModifierChordKeyGroup(chord),
+      modifierKeyGroup: Array.from(new Set([
+        ...resolveKeyGroup(chord.key),
+        ...modifierKeyGroup,
+      ])),
     }
   }
 
   return {
     mainKeyGroup: resolveKeyGroup(chord.key),
-    requiredModifiers: createRequiredModifiers(chord.modifiers),
+    modifierKeyGroup,
   }
 }
 
-function createRequiredModifiers(modifiers: ShortcutModifier[]): Set<Exclude<ShortcutModifier, 'Primary'>> {
-  const required = new Set<Exclude<ShortcutModifier, 'Primary'>>()
-
-  for (const modifier of modifiers) {
-    switch (modifier) {
-      case 'Primary':
-        required.add(process.platform === 'darwin'
-          ? 'Meta'
-          : 'Control')
-        break
-      case 'Meta':
-      case 'Control':
-      case 'Alt':
-      case 'Shift':
-        required.add(modifier)
-        break
-    }
-  }
-
-  return required
-}
-
-function matchesShortcut(event: UiohookKeyboardEvent, match: KeyboardChordMatch): boolean {
-  return isKeyWithinGroups(event.keycode, match.mainKeyGroup)
-    && matchesModifiers(event, match.requiredModifiers)
-}
-
-function matchesModifiers(
+function getModifierState(
   event: UiohookKeyboardEvent,
-  requiredModifiers: Set<Exclude<ShortcutModifier, 'Primary'>>,
-): boolean {
-  return event.metaKey === requiredModifiers.has('Meta')
-    && event.ctrlKey === requiredModifiers.has('Control')
-    && event.altKey === requiredModifiers.has('Alt')
-    && event.shiftKey === requiredModifiers.has('Shift')
+): KeyboardModifierState {
+  const physical = new Set<KeyboardModifierCode>()
+  for (const modifier of KEYBOARD_MODIFIER_CODES) {
+    if (resolveKeyGroup(modifier).some(keycode => pressedKeycodes.has(keycode)))
+      physical.add(modifier)
+  }
+
+  const logical: ShortcutModifier[] = []
+  if (event.metaKey)
+    logical.push('Meta')
+  if (event.ctrlKey)
+    logical.push('Control')
+  if (event.altKey)
+    logical.push('Alt')
+  if (event.shiftKey)
+    logical.push('Shift')
+
+  return { logical, physical }
+}
+
+function resolveModifierChordKeyGroup(chord: KeyboardShortcutChord): number[] {
+  const groups = [
+    ...resolveKeyGroup(chord.key),
+    ...resolveModifierKeyGroup(chord.modifiers),
+  ]
+
+  return Array.from(new Set(groups))
+}
+
+function resolveModifierKeyGroup(modifiers: readonly KeyboardShortcutModifier[]): number[] {
+  return modifiers.flatMap(modifier => resolveKeyGroup(resolveModifierToken(modifier)))
+}
+
+function resolveModifierToken(modifier: KeyboardShortcutModifier): string {
+  if (modifier !== 'Primary')
+    return modifier
+
+  return process.platform === 'darwin'
+    ? 'Meta'
+    : 'Control'
 }
 
 function isKeyWithinGroups(keycode: number, group: number[]): boolean {
@@ -237,5 +290,10 @@ type RegisteredKeyboardGestureShortcut = KeyboardGestureShortcutConfig & {
 
 type KeyboardChordMatch = {
   mainKeyGroup: number[]
-  requiredModifiers: Set<Exclude<ShortcutModifier, 'Primary'>>
+  modifierKeyGroup: number[]
+}
+
+type KeyboardModifierState = {
+  logical: ShortcutModifier[]
+  physical: Set<KeyboardModifierCode>
 }

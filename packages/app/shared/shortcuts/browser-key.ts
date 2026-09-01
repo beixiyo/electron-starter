@@ -1,5 +1,18 @@
-import type { KeyboardCode, KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from './types'
-import { normalizeKeyboardCode, normalizeKeyboardShortcutChord, releaseActiveKeyboardChord } from './utils'
+import type {
+  ActiveKeyboardShortcutEntry,
+  KeyboardCode,
+  KeyboardShortcutChord,
+  KeyboardShortcutModifier,
+  ShortcutModifier,
+  ShortcutRecordEvent,
+} from './types'
+import {
+  normalizeKeyboardCode,
+  normalizeKeyboardShortcutChord,
+  pressKeyboardShortcutChord,
+  releaseActiveKeyboardChords,
+  specializeKeyboardShortcutModifiers,
+} from './utils'
 
 const BROWSER_LOCK_KEYS = new Set([
   'CapsLock',
@@ -7,46 +20,56 @@ const BROWSER_LOCK_KEYS = new Set([
   'ScrollLock',
 ])
 
-export function toBrowserShortcutRecordEvent(
+/** 将一次 DOM 按键相位转换为标准事件；成员释放时可能结束多个冻结 chord */
+export function toBrowserShortcutRecordEvents(
   event: BrowserShortcutKeyEvent,
   phase: BrowserShortcutRecordPhase,
-  activeChords: Map<string, KeyboardShortcutChord>,
-): ShortcutRecordEvent | null {
+  activeEntries: Map<string, ActiveKeyboardShortcutEntry>,
+): ShortcutRecordEvent[] {
   const keyId = getBrowserShortcutKeyId(event)
+  const timestamp = Date.now()
 
   if (phase === 'up') {
-    const chord = releaseActiveKeyboardChord(activeChords, keyId)
-    if (!chord)
-      return null
-
-    return {
+    return releaseActiveKeyboardChords(
+      activeEntries,
+      keyId,
+      getBrowserLogicalShortcutModifiers(event),
+    ).map(chord => ({
       phase,
       chord,
-      timestamp: Date.now(),
-    }
+      timestamp,
+    }))
   }
 
-  if (event.repeat || activeChords.has(keyId) || BROWSER_LOCK_KEYS.has(event.key))
-    return null
+  if (event.repeat || activeEntries.has(keyId) || BROWSER_LOCK_KEYS.has(event.key))
+    return []
 
-  const chord = toBrowserShortcutChord(event)
-  if (!chord)
-    return null
+  const key = normalizeBrowserShortcutKey(event)
+  if (!key)
+    return []
 
-  activeChords.set(keyId, chord)
-  return {
+  const chord = pressKeyboardShortcutChord(
+    activeEntries,
+    keyId,
+    key,
+    getBrowserLogicalShortcutModifiers(event),
+  )
+  return [{
     phase,
     chord,
-    timestamp: Date.now(),
-  }
+    timestamp,
+  }]
 }
 
-export function toBrowserShortcutChord(event: BrowserShortcutKeyEvent): KeyboardShortcutChord | null {
+export function toBrowserShortcutChord(
+  event: BrowserShortcutKeyEvent,
+  activeEntries: Iterable<ActiveKeyboardShortcutEntry> = [],
+): KeyboardShortcutChord | null {
   const key = normalizeBrowserShortcutKey(event)
   if (!key)
     return null
 
-  return normalizeKeyboardShortcutChord(key, getBrowserShortcutModifiers(event))
+  return normalizeKeyboardShortcutChord(key, getBrowserShortcutModifiers(event, activeEntries))
 }
 
 export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): KeyboardCode | null {
@@ -67,7 +90,20 @@ export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): Key
   return null
 }
 
-export function getBrowserShortcutModifiers(event: BrowserShortcutKeyEvent): ShortcutModifier[] {
+export function getBrowserShortcutModifiers(
+  event: BrowserShortcutKeyEvent,
+  activeEntries: Iterable<ActiveKeyboardShortcutEntry> = [],
+): KeyboardShortcutModifier[] {
+  return specializeKeyboardShortcutModifiers(
+    getBrowserLogicalShortcutModifiers(event),
+    activeEntries,
+  )
+}
+
+/** 读取 DOM 事件的逻辑 modifier flags，不推断左右物理侧 */
+export function getBrowserLogicalShortcutModifiers(
+  event: BrowserShortcutKeyEvent,
+): ShortcutModifier[] {
   const modifiers: ShortcutModifier[] = []
 
   if (event.metaKey)

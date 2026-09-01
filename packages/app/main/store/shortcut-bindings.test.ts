@@ -49,4 +49,52 @@ describe('快捷键绑定持久化边界', () => {
 
     expect(bindings.voiceDictation?.gesture).toBe('press')
   })
+
+  it('保留可执行的右侧 Option 单键绑定', () => {
+    const bindings = normalizeShortcutBindingsForWrite({
+      voiceDictation: {
+        scope: 'global',
+        gesture: 'press',
+        chord: { source: 'keyboard', key: 'AltRight', modifiers: [] },
+      },
+    })
+
+    expect(bindings.voiceDictation).toEqual({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'AltRight', modifiers: [] },
+    })
+  })
+
+  it('拒绝物理 modifier 主键叠加当前平台等价的 Primary', () => {
+    const key = process.platform === 'darwin'
+      ? 'MetaRight'
+      : 'ControlRight'
+
+    expect(() => normalizeShortcutBindingsForWrite({
+      voiceDictation: {
+        scope: 'global',
+        gesture: 'press',
+        chord: { source: 'keyboard', key, modifiers: ['Primary'] },
+      },
+    })).toThrow('voiceDictation')
+  })
+
+  it('拒绝 Primary 与当前平台逻辑 modifier 重复声明同一家族', () => {
+    const logicalModifier = process.platform === 'darwin'
+      ? 'Meta'
+      : 'Control'
+
+    expect(() => normalizeShortcutBindingsForWrite({
+      voiceDictation: {
+        scope: 'global',
+        gesture: 'press',
+        chord: {
+          source: 'keyboard',
+          key: 'A',
+          modifiers: ['Primary', logicalModifier],
+        },
+      },
+    })).toThrow('voiceDictation')
+  })
 })

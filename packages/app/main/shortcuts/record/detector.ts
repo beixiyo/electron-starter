@@ -1,6 +1,15 @@
-import type { KeyboardShortcutChord, ShortcutModifier, ShortcutRecordEvent } from '@shared/shortcuts'
+import type {
+  ActiveKeyboardShortcutEntry,
+  KeyboardCode,
+  ShortcutModifier,
+  ShortcutRecordEvent,
+} from '@shared/shortcuts'
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
-import { normalizeKeyboardCode, normalizeKeyboardShortcutChord, releaseActiveKeyboardChord } from '@shared/shortcuts'
+import {
+  normalizeKeyboardCode,
+  pressKeyboardShortcutChord,
+  releaseActiveKeyboardChords,
+} from '@shared/shortcuts'
 import { UiohookKey } from 'uiohook-napi'
 import { acquireHook, addUiohookKeyboardListeners, releaseHook } from '../uiohook-lifecycle'
 
@@ -16,6 +25,18 @@ const CODE_TO_NAME: Map<number, string> = new Map(
     .map(([name, code]) => [code, name]),
 )
 
+/** uiohook 将左侧修饰键命名为通用键名，这里补回物理侧别供新录制持久化 */
+const SIDE_MODIFIER_CODE_TO_NAME: ReadonlyMap<number, KeyboardCode> = new Map([
+  [UiohookKey.Meta, 'MetaLeft'],
+  [UiohookKey.MetaRight, 'MetaRight'],
+  [UiohookKey.Ctrl, 'ControlLeft'],
+  [UiohookKey.CtrlRight, 'ControlRight'],
+  [UiohookKey.Alt, 'AltLeft'],
+  [UiohookKey.AltRight, 'AltRight'],
+  [UiohookKey.Shift, 'ShiftLeft'],
+  [UiohookKey.ShiftRight, 'ShiftRight'],
+])
+
 /** 非 null 表示当前已有一个录制会话，避免重复绑定全局监听 */
 let activeEmit: ((event: ShortcutRecordEvent) => void) | null = null
 
@@ -25,8 +46,8 @@ let removeHookListeners: (() => void) | null = null
 /** 当前 detector 是否已经占用 uIOhook lifecycle 引用计数 */
 let hookAcquired = false
 
-/** keycode → keydown 时捕获的 chord；keyup 时复用，避免修饰键先松开导致 chord 漂移 */
-const activeChords = new Map<number, KeyboardShortcutChord>()
+/** keycode → 物理键与 keydown 时冻结的 chord */
+const activeEntries = new Map<number, ActiveKeyboardShortcutEntry>()
 
 /**
  * 录制期间监听真实键盘 down/up。
@@ -62,7 +83,7 @@ export function stopRecordShortcutDetection(): void {
   removeHookListeners = null
 
   activeEmit = null
-  activeChords.clear()
+  activeEntries.clear()
 
   if (hookAcquired) {
     releaseHook()
@@ -75,14 +96,19 @@ function handleKeyDown(event: UiohookKeyboardEvent): void {
     return
   if (IGNORED_KEY_CODES.has(event.keycode))
     return
-  if (activeChords.has(event.keycode))
+  if (activeEntries.has(event.keycode))
     return
 
-  const chord = toKeyboardShortcutChord(event)
-  if (!chord)
+  const key = normalizeKeyboardCode(keycodeToName(event.keycode))
+  if (!key)
     return
 
-  activeChords.set(event.keycode, chord)
+  const chord = pressKeyboardShortcutChord(
+    activeEntries,
+    event.keycode,
+    key,
+    getModifiers(event),
+  )
   activeEmit({
     phase: 'down',
     chord,
@@ -94,30 +120,29 @@ function handleKeyUp(event: UiohookKeyboardEvent): void {
   if (!activeEmit)
     return
 
-  const chord = releaseActiveKeyboardChord(activeChords, event.keycode)
-  if (!chord)
-    return
-
-  activeEmit({
-    phase: 'up',
-    chord,
-    timestamp: Date.now(),
-  })
-}
-
-function toKeyboardShortcutChord(event: UiohookKeyboardEvent): KeyboardShortcutChord | null {
-  const key = normalizeKeyboardCode(keycodeToName(event.keycode))
-  if (!key)
-    return null
-
-  return normalizeKeyboardShortcutChord(key, getModifiers(event))
+  const timestamp = Date.now()
+  for (const chord of releaseActiveKeyboardChords(
+    activeEntries,
+    event.keycode,
+    getModifiers(event),
+  )) {
+    activeEmit({
+      phase: 'up',
+      chord,
+      timestamp,
+    })
+  }
 }
 
 function keycodeToName(keycode: number): string | null {
-  return CODE_TO_NAME.get(keycode) ?? null
+  return SIDE_MODIFIER_CODE_TO_NAME.get(keycode)
+    ?? CODE_TO_NAME.get(keycode)
+    ?? null
 }
 
-function getModifiers(event: UiohookKeyboardEvent): ShortcutModifier[] {
+function getModifiers(
+  event: UiohookKeyboardEvent,
+): ShortcutModifier[] {
   const modifiers: ShortcutModifier[] = []
   if (event.metaKey)
     modifiers.push('Meta')

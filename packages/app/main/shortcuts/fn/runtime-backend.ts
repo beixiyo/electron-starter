@@ -14,7 +14,10 @@ import { createShortcutGestureEngine } from '@shared/shortcuts'
 import { canUseFnShortcutBackend } from '../capabilities'
 import { FN_SHORTCUT_RUNTIME_PROVIDER } from '../providers'
 import { getShortcutRuntimeEntries } from '../runtime-backend'
-import { isShortcutRuntimeSuspended } from '../suspension'
+import {
+  addShortcutRuntimeSuspensionListener,
+  isShortcutRuntimeSuspended,
+} from '../suspension'
 import { addFnRawEventListener, startFnKeyListener, stopFnKeyListener } from './core'
 
 type FnBinding = ShortcutBinding & { chord: FnShortcutChord }
@@ -28,6 +31,11 @@ const gestureEngine = createShortcutGestureEngine<FnBinding>({
   entries: [],
   isPaused: isShortcutRuntimeSuspended,
   emit: emitFnGestureEvent,
+})
+
+/** backend 与应用同生命周期；暂停只清手势状态，不启停 Fn native listener */
+addShortcutRuntimeSuspensionListener(() => {
+  gestureEngine.cancelActiveGestures()
 })
 
 export const fnShortcutRuntimeBackend: ShortcutRuntimeBackend = {

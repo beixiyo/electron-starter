@@ -7,7 +7,7 @@ export const SHORTCUT_ACTIONS = [
     label: '录音',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'combination' },
+    recordingChord: { fn: 'combination', keyboard: 'any' },
     binding: { gesture: 'press', chord: { source: 'fn', key: 'Space' } },
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'R', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
@@ -17,7 +17,7 @@ export const SHORTCUT_ACTIONS = [
     label: 'Ask',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'single', keyboard: 'combination' },
+    recordingChord: { fn: 'single', keyboard: 'any' },
     binding: { gesture: 'doublePress', chord: { source: 'fn', key: 'Fn' } },
     keyboardBinding: { gesture: 'doublePress', chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
@@ -27,7 +27,7 @@ export const SHORTCUT_ACTIONS = [
     label: '语音听写',
     scope: 'global',
     activation: 'toggle',
-    recordingChord: { fn: 'single', keyboard: 'combination' },
+    recordingChord: { fn: 'single', keyboard: 'any' },
     binding: { gesture: 'press', chord: { source: 'fn', key: 'Fn' } },
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'V', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
@@ -37,7 +37,7 @@ export const SHORTCUT_ACTIONS = [
     label: '标记',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'combination' },
+    recordingChord: { fn: 'combination', keyboard: 'any' },
     binding: { gesture: 'press', chord: { source: 'fn', key: 'Grave' } },
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'B', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
@@ -47,7 +47,7 @@ export const SHORTCUT_ACTIONS = [
     label: '截图',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'combination' },
+    recordingChord: { fn: 'combination', keyboard: 'any' },
     binding: { gesture: 'press', chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'S', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
@@ -116,7 +116,11 @@ export function isShortcutGestureBindingSupportedByAction(
     ? binding.chord.key === 'Fn'
     : binding.chord.modifiers.length === 0
 
-  return action.recordingChord[binding.chord.source] === 'single'
+  const chordShape = action.recordingChord[binding.chord.source]
+  if (chordShape === 'any')
+    return true
+
+  return chordShape === 'single'
     ? isSingle
     : !isSingle
 }
@@ -133,13 +137,16 @@ export type ShortcutActionDefinition = {
   /** `trigger` 每次执行动作；`hold` 按住生效；`toggle` 在开始和结束间切换 */
   readonly activation: 'trigger' | 'hold' | 'toggle'
   /** 设置页允许录制的按键形态 */
-  readonly recordingChord: Readonly<Record<'fn' | 'keyboard', 'single' | 'combination'>>
+  readonly recordingChord: Readonly<Record<'fn' | 'keyboard', ShortcutRecordingChordShape>>
   /** macOS 默认绑定；scope 统一取自 action */
   readonly binding: ShortcutGestureBinding | null
   /** 非 macOS 平台和 Web 的普通键盘默认绑定 */
   readonly keyboardBinding: ShortcutGestureBinding
   readonly supportedGestures: readonly ShortcutGestureType[]
 }
+
+/** 设置页允许录制的按键形态；`any` 同时接受单键和组合键 */
+export type ShortcutRecordingChordShape = 'single' | 'combination' | 'any'
 
 /** 内置 action 的绑定集合 */
 export type ShortcutBindingsByAction = Record<ShortcutActionId, ShortcutBinding | null>

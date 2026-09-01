@@ -1,6 +1,7 @@
 import type { FnNativeEvent } from '@ipc/services/fn/contract'
 import type { ShortcutBindings } from '@shared/shortcuts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resumeShortcutRuntime, suspendShortcutRuntime } from '../suspension'
 import { fnShortcutRuntimeBackend } from './runtime-backend'
 
 const harness = vi.hoisted(() => ({
@@ -35,6 +36,7 @@ vi.mock('../providers', () => ({
 describe('fn runtime backend', () => {
   afterEach(() => {
     fnShortcutRuntimeBackend.reset()
+    resumeShortcutRuntime()
     vi.useRealTimers()
   })
 
@@ -98,6 +100,31 @@ describe('fn runtime backend', () => {
     harness.listener?.({ type: 'reset', timestamp: 301 })
 
     expect(emitted).toEqual(['trigger', 'release'])
+  })
+
+  it('进入 suspension 时立即释放 active hold，且保留 native listener', async () => {
+    vi.useFakeTimers()
+    const emitted: string[] = []
+    const bindings: ShortcutBindings = {
+      voiceDictation: {
+        scope: 'global',
+        gesture: 'hold',
+        chord: { source: 'fn', key: 'Space' },
+      },
+    }
+
+    fnShortcutRuntimeBackend.apply(bindings, {
+      getHandler: () => vi.fn(),
+      canTrigger: () => true,
+      emit: event => emitted.push(event.phase),
+    })
+
+    harness.listener?.(input('down', 1))
+    await vi.advanceTimersByTimeAsync(300)
+    suspendShortcutRuntime()
+
+    expect(emitted).toEqual(['trigger', 'release'])
+    expect(harness.listener).not.toBeNull()
   })
 })
 

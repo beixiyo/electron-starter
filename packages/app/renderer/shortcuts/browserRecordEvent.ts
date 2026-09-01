@@ -1,5 +1,5 @@
-import type { KeyboardShortcutChord, ShortcutRecordEvent } from '@shared/shortcuts'
-import { toBrowserShortcutRecordEvent } from '@shared/shortcuts'
+import type { ActiveKeyboardShortcutEntry, ShortcutRecordEvent } from '@shared/shortcuts'
+import { toBrowserShortcutRecordEvents } from '@shared/shortcuts'
 
 /**
  * 绑定浏览器环境下的快捷键录制事件。
@@ -8,26 +8,26 @@ import { toBrowserShortcutRecordEvent } from '@shared/shortcuts'
 export function bindBrowserShortcutRecordEvents(
   emit: (event: ShortcutRecordEvent) => void,
 ): () => void {
-  const activeChords = new Map<string, KeyboardShortcutChord>()
+  const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    const recordEvent = toBrowserShortcutRecordEvent(event, 'down', activeChords)
-    if (!recordEvent)
+    const recordEvents = toBrowserShortcutRecordEvents(event, 'down', activeEntries)
+    if (recordEvents.length === 0)
       return
 
     event.preventDefault()
     event.stopPropagation()
-    emit(recordEvent)
+    recordEvents.forEach(emit)
   }
 
   const handleKeyUp = (event: KeyboardEvent) => {
-    const recordEvent = toBrowserShortcutRecordEvent(event, 'up', activeChords)
-    if (!recordEvent)
+    const recordEvents = toBrowserShortcutRecordEvents(event, 'up', activeEntries)
+    if (recordEvents.length === 0)
       return
 
     event.preventDefault()
     event.stopPropagation()
-    emit(recordEvent)
+    recordEvents.forEach(emit)
   }
 
   window.addEventListener('keydown', handleKeyDown, true)
@@ -36,6 +36,6 @@ export function bindBrowserShortcutRecordEvents(
   return () => {
     window.removeEventListener('keydown', handleKeyDown, true)
     window.removeEventListener('keyup', handleKeyUp, true)
-    activeChords.clear()
+    activeEntries.clear()
   }
 }

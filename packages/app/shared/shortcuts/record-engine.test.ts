@@ -34,7 +34,7 @@ describe('快捷键录制手势优先级', () => {
     })
     engine.start(['hold'])
 
-    engine.handle(modifierEvent('down', 'Meta', [], 0))
+    engine.handle(modifierEvent('down', 'MetaLeft', [], 0))
     await vi.advanceTimersByTimeAsync(399)
     expect(onDetectedChange).toHaveBeenLastCalledWith(null)
 
@@ -42,7 +42,7 @@ describe('快捷键录制手势优先级', () => {
 
     expect(onDetectedChange).toHaveBeenLastCalledWith({
       gesture: 'hold',
-      chord: { source: 'keyboard', key: 'Meta', modifiers: [] },
+      chord: { source: 'keyboard', key: 'MetaLeft', modifiers: [] },
       minDurationMs: 400,
     })
   })
@@ -56,12 +56,12 @@ describe('快捷键录制手势优先级', () => {
     })
     engine.start(['hold'])
 
-    engine.handle(modifierEvent('down', 'Meta', [], 0))
-    engine.handle(modifierEvent('up', 'Meta', [], 399))
+    engine.handle(modifierEvent('down', 'MetaLeft', [], 0))
+    engine.handle(modifierEvent('up', 'MetaLeft', [], 399))
 
     expect(onDetectedChange).toHaveBeenLastCalledWith({
       gesture: 'press',
-      chord: { source: 'keyboard', key: 'Meta', modifiers: [] },
+      chord: { source: 'keyboard', key: 'MetaLeft', modifiers: [] },
     })
     expect(onPhaseChange).toHaveBeenLastCalledWith('unsupported')
   })
@@ -74,14 +74,14 @@ describe('快捷键录制手势优先级', () => {
     })
     engine.start(['press'])
 
-    engine.handle(modifierEvent('down', 'Meta', [], 0))
-    engine.handle(modifierEvent('down', 'Meta', ['Alt'], 20))
-    engine.handle(modifierEvent('up', 'Meta', [], 40))
-    engine.handle(modifierEvent('up', 'Meta', ['Alt'], 60))
+    engine.handle(modifierEvent('down', 'MetaLeft', [], 0))
+    engine.handle(modifierEvent('down', 'MetaLeft', ['AltRight'], 20))
+    engine.handle(modifierEvent('up', 'MetaLeft', [], 40))
+    engine.handle(modifierEvent('up', 'MetaLeft', ['AltRight'], 60))
 
     expect(onDetectedChange).toHaveBeenLastCalledWith({
       gesture: 'press',
-      chord: { source: 'keyboard', key: 'Meta', modifiers: ['Alt'] },
+      chord: { source: 'keyboard', key: 'MetaLeft', modifiers: ['AltRight'] },
     })
   })
 
@@ -93,21 +93,21 @@ describe('快捷键录制手势优先级', () => {
     })
     engine.start(['press'])
 
-    engine.handle(modifierEvent('down', 'Meta', [], 0))
+    engine.handle(modifierEvent('down', 'MetaLeft', [], 0))
     engine.handle({
       phase: 'down',
       timestamp: 20,
-      chord: { source: 'keyboard', key: 'A', modifiers: ['Meta'] },
+      chord: { source: 'keyboard', key: 'A', modifiers: ['MetaLeft'] },
     })
     engine.handle({
       phase: 'up',
       timestamp: 40,
-      chord: { source: 'keyboard', key: 'A', modifiers: ['Meta'] },
+      chord: { source: 'keyboard', key: 'A', modifiers: ['MetaLeft'] },
     })
 
     expect(onDetectedChange).toHaveBeenLastCalledWith({
       gesture: 'press',
-      chord: { source: 'keyboard', key: 'A', modifiers: ['Meta'] },
+      chord: { source: 'keyboard', key: 'A', modifiers: ['MetaLeft'] },
     })
   })
 })
@@ -122,8 +122,8 @@ function event(phase: 'down' | 'up', timestamp: number): ShortcutRecordEvent {
 
 function modifierEvent(
   phase: 'down' | 'up',
-  key: 'Meta' | 'Alt',
-  modifiers: Array<'Meta' | 'Alt'>,
+  key: 'MetaLeft' | 'AltRight',
+  modifiers: Array<'MetaLeft' | 'AltRight'>,
   timestamp: number,
 ): ShortcutRecordEvent {
   return {

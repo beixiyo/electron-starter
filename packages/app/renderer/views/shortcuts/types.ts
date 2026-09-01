@@ -1,10 +1,12 @@
 import type {
   FnModifier,
+  KeyboardShortcutModifier,
   ShortcutBinding,
   ShortcutChord,
   ShortcutGestureBinding,
   ShortcutGestureType,
   ShortcutModifier,
+  ShortcutRecordingChordShape,
 } from '@shared/shortcuts'
 import {
   getShortcutActionSupportedGestures,
@@ -35,7 +37,7 @@ export type ShortcutAction = {
   /** 该 action 允许录制的手势类型 */
   supportedGestures: GestureType[]
   /** 该 action 允许录制的按键形态 */
-  recordingChord: Readonly<Record<'fn' | 'keyboard', 'single' | 'combination'>>
+  recordingChord: Readonly<Record<'fn' | 'keyboard', ShortcutRecordingChordShape>>
 }
 
 const FN_KEY_DISPLAY: Record<string, string> = {
@@ -76,9 +78,17 @@ const MODIFIER_SEPARATOR = IS_APPLE_PLATFORM
 
 const KEYBOARD_MODIFIER_DISPLAY: Record<string, string> = {
   Meta: MODIFIER_DISPLAY.Meta,
+  MetaLeft: `Left ${MODIFIER_DISPLAY.Meta}`,
+  MetaRight: `Right ${MODIFIER_DISPLAY.Meta}`,
   Control: MODIFIER_DISPLAY.Control,
+  ControlLeft: `Left ${MODIFIER_DISPLAY.Control}`,
+  ControlRight: `Right ${MODIFIER_DISPLAY.Control}`,
   Alt: MODIFIER_DISPLAY.Alt,
+  AltLeft: `Left ${MODIFIER_DISPLAY.Alt}`,
+  AltRight: `Right ${MODIFIER_DISPLAY.Alt}`,
   Shift: MODIFIER_DISPLAY.Shift,
+  ShiftLeft: `Left ${MODIFIER_DISPLAY.Shift}`,
+  ShiftRight: `Right ${MODIFIER_DISPLAY.Shift}`,
 }
 
 const HOTKEY_DISPLAY: Record<string, string> = {
@@ -131,9 +141,10 @@ function formatChord(chord: ShortcutChord): string {
     : ''}${key}`
 }
 
-function formatModifiers(modifiers: ShortcutModifier[]): string {
+function formatModifiers(modifiers: KeyboardShortcutModifier[]): string {
   return modifiers
-    .map(modifier => MODIFIER_DISPLAY[normalizeShortcutModifier(modifier)])
+    .map(modifier => KEYBOARD_MODIFIER_DISPLAY[modifier]
+      ?? MODIFIER_DISPLAY[normalizeShortcutModifier(modifier as ShortcutModifier)])
     .join(MODIFIER_SEPARATOR)
 }
 

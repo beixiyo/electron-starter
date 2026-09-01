@@ -28,15 +28,37 @@ export function resolveKeyGroup(rawToken: string): number[] {
     case 'win':
     case 'windows':
       return META_KEYS
+    case 'metaleft':
+    case 'commandleft':
+      return [UiohookKey.Meta]
+    case 'metaright':
+    case 'commandright':
+      return [UiohookKey.MetaRight]
     case 'control':
     case 'ctrl':
       return CTRL_KEYS
+    case 'controlleft':
+    case 'ctrlleft':
+      return [UiohookKey.Ctrl]
+    case 'controlright':
+    case 'ctrlright':
+      return [UiohookKey.CtrlRight]
     case 'shift':
       return SHIFT_KEYS
+    case 'shiftleft':
+      return [UiohookKey.Shift]
+    case 'shiftright':
+      return [UiohookKey.ShiftRight]
     case 'alt':
     case 'option':
     case 'altgr':
       return ALT_KEYS
+    case 'altleft':
+    case 'optionleft':
+      return [UiohookKey.Alt]
+    case 'altright':
+    case 'optionright':
+      return [UiohookKey.AltRight]
     case 'enter':
     case 'return':
       return [UiohookKey.Enter]

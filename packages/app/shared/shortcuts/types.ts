@@ -197,19 +197,35 @@ export const KEYBOARD_CODES = [
   'PrintScreen',
   'NumLock',
   'ScrollLock',
-  'Meta',
-  'Control',
-  'Alt',
-  'Shift',
+  'MetaLeft',
+  'MetaRight',
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'ShiftLeft',
+  'ShiftRight',
 ] as const
 
 /** 普通键盘快捷键的规范键名类型 */
 export type KeyboardCode = typeof KEYBOARD_CODES[number]
 
-/** 纯修饰键组合选取主键时使用的稳定顺序 */
-export const KEYBOARD_MODIFIER_CODES = ['Meta', 'Control', 'Alt', 'Shift'] as const satisfies readonly KeyboardCode[]
+/** 物理修饰键；顺序同时用于纯修饰键组合的稳定归一化 */
+export const KEYBOARD_MODIFIER_CODES = [
+  'MetaLeft',
+  'MetaRight',
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'ShiftLeft',
+  'ShiftRight',
+] as const satisfies readonly KeyboardCode[]
 
-/** 旧版及浏览器输入名称到规范键名的别名 */
+/** 带物理侧别的键盘修饰键 */
+export type KeyboardModifierCode = typeof KEYBOARD_MODIFIER_CODES[number]
+
+/** 输入边界的非规范键名到持久化键名的别名 */
 export const KEYBOARD_CODE_ALIASES: Readonly<Record<string, KeyboardCode>> = {
   Grave: 'Backquote',
   Left: 'ArrowLeft',
@@ -221,31 +237,36 @@ export const KEYBOARD_CODE_ALIASES: Readonly<Record<string, KeyboardCode>> = {
   Return: 'Enter',
   Esc: 'Escape',
   Del: 'Delete',
-  MetaLeft: 'Meta',
-  MetaRight: 'Meta',
-  ControlLeft: 'Control',
-  ControlRight: 'Control',
-  Ctrl: 'Control',
-  CtrlRight: 'Control',
-  AltLeft: 'Alt',
-  AltRight: 'Alt',
-  ShiftLeft: 'Shift',
-  ShiftRight: 'Shift',
+  CtrlLeft: 'ControlLeft',
+  CtrlRight: 'ControlRight',
 } as const
 
 /** 作为主键使用时，对应的逻辑修饰键 */
 export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, FnModifier>>> = {
-  Meta: 'Meta',
-  Control: 'Control',
-  Alt: 'Alt',
-  Shift: 'Shift',
+  MetaLeft: 'Meta',
+  MetaRight: 'Meta',
+  ControlLeft: 'Control',
+  ControlRight: 'Control',
+  AltLeft: 'Alt',
+  AltRight: 'Alt',
+  ShiftLeft: 'Shift',
+  ShiftRight: 'Shift',
 }
+
+/** 键盘 chord 的 modifier；录制结果使用物理侧别，声明式默认值仍可使用逻辑修饰键 */
+export type KeyboardShortcutModifier = ShortcutModifier | KeyboardModifierCode
 
 /** 普通键盘快捷键 chord */
 export type KeyboardShortcutChord = {
   source: 'keyboard'
   key: KeyboardCode
-  modifiers: ShortcutModifier[]
+  modifiers: KeyboardShortcutModifier[]
+}
+
+/** 单个已按下物理键及其 keydown 时冻结的 keyboard chord */
+export type ActiveKeyboardShortcutEntry = {
+  key: KeyboardCode
+  chord: KeyboardShortcutChord
 }
 
 /** Fn/Globe 快捷键 chord，`Fn` 表示 Fn 键自身 */

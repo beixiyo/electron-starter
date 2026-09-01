@@ -1,8 +1,11 @@
 import type {
+  ActiveKeyboardShortcutEntry,
   FnModifier,
   FnShortcutKey,
   KeyboardCode,
+  KeyboardModifierCode,
   KeyboardShortcutChord,
+  KeyboardShortcutModifier,
   ShortcutBinding,
   ShortcutBindings,
   ShortcutChord,
@@ -19,17 +22,51 @@ import {
 } from './types'
 
 export function shortcutChordsEqual(a: ShortcutChord, b: ShortcutChord): boolean {
-  return a.source === b.source
-    && a.key === b.key
+  if (a.source !== b.source)
+    return false
+
+  if (a.source === 'keyboard' && b.source === 'keyboard') {
+    const left = normalizeKeyboardShortcutChord(a.key, a.modifiers)
+    const right = normalizeKeyboardShortcutChord(b.key, b.modifiers)
+
+    if (isKeyboardModifierCode(left.key) || isKeyboardModifierCode(right.key)) {
+      if (!isKeyboardModifierCode(left.key) || !isKeyboardModifierCode(right.key))
+        return false
+
+      return shortcutModifiersEqual(
+        [left.key, ...left.modifiers],
+        [right.key, ...right.modifiers],
+      )
+    }
+
+    return left.key === right.key
+      && shortcutModifiersEqual(left.modifiers, right.modifiers)
+  }
+
+  return a.key === b.key
     && shortcutModifiersEqual(a.modifiers ?? [], b.modifiers ?? [])
 }
 
-export function shortcutModifiersEqual(a: ShortcutModifier[], b: ShortcutModifier[]): boolean {
-  const left = normalizeShortcutModifiers(a)
-  const right = normalizeShortcutModifiers(b)
+export function shortcutModifiersEqual(
+  a: readonly KeyboardShortcutModifier[],
+  b: readonly KeyboardShortcutModifier[],
+): boolean {
+  const left = groupKeyboardShortcutModifiers(a)
+  const right = groupKeyboardShortcutModifiers(b)
 
-  return left.length === right.length
-    && left.every((modifier, index) => modifier === right[index])
+  if (!sameSet(new Set(left.keys()), new Set(right.keys())))
+    return false
+
+  for (const [family, leftState] of left) {
+    const rightState = right.get(family)!
+    /** 逻辑 modifier 表示该家族至少按住一侧；物理 modifier 则要求侧别集合完全一致 */
+    if (leftState.logical || rightState.logical)
+      continue
+    if (!sameSet(leftState.physical, rightState.physical))
+      return false
+  }
+
+  return true
 }
 
 /** 把外部 JSON 数据归一成当前 ShortcutBinding 结构 */
@@ -132,36 +169,79 @@ export function normalizeKeyboardCode(value: unknown): KeyboardCode | null {
 /**
  * 将浏览器或 uIOhook 捕获的主键和修饰键转换为统一的 keyboard chord
  *
- * 普通组合保留原主键；纯修饰键组合按固定顺序选取主键，使不同按下顺序
- * 得到相同的持久化和运行时结构
+ * 普通组合保留原主键；单个物理修饰键保留左右侧，多个修饰键则按固定
+ * 物理键顺序选取主键，使不同按下顺序得到相同的持久化和运行时结构
  */
 export function normalizeKeyboardShortcutChord(
   key: KeyboardCode,
-  modifiers: ShortcutModifier[],
+  modifiers: KeyboardShortcutModifier[],
 ): KeyboardShortcutChord {
   const mainModifier = KEYBOARD_MODIFIER_BY_CODE[key]
   if (!mainModifier)
-    return { source: 'keyboard', key, modifiers }
+    return {
+      source: 'keyboard',
+      key,
+      modifiers: canonicalizeKeyboardShortcutModifiers(modifiers),
+    }
 
-  const members = new Set<FnModifier>([
-    mainModifier,
-    ...modifiers.filter((modifier): modifier is FnModifier => modifier !== 'Primary'),
-  ])
-  const canonicalKey = KEYBOARD_MODIFIER_CODES.find(code => members.has(KEYBOARD_MODIFIER_BY_CODE[code]!)) ?? key
-  const canonicalModifier = KEYBOARD_MODIFIER_BY_CODE[canonicalKey]
+  const physicalMembers = new Set<KeyboardModifierCode>([key as KeyboardModifierCode])
+  for (const modifier of modifiers) {
+    if (isKeyboardModifierCode(modifier))
+      physicalMembers.add(modifier)
+  }
+
+  const logicalModifiers = modifiers.filter((modifier): modifier is ShortcutModifier => (
+    !isKeyboardModifierCode(modifier)
+      && !hasPhysicalModifier(physicalMembers, normalizeShortcutModifier(modifier))
+  ))
+  const canonicalKey = KEYBOARD_MODIFIER_CODES.find(code => physicalMembers.has(code)) ?? key
 
   return {
     source: 'keyboard',
     key: canonicalKey,
-    modifiers: [
-      ...KEYBOARD_MODIFIER_CODES
-        .map(code => KEYBOARD_MODIFIER_BY_CODE[code]!)
-        .filter(modifier => modifier !== canonicalModifier && members.has(modifier)),
-      ...modifiers.includes('Primary')
-        ? ['Primary' as const]
-        : [],
-    ],
+    modifiers: sortKeyboardShortcutModifiers([
+      ...Array.from(physicalMembers).filter(code => code !== canonicalKey),
+      ...logicalModifiers,
+    ]),
   }
+}
+
+/** 使用当前已按住的物理修饰键，将 KeyboardEvent/uiohook 的逻辑 flags 补全为左右侧 */
+export function specializeKeyboardShortcutModifiers(
+  modifiers: ShortcutModifier[],
+  activeEntries: Iterable<ActiveKeyboardShortcutEntry>,
+): KeyboardShortcutModifier[] {
+  const physicalModifiers = new Set<KeyboardModifierCode>()
+
+  for (const entry of activeEntries) {
+    if (isKeyboardModifierCode(entry.key))
+      physicalModifiers.add(entry.key)
+  }
+
+  return canonicalizeKeyboardShortcutModifiers([
+    ...physicalModifiers,
+    ...modifiers.filter(modifier => (
+      modifier === 'Primary' || !hasPhysicalModifier(physicalModifiers, modifier)
+    )),
+  ])
+}
+
+/** 记录物理键 keydown，并返回该时刻冻结的 keyboard chord */
+export function pressKeyboardShortcutChord<Key>(
+  activeEntries: Map<Key, ActiveKeyboardShortcutEntry>,
+  keyId: Key,
+  key: KeyboardCode,
+  modifiers: ShortcutModifier[],
+): KeyboardShortcutChord {
+  const entry: ActiveKeyboardShortcutEntry = {
+    key,
+    chord: normalizeKeyboardShortcutChord(
+      key,
+      specializeKeyboardShortcutModifiers(modifiers, activeEntries.values()),
+    ),
+  }
+  activeEntries.set(keyId, entry)
+  return entry.chord
 }
 
 /** 判断新的 keyboard chord 是否在已按住的纯修饰键 chord 上继续扩展 */
@@ -173,48 +253,104 @@ export function isKeyboardModifierChordPrefixOf(previous: ShortcutChord, next: S
   if (!previousMembers)
     return false
 
-  const nextMembers = new Set(next.modifiers.filter((modifier): modifier is FnModifier => modifier !== 'Primary'))
+  const nextMembers = getKeyboardModifierChordMembers(next)
+    ?? next.modifiers.filter(modifier => modifier !== 'Primary')
   const nextMainModifier = KEYBOARD_MODIFIER_BY_CODE[next.key]
-  if (nextMainModifier)
-    nextMembers.add(nextMainModifier)
 
-  return previousMembers.every(modifier => nextMembers.has(modifier))
-    && (nextMembers.size > previousMembers.length || !nextMainModifier)
+  return keyboardModifierListContainsAll(nextMembers, previousMembers)
+    && (nextMembers.length > previousMembers.length || !nextMainModifier)
 }
 
-/** 取出 keyup 对应的冻结 chord；纯修饰键组合由任一成员松开结束 */
-export function releaseActiveKeyboardChord<Key>(
-  activeChords: Map<Key, KeyboardShortcutChord>,
+/**
+ * 释放一个物理键，并返回所有依赖该成员的冻结 chord
+ *
+ * 仍按住的键会按当前 modifier 状态重算，避免已经松开的物理修饰键从旧 chord
+ * 重新进入后续输入。返回值按成员数从多到少排序，供录制状态机优先结束完整组合
+ */
+export function releaseActiveKeyboardChords<Key>(
+  activeEntries: Map<Key, ActiveKeyboardShortcutEntry>,
   keyId: Key,
-): KeyboardShortcutChord | null {
-  const ownChord = activeChords.get(keyId)
-  if (!ownChord)
-    return null
+  modifiers: ShortcutModifier[],
+): KeyboardShortcutChord[] {
+  const ownEntry = activeEntries.get(keyId)
+  if (!ownEntry)
+    return []
 
-  activeChords.delete(keyId)
-  let releasedChord = ownChord
-  let releasedMembers = getKeyboardModifierChordMembers(ownChord)
-  if (!releasedMembers)
-    return ownChord
+  const releasedKey = ownEntry.key
+  const releasedChords = Array.from(activeEntries.values())
+    .filter(entry => (
+      entry === ownEntry
+      || keyboardChordContainsPhysicalKey(entry.chord, releasedKey)
+    ))
+    .map(entry => entry.chord)
 
-  for (const candidate of activeChords.values()) {
-    const candidateMembers = getKeyboardModifierChordMembers(candidate)
-    if (!candidateMembers || candidateMembers.length <= releasedMembers.length)
-      continue
-    if (!releasedMembers.every(modifier => candidateMembers.includes(modifier)))
-      continue
-
-    releasedChord = candidate
-    releasedMembers = candidateMembers
+  activeEntries.delete(keyId)
+  for (const entry of activeEntries.values()) {
+    entry.chord = normalizeKeyboardShortcutChord(
+      entry.key,
+      specializeKeyboardShortcutModifiers(modifiers, activeEntries.values()),
+    )
   }
 
-  for (const [activeKeyId, candidate] of activeChords) {
-    const candidateMembers = getKeyboardModifierChordMembers(candidate)
-    if (candidateMembers?.every(modifier => releasedMembers.includes(modifier)))
-      activeChords.delete(activeKeyId)
+  return uniqueKeyboardShortcutChords(releasedChords)
+    .sort((a, b) => b.modifiers.length - a.modifiers.length)
+}
+
+/** 当前物理 modifier 状态是否精确满足 chord；逻辑 modifier 仍表示该家族任一侧 */
+export function keyboardShortcutChordMatchesModifierState(
+  chord: KeyboardShortcutChord,
+  activePhysicalModifiers: ReadonlySet<KeyboardModifierCode>,
+  logicalModifiers: readonly ShortcutModifier[],
+): boolean {
+  const expectedLogical = new Set<FnModifier>()
+  const expectedPhysical = new Map<FnModifier, Set<KeyboardModifierCode>>()
+
+  for (const modifier of chord.modifiers) {
+    if (isKeyboardModifierCode(modifier)) {
+      const logical = KEYBOARD_MODIFIER_BY_CODE[modifier]!
+      expectedLogical.add(logical)
+      const family = expectedPhysical.get(logical) ?? new Set<KeyboardModifierCode>()
+      family.add(modifier)
+      expectedPhysical.set(logical, family)
+      continue
+    }
+
+    expectedLogical.add(normalizeShortcutModifier(modifier))
   }
 
-  return releasedChord
+  if (isKeyboardModifierCode(chord.key)) {
+    const logical = KEYBOARD_MODIFIER_BY_CODE[chord.key]!
+    expectedLogical.add(logical)
+    const family = expectedPhysical.get(logical) ?? new Set<KeyboardModifierCode>()
+    family.add(chord.key)
+    expectedPhysical.set(logical, family)
+  }
+
+  const actualLogical = new Set(logicalModifiers.map(normalizeShortcutModifier))
+  if (!sameSet(expectedLogical, actualLogical))
+    return false
+
+  for (const [logical, expectedFamily] of expectedPhysical) {
+    const actualFamily = new Set(
+      Array.from(activePhysicalModifiers)
+        .filter(code => KEYBOARD_MODIFIER_BY_CODE[code] === logical),
+    )
+    if (!sameSet(expectedFamily, actualFamily))
+      return false
+  }
+
+  return true
+}
+
+/** 读取当前仍按住的物理 modifier */
+export function getActiveKeyboardModifierCodes(
+  activeEntries: Iterable<ActiveKeyboardShortcutEntry>,
+): Set<KeyboardModifierCode> {
+  return new Set(
+    Array.from(activeEntries)
+      .map(entry => entry.key)
+      .filter(isKeyboardModifierCode),
+  )
 }
 
 /** 判断两个 binding 是否会在运行时互相抢占 */
@@ -251,10 +387,6 @@ export function resolveShortcutBindingConflicts(bindings: ShortcutBindings): Sho
 }
 
 /** 把 `Primary` 等抽象修饰键归一为当前平台的真实修饰键 */
-function normalizeShortcutModifiers(modifiers: ShortcutModifier[]): FnModifier[] {
-  return Array.from(new Set(modifiers.map(normalizeShortcutModifier))).sort()
-}
-
 export function normalizeShortcutModifier(modifier: ShortcutModifier): FnModifier {
   if (modifier !== 'Primary')
     return modifier
@@ -283,21 +415,22 @@ function detectApplePlatform(): boolean {
 
 function parseKeyboardShortcutChord(chord: Record<string, unknown>): KeyboardShortcutChord | null {
   const key = normalizeKeyboardCode(chord.key)
-  if (!key)
+  const modifiers = normalizeKeyboardShortcutModifierList(chord.modifiers)
+  if (!key || !modifiers)
     return null
+  if (isKeyboardModifierCode(key)
+    && hasMixedLogicalAndPhysicalModifierFamily([key, ...modifiers])) {
+    return null
+  }
 
-  return normalizeKeyboardShortcutChord(key, normalizeShortcutModifierList(chord.modifiers))
+  return normalizeKeyboardShortcutChord(key, modifiers)
 }
 
-function getKeyboardModifierChordMembers(chord: KeyboardShortcutChord): FnModifier[] | null {
-  const mainModifier = KEYBOARD_MODIFIER_BY_CODE[chord.key]
-  if (!mainModifier || chord.modifiers.includes('Primary'))
+function getKeyboardModifierChordMembers(chord: KeyboardShortcutChord): KeyboardShortcutModifier[] | null {
+  if (!isKeyboardModifierCode(chord.key) || chord.modifiers.includes('Primary'))
     return null
 
-  return Array.from(new Set([
-    mainModifier,
-    ...chord.modifiers.filter((modifier): modifier is FnModifier => modifier !== 'Primary'),
-  ]))
+  return sortKeyboardShortcutModifiers([chord.key, ...chord.modifiers])
 }
 
 function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord | null {
@@ -312,18 +445,209 @@ function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord
     }
   }
 
+  const modifiers = normalizeShortcutModifierList(chord.modifiers)
+  if (!modifiers)
+    return null
+
   return {
     source: 'fn',
     key,
-    modifiers: normalizeShortcutModifierList(chord.modifiers),
+    modifiers,
   }
 }
 
-function normalizeShortcutModifierList(modifiers: unknown): ShortcutModifier[] {
+function normalizeShortcutModifierList(modifiers: unknown): ShortcutModifier[] | null {
   if (!Array.isArray(modifiers))
     return []
 
-  return Array.from(new Set(modifiers.filter(isShortcutModifier)))
+  const normalized = Array.from(new Set(modifiers.filter(isShortcutModifier)))
+  return hasDuplicateLogicalModifierFamily(normalized)
+    ? null
+    : normalized
+}
+
+function normalizeKeyboardShortcutModifierList(modifiers: unknown): KeyboardShortcutModifier[] | null {
+  if (!Array.isArray(modifiers))
+    return []
+
+  const normalized = Array.from(new Set(modifiers.filter(isKeyboardShortcutModifier)))
+  return hasMixedLogicalAndPhysicalModifierFamily(normalized)
+    || hasDuplicateLogicalModifierFamily(normalized)
+    ? null
+    : normalized
+}
+
+function normalizeKeyboardShortcutModifiers(
+  modifiers: readonly KeyboardShortcutModifier[],
+): Array<FnModifier | KeyboardModifierCode> {
+  return canonicalizeKeyboardShortcutModifiers(modifiers).map(modifier => (
+    modifier === 'Primary'
+      ? PRIMARY_MODIFIER
+      : modifier
+  ))
+}
+
+function canonicalizeKeyboardShortcutModifiers(
+  modifiers: Iterable<KeyboardShortcutModifier>,
+): KeyboardShortcutModifier[] {
+  const unique = new Set(modifiers)
+  const physicalModifiers = new Set(
+    Array.from(unique).filter(isKeyboardModifierCode),
+  )
+  const logicalFamilies = new Set<FnModifier>()
+
+  return sortKeyboardShortcutModifiers(unique).filter((modifier) => {
+    if (isKeyboardModifierCode(modifier))
+      return true
+
+    const family = normalizeShortcutModifier(modifier)
+    if (hasPhysicalModifier(physicalModifiers, family) || logicalFamilies.has(family))
+      return false
+
+    logicalFamilies.add(family)
+    return true
+  })
+}
+
+function sortKeyboardShortcutModifiers(
+  modifiers: Iterable<KeyboardShortcutModifier>,
+): KeyboardShortcutModifier[] {
+  const unique = new Set(modifiers)
+  const logicalOrder: readonly ShortcutModifier[] = ['Primary', 'Meta', 'Control', 'Alt', 'Shift']
+
+  return [
+    ...KEYBOARD_MODIFIER_CODES.filter(code => unique.delete(code)),
+    ...logicalOrder.filter(modifier => unique.delete(modifier)),
+  ]
+}
+
+function keyboardModifierListContainsAll(
+  container: readonly KeyboardShortcutModifier[],
+  expected: readonly KeyboardShortcutModifier[],
+): boolean {
+  const remaining = [...container]
+
+  for (const modifier of expected) {
+    const index = remaining.findIndex(candidate => keyboardModifiersMatch(modifier, candidate))
+    if (index < 0)
+      return false
+    remaining.splice(index, 1)
+  }
+
+  return true
+}
+
+function keyboardModifiersMatch(
+  left: KeyboardShortcutModifier,
+  right: KeyboardShortcutModifier,
+): boolean {
+  if (left === right)
+    return true
+  if (left === 'Primary' || right === 'Primary')
+    return false
+
+  const leftPhysical = isKeyboardModifierCode(left)
+  const rightPhysical = isKeyboardModifierCode(right)
+  if (leftPhysical && rightPhysical)
+    return false
+
+  return getLogicalModifier(left) === getLogicalModifier(right)
+}
+
+function hasPhysicalModifier(
+  modifiers: ReadonlySet<KeyboardModifierCode>,
+  logicalModifier: FnModifier,
+): boolean {
+  return Array.from(modifiers).some(code => KEYBOARD_MODIFIER_BY_CODE[code] === logicalModifier)
+}
+
+function getLogicalModifier(modifier: FnModifier | KeyboardModifierCode): FnModifier {
+  return isKeyboardModifierCode(modifier)
+    ? KEYBOARD_MODIFIER_BY_CODE[modifier]!
+    : modifier
+}
+
+function groupKeyboardShortcutModifiers(
+  modifiers: readonly KeyboardShortcutModifier[],
+): Map<FnModifier, KeyboardModifierFamilyState> {
+  const groups = new Map<FnModifier, KeyboardModifierFamilyState>()
+
+  for (const modifier of normalizeKeyboardShortcutModifiers(modifiers)) {
+    const family = getLogicalModifier(modifier)
+    const state = groups.get(family) ?? {
+      logical: false,
+      physical: new Set<KeyboardModifierCode>(),
+    }
+
+    if (isKeyboardModifierCode(modifier))
+      state.physical.add(modifier)
+    else
+      state.logical = true
+    groups.set(family, state)
+  }
+
+  return groups
+}
+
+function hasDuplicateLogicalModifierFamily(
+  modifiers: readonly KeyboardShortcutModifier[],
+): boolean {
+  const families = new Set<FnModifier>()
+
+  for (const modifier of modifiers) {
+    if (isKeyboardModifierCode(modifier))
+      continue
+
+    const family = normalizeShortcutModifier(modifier)
+    if (families.has(family))
+      return true
+    families.add(family)
+  }
+
+  return false
+}
+
+function hasMixedLogicalAndPhysicalModifierFamily(
+  modifiers: readonly KeyboardShortcutModifier[],
+): boolean {
+  const physicalModifiers = new Set(modifiers.filter(isKeyboardModifierCode))
+
+  return modifiers.some(modifier => {
+    if (isKeyboardModifierCode(modifier))
+      return false
+
+    return hasPhysicalModifier(physicalModifiers, normalizeShortcutModifier(modifier))
+  })
+}
+
+function keyboardChordContainsPhysicalKey(
+  chord: KeyboardShortcutChord,
+  key: KeyboardCode,
+): boolean {
+  return chord.key === key || chord.modifiers.includes(key as KeyboardModifierCode)
+}
+
+function uniqueKeyboardShortcutChords(
+  chords: readonly KeyboardShortcutChord[],
+): KeyboardShortcutChord[] {
+  return chords.filter((chord, index) => (
+    chords.findIndex(candidate => shortcutChordsEqual(candidate, chord)) === index
+  ))
+}
+
+function sameSet<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
+  return left.size === right.size
+    && Array.from(left).every(value => right.has(value))
+}
+
+type KeyboardModifierFamilyState = {
+  logical: boolean
+  physical: Set<KeyboardModifierCode>
+}
+
+export function isKeyboardModifierCode(value: unknown): value is KeyboardModifierCode {
+  return typeof value === 'string'
+    && (KEYBOARD_MODIFIER_CODES as readonly string[]).includes(value)
 }
 
 function isShortcutGesture(value: unknown): value is ShortcutGestureType {
@@ -337,6 +661,10 @@ function isShortcutModifier(value: unknown): value is ShortcutModifier {
     || value === 'Control'
     || value === 'Alt'
     || value === 'Shift'
+}
+
+function isKeyboardShortcutModifier(value: unknown): value is KeyboardShortcutModifier {
+  return isShortcutModifier(value) || isKeyboardModifierCode(value)
 }
 
 function isFnShortcutKey(value: unknown): value is FnShortcutKey {

@@ -79,6 +79,7 @@ shortcuts/
 - **Swift 只归一物理输入**：native helper 输出 Fn/Fn combo 的 raw down/up/reset，不判断 press、doublePress、hold、scope 或 action
 - **录制事件统一**：不同 backend 可以提供 `down/up` 或完整 `press`，但设置页只消费 `ShortcutRecordEvent`，不直接感知 Fn IPC、uiohook 或 DOM KeyboardEvent。录制状态机只输出 `gesture + chord`，保存边界才附加 `global/local` scope
 - **抽象修饰键延迟归一**：配置里可以保留 `Primary`，运行时注册和冲突比较再映射为当前平台真实修饰键，避免把跨平台配置写死到某个系统
+- **逻辑修饰键家族不可重复**：`Primary` 解析为当前平台修饰键后，不得再与同家族的 `Meta` 或 `Control` 并存；keyboard 与 Fn chord 使用同一持久化约束
 - **普通键名只有一个持久化命名空间**：keyboard binding 使用 shared `KeyboardCode`；浏览器 code、旧配置别名和 uiohook 名称只在 adapter 边界转换，未知键在写入前拒绝
 - **Fn backend 不拥有业务 UI**：`fn/runtime-backend` 只适配 raw input 并派发统一 runtime 事件；模板业务 handler 由 `main/index.ts` 注入
 - **local keyboard 不依赖 main 进程全局监听**：Electron / Web 的 local keyboard binding 都走 renderer DOM backend；main 进程 keyboard provider 只负责系统级 global binding
