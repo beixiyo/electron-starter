@@ -471,7 +471,6 @@ describe('跨平台快捷键默认值', () => {
       scope: 'global',
       chord: { source: 'keyboard', key: 'R', modifiers: ['Primary', 'Shift'] },
     })
-    expect(DEFAULT_KEYBOARD_BINDINGS.screenshot?.chord.source).toBe('keyboard')
   })
 
   it('由 action activation 声明语音听写的 toggle 手势', () => {

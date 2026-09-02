@@ -1,4 +1,5 @@
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
+import { SCREENSHOT_MIME_TYPE } from '@shared'
 import {
   ScreenshotToolbar,
   SelectionBox,
@@ -20,7 +21,23 @@ export const ScreenshotApp = memo(() => {
     handleCancel,
   } = useScreenshot()
 
-  if (!initData)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!initData) {
+      setImageUrl(null)
+      return
+    }
+
+    const nextImageUrl = URL.createObjectURL(new Blob([initData.bytes], { type: SCREENSHOT_MIME_TYPE }))
+    setImageUrl(nextImageUrl)
+
+    return () => {
+      URL.revokeObjectURL(nextImageUrl)
+    }
+  }, [initData])
+
+  if (!initData || !imageUrl)
     return null
 
   const hasSelection = !!selection && selection.width > 0 && selection.height > 0
@@ -32,8 +49,8 @@ export const ScreenshotApp = memo(() => {
       onMouseDown={ handleMouseDown }
     >
       <img
-        src={ `data:image/png;base64,${initData.base64}` }
-        className="fixed inset-0 size-full object-cover pointer-events-none"
+        src={ imageUrl }
+        className="fixed inset-0 size-full object-fill pointer-events-none"
         draggable={ false }
         alt=""
       />
@@ -51,7 +68,8 @@ export const ScreenshotApp = memo(() => {
             y={ selection.y }
             width={ selection.width }
             height={ selection.height }
-            scaleFactor={ initData.scaleFactor }
+            scaleX={ initData.scaleX }
+            scaleY={ initData.scaleY }
           />
 
           {isConfirmed && (

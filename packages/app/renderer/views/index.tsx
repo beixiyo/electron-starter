@@ -18,13 +18,18 @@ export default function Layout() {
     if (!isElectron()) return
 
     return $ipc.permission.on('required', ({ kinds, reason }) => {
-      const title = reason === 'voice-ime'
-        ? tApp('permission.voiceImeMicrophoneTitle', '允许语音输入使用麦克风')
-        : tApp('permission.recordingMicrophoneTitle', '允许录音使用麦克风')
+      const isScreenshot = reason === 'screenshot-screen'
+      const title = isScreenshot
+        ? tApp('permission.title', '需要以下权限')
+        : reason === 'voice-ime'
+          ? tApp('permission.voiceImeMicrophoneTitle', '允许语音输入使用麦克风')
+          : tApp('permission.recordingMicrophoneTitle', '允许录音使用麦克风')
 
-      const subtitle = reason === 'voice-ime'
-        ? tApp('permission.voiceImeMicrophoneSubtitle', '唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。')
-        : tApp('permission.recordingMicrophoneSubtitle', '开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。')
+      const subtitle = isScreenshot
+        ? tApp('permission.subtitle', '请授予权限以使用该功能')
+        : reason === 'voice-ime'
+          ? tApp('permission.voiceImeMicrophoneSubtitle', '唤起语音输入法后，需要麦克风权限才能显示实时波形并完成转写。')
+          : tApp('permission.recordingMicrophoneSubtitle', '开始录音前需要麦克风权限。点击下方按钮后，系统会弹出 macOS 授权确认。')
 
       ensure(kinds, {
         title,

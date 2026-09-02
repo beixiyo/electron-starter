@@ -3,7 +3,7 @@ import type { ScreenshotBounds } from '@shared'
 /**
  * 选区矩形，坐标系为 CSS 像素（DIP），与 overlay 视口同系
  *
- * 主进程裁剪时会乘以 scaleFactor 转成物理像素，渲染层不做该换算
+ * 主进程裁剪时会乘以实际 scaleX / scaleY 转成物理像素，渲染层不做该换算
  */
 export type SelectionRect = ScreenshotBounds
 

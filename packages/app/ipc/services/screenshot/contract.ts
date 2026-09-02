@@ -4,6 +4,7 @@ import type {
   ScreenshotCancelPayload,
   ScreenshotInitPayload,
   ScreenshotOkPayload,
+  ScreenshotResetPayload,
   ScreenshotStartOptions,
   ScreenshotStartResult,
 } from '@shared'
@@ -23,9 +24,12 @@ export type ScreenshotContract = IpcContract<{
     confirmCapture: (displayId: number, rect: ScreenshotBounds) => void
     saveCapture: (displayId: number, rect: ScreenshotBounds) => void
     cancelCapture: () => void
+    /** overlay mount 后回拉初始化数据，避免一次性 push 早于订阅 */
+    requestInit: () => ScreenshotInitPayload | null
   }
   rendererOn: {
     init: ScreenshotInitPayload
+    reset: ScreenshotResetPayload
     ok: ScreenshotOkPayload
     cancel: ScreenshotCancelPayload
   }

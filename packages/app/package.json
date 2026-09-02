@@ -72,7 +72,6 @@
     "@jl-org/log": "^2.1.1",
     "@nut-tree-fork/nut-js": "4.2.6",
     "electron-updater": "^6.8.9",
-    "node-screenshots": "^0.2.8",
     "rotating-file-stream": "^3.2.9",
     "selection-hook": "^1.0.13",
     "uiohook-napi": "^1.5.4"

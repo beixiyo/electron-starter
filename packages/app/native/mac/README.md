@@ -1,6 +1,6 @@
 # macOS SwiftPM helpers
 
-五个原生 helper 按最低系统版本拆成四个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
+六个原生 helper 按最低系统版本拆成五个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
 
 | package | products | minimum macOS |
 | --- | --- | --- |
@@ -8,6 +8,7 @@
 | `hour-cycle/` | `hour-cycle` | 14.2 |
 | `audio-recorder/` | `audio-recorder` | 14.0 |
 | `audio-monitor/` | `audio-monitor` | 14.2 |
+| `screenshot-capture/` | `screenshot-capture` | 14.0 |
 
 直接检查 package manifest：
 
@@ -16,6 +17,7 @@ swift package dump-package --package-path packages/app/native/mac/accessibility
 swift package dump-package --package-path packages/app/native/mac/hour-cycle
 swift package dump-package --package-path packages/app/native/mac/audio-recorder
 swift package dump-package --package-path packages/app/native/mac/audio-monitor
+swift package dump-package --package-path packages/app/native/mac/screenshot-capture
 ```
 
 `FnListenerCore` 使用独立测试 package，避免生产 helper 解析远程测试依赖：
@@ -32,6 +34,7 @@ resources/native/mac/hour-cycle
 resources/native/mac/fn-listener
 resources/native/mac/audio-monitor
 resources/native/mac/audio-recorder
+resources/native/mac/screenshot-capture
 ```
 
 SwiftPM 编译缓存保留在各 package 的 `.build/` 中，同一 package 的 products 共享缓存。首次或源码变化后会重新编译，后续构建复用增量结果；缓存属于本地产物，不进入 Git

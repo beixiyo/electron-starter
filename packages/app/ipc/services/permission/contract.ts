@@ -21,4 +21,4 @@ export type PermissionRequiredPayload = {
   reason: PermissionRequiredReason
 }
 
-export type PermissionRequiredReason = 'recording' | 'voice-ime'
+export type PermissionRequiredReason = 'recording' | 'voice-ime' | 'screenshot-screen'

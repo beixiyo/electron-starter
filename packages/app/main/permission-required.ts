@@ -17,6 +17,19 @@ export function ensureMicrophonePermissionOrExplain(reason: PermissionRequiredRe
   return false
 }
 
+export function ensureScreenPermissionOrExplain(reason: PermissionRequiredReason): boolean {
+  if (getPermissionStatus('screen') === 'granted') {
+    return true
+  }
+
+  showPermissionRequired({
+    kinds: ['screen'],
+    reason,
+  })
+
+  return false
+}
+
 export function showPermissionRequired(payload: PermissionRequiredPayload): void {
   const mainWindow = windowManager.get(WindowType.MAIN)
   if (!mainWindow || mainWindow.isDestroyed()) {

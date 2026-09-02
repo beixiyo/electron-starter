@@ -3,9 +3,11 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type { ScreenshotContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import {
+  getOverlayInitPayload,
   handleCancelCapture,
   handleConfirmCapture,
   handleSaveCapture,
+  setScreenshotEmitter,
   startCapture,
 } from '@main/screenshot'
 
@@ -28,5 +30,12 @@ export const screenshotService = createIpcService<ScreenshotContract>('screensho
     async cancelCapture(_e) {
       return handleCancelCapture()
     },
+
+    async requestInit(e) {
+      return getOverlayInitPayload((e as IpcMainInvokeEvent).sender.id)
+    },
   },
 })
+
+/** screenshot 模块与 service 相互依赖，通过注入保持文件级依赖单向 */
+setScreenshotEmitter(screenshotService)

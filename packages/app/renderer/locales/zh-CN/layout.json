@@ -2,6 +2,7 @@
   "title": "功能",
   "menu": {
     "recorder": "一起录",
+    "screenshotTest": "截图测试",
     "shortcuts": "快捷键",
     "notifyTest": "通知测试",
     "globalToastTest": "消息窗口",

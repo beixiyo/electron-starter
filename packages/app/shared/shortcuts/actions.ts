@@ -42,16 +42,6 @@ export const SHORTCUT_ACTIONS = [
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'B', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
   },
-  {
-    id: 'screenshot',
-    label: '截图',
-    scope: 'global',
-    activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'any' },
-    binding: { gesture: 'press', chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
-    keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'S', modifiers: ['Primary', 'Shift'] } },
-    supportedGestures: SHORTCUT_GESTURES,
-  },
 ] as const satisfies readonly ShortcutActionDefinition[]
 
 export const MAC_DEFAULT_BINDINGS = Object.fromEntries(

@@ -6,4 +6,5 @@ export const screenshotClient = createServiceClient<ScreenshotContract>('screens
   'confirmCapture',
   'saveCapture',
   'cancelCapture',
+  'requestInit',
 ])

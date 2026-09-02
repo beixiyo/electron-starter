@@ -2,6 +2,7 @@
   "title": "Features",
   "menu": {
     "recorder": "Recording",
+    "screenshotTest": "Screenshot Test",
     "shortcuts": "Shortcuts",
     "notifyTest": "Notifications",
     "globalToastTest": "Message Window",

@@ -45,6 +45,7 @@ mac:
     - Contents/Resources/native/mac/hour-cycle
     - Contents/Resources/native/mac/audio-monitor
     - Contents/Resources/native/mac/audio-recorder
+    - Contents/Resources/native/mac/screenshot-capture
   extendInfo:
     NSCameraUsageDescription: Application requests access to the device's camera.
     NSMicrophoneUsageDescription: Application requests access to the device's microphone.
@@ -63,6 +64,8 @@ mac:
       to: native/mac/audio-monitor
     - from: resources/native/mac/audio-recorder
       to: native/mac/audio-recorder
+    - from: resources/native/mac/screenshot-capture
+      to: native/mac/screenshot-capture
     - from: resources/native/mac/RecorderAPM-LICENSES
       to: native/mac/RecorderAPM-LICENSES
   # 正式分发默认使用 electron-builder 内置公证

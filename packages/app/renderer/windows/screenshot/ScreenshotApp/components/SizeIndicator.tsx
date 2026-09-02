@@ -6,14 +6,15 @@ const LABEL_OFFSET = 26
 /**
  * 选区尺寸提示
  *
- * 乘 scaleFactor 换算成物理像素，与主进程的裁剪口径对齐
+ * 分别乘实际横纵缩放比换算成物理像素，与主进程的裁剪口径对齐
  */
 export const SizeIndicator = memo<SizeIndicatorProps>(({
   x,
   y,
   width,
   height,
-  scaleFactor,
+  scaleX,
+  scaleY,
 }) => {
   return (
     <div
@@ -28,9 +29,9 @@ export const SizeIndicator = memo<SizeIndicatorProps>(({
         top: Math.max(0, y - LABEL_OFFSET),
       } }
     >
-      {Math.round(width * scaleFactor)}
+      {Math.round(width * scaleX)}
       {' x '}
-      {Math.round(height * scaleFactor)}
+      {Math.round(height * scaleY)}
     </div>
   )
 })
@@ -43,6 +44,8 @@ export type SizeIndicatorProps = {
   y: number
   width: number
   height: number
-  /** 当前屏缩放比，用于把 CSS 像素换算成物理像素 */
-  scaleFactor: number
+  /** 当前截图横向物理像素 / CSS 像素比例 */
+  scaleX: number
+  /** 当前截图纵向物理像素 / CSS 像素比例 */
+  scaleY: number
 }

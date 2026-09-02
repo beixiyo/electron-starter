@@ -8,20 +8,21 @@ export type ScreenshotBounds = {
 }
 
 export type ScreenshotInitPayload = {
-  base64: string
+  /** 本次截图会话 id，用于忽略取消后迟到的初始化结果 */
+  captureId: string
+  /** 整屏 PNG 二进制；截图窗转换成 Blob URL 展示，不经过 base64 */
+  bytes: ArrayBuffer
   displayId: number
-  scaleFactor: number
+  /** 截图物理像素 / overlay CSS 像素的横向比例 */
+  scaleX: number
+  /** 截图物理像素 / overlay CSS 像素的纵向比例 */
+  scaleY: number
 }
 
-/**
- * 全局快捷键截图（无渲染端申请方）的兜底消费方角色
- *
- * 主进程在快捷键触发时按当前活跃功能裁决投递目标，并在完成事件 payload 上携带该角色；
- * 渲染端无人持有该 captureId，由声明了对应 `fallbackRole` 的消费者接收
- *
- * 模板内置 `main`（投递给主窗），下游项目按需扩展为联合类型（如 `'recorderNote' | 'askWindow'`）
- */
-export type ScreenshotFallbackTarget = 'main'
+/** 释放截图窗当前底图；captureId 防止迟到事件清掉下一轮截图 */
+export type ScreenshotResetPayload = {
+  captureId: string
+}
 
 /**
  * 截图产物的 MIME 类型
@@ -47,11 +48,6 @@ export type ScreenshotOkPayload = {
    */
   bytes: ArrayBuffer
   bounds: ScreenshotBounds
-  /**
-   * 仅全局快捷键发起的会话携带：标记兜底消费方角色，
-   * 渲染端无人持有该 captureId，由声明了对应 fallbackRole 的消费者接收
-   */
-  fallback?: ScreenshotFallbackTarget
 }
 
 /**

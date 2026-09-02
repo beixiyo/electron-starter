@@ -25,7 +25,7 @@ import { initNativeRecordingPipeline } from './native-recording'
 import { ensureMicrophonePermissionOrExplain } from './permission-required'
 import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
-import { startCaptureFromShortcut } from './screenshot'
+import { warmScreenshotOverlays } from './screenshot'
 import { initSelectionHook } from './selection'
 import { holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync, setupFnKeyIpc } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
@@ -371,7 +371,11 @@ function createMainWindow(): void {
     initTray({ onOpenMain: showOrCreateMainWindow })
     void createWindowsSequentially([
       { type: WindowType.VOICE_IME },
-    ]).then(showFocusNativeDemoWindow)
+    ]).then(() => {
+      showFocusNativeDemoWindow()
+      /** 延迟敏感但不阻塞主窗首屏：排在既有常驻窗之后串行预热截图 renderer */
+      return warmScreenshotOverlays()
+    })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -415,7 +419,6 @@ const SHORTCUT_ACTION_HANDLERS: ShortcutRuntimeHandlers = {
   askAssistant: handleShortcutAction,
   voiceDictation: handleShortcutAction,
   bookmark: handleShortcutAction,
-  screenshot: handleShortcutAction,
 }
 
 function handleShortcutAction(event: ShortcutRuntimeEvent): void {
@@ -432,9 +435,6 @@ function handleShortcutAction(event: ShortcutRuntimeEvent): void {
     case 'bookmark':
       showShortcutActionTestWindow('Bookmark', event)
       return
-    case 'screenshot':
-      handleScreenshotShortcut(event)
-      return
   }
 }
 
@@ -446,12 +446,6 @@ function showShortcutActionTestWindow(label: string, event: ShortcutRuntimeEvent
     `${label} (${formatKeyboardGestureLabel(gesture)})`,
     getShortcutTestTriggerType(event),
   )
-}
-
-function handleScreenshotShortcut(event: ShortcutRuntimeEvent): void {
-  if (event.phase !== 'trigger') return
-
-  void startCaptureFromShortcut()
 }
 
 function formatKeyboardGestureLabel(gesture: ShortcutRuntimeEvent['gesture']): string {

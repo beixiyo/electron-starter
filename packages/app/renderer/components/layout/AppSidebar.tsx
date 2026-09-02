@@ -2,13 +2,14 @@
  * 主窗口的轻量导航栏，承载全局入口并保持 Flowtica 的 64px 导航节奏
  */
 import { NavLink, useLocation } from '@jl-org/react-router'
-import { Bell, Camera, DownloadCloud, Keyboard, Layers3, MessageSquareText } from 'lucide-react'
+import { Bell, Camera, DownloadCloud, Keyboard, Layers3, MessageSquareText, ScanLine } from 'lucide-react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
 
 const NAV_ITEMS = [
   { key: 'recorder', path: '/recorder', Icon: Camera },
+  { key: 'screenshotTest', path: '/screenshot-test', Icon: ScanLine },
   { key: 'shortcuts', path: '/shortcuts', Icon: Keyboard },
   { key: 'notifyTest', path: '/notify-test', Icon: Bell },
   { key: 'globalToastTest', path: '/global-toast-test', Icon: MessageSquareText },
