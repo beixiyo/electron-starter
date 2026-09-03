@@ -1,0 +1,13 @@
+{
+  "permissionDragGuide": {
+    "headline": "Drag <app>{{app}}</app> to the list above to allow {{permission}}",
+    "granted": "{{permission}} enabled",
+    "dismiss": "Dismiss",
+    "noBundle": "Could not locate the app bundle — drag it in from Finder instead",
+    "permission": {
+      "accessibility": "Accessibility",
+      "screen": "Screen & System Audio Recording"
+    },
+    "unconfirmed": "Added to the list — check the switch is on in System Settings"
+  }
+}

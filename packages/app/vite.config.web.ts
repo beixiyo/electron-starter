@@ -58,6 +58,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
           floatingStatusPool: resolve(__dirname, './renderer/windows/floating-status-pool/index.html'),
           globalToast: resolve(__dirname, './renderer/windows/global-toast/index.html'),
           utilityPanelPool: resolve(__dirname, './renderer/windows/utility-panel-pool/index.html'),
+          permissionDragGuide: resolve(__dirname, './renderer/windows/permission-drag-guide/index.html'),
         },
       },
     },

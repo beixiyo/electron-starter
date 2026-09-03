@@ -1,0 +1,13 @@
+{
+  "permissionDragGuide": {
+    "headline": "拖动 <app>{{app}}</app> 到上方列表以允许{{permission}}",
+    "granted": "{{permission}}已开启",
+    "dismiss": "关闭",
+    "noBundle": "定位不到应用包，请从访达手动拖入",
+    "permission": {
+      "accessibility": "辅助功能",
+      "screen": "屏幕与系统音频录制"
+    },
+    "unconfirmed": "已添加到列表，请在系统设置中确认开关已打开"
+  }
+}

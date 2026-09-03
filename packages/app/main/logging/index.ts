@@ -228,6 +228,7 @@ export type MainDiagnosticModule =
   | 'native.recorder'
   | 'native.recording'
   | 'permission'
+  | 'permission.drag-guide'
   | 'recording.recovery'
   | 'recording.state'
   | 'screenshot'

@@ -127,3 +127,26 @@ export const UTILITY_PANEL_POOL_WINDOW_SIZE = {
   minWidth: 280 + SHADOW_INSET * 2,
   minHeight: 180 + SHADOW_INSET * 2,
 } as const
+
+/**
+ * 权限拖拽引导卡片的可见内容尺寸
+ *
+ * 539x147：卡片要横跨系统设置内容区的宽度，读起来才像是「属于上面那个列表」
+ * 做成接近正方形就会变回一个恰好停在旁边的对话框
+ */
+export const PERMISSION_DRAG_GUIDE_CONTENT_SIZE = {
+  width: 539,
+  height: 147,
+} as const
+
+/**
+ * 卡片走原生 vibrancy 毛玻璃，圆角与投影都由系统画在窗口本身上，
+ * 内容即窗口，四周不需要给 CSS 阴影留透明边。保留这个常量是为了让贴合计算的
+ * 「可见内容」语义与其他透明浮窗一致
+ */
+export const PERMISSION_DRAG_GUIDE_SHADOW_INSET = 0
+
+export const PERMISSION_DRAG_GUIDE_WINDOW_SIZE = {
+  width: PERMISSION_DRAG_GUIDE_CONTENT_SIZE.width + PERMISSION_DRAG_GUIDE_SHADOW_INSET * 2,
+  height: PERMISSION_DRAG_GUIDE_CONTENT_SIZE.height + PERMISSION_DRAG_GUIDE_SHADOW_INSET * 2,
+} as const

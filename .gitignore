@@ -35,6 +35,7 @@ packages/app/resources/native/mac/fn-listener
 packages/app/resources/native/mac/focus-check
 packages/app/resources/native/mac/hour-cycle
 packages/app/resources/native/mac/screenshot-capture
+packages/app/resources/native/mac/settings-window
 packages/app/resources/native/mac/RecorderAPM-LICENSES
 
 # Generated WebRTC AEC3 artifact; shim, licenses and reproducible build recipe stay tracked

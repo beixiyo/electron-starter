@@ -9,6 +9,7 @@ let package = Package(
     .library(name: "FnListenerCore", targets: ["FnListenerCore"]),
     .executable(name: "focus-check", targets: ["FocusCheck"]),
     .executable(name: "fn-listener", targets: ["FnListener"]),
+    .executable(name: "settings-window", targets: ["SettingsWindow"]),
   ],
   targets: [
     .target(name: "FnListenerCore"),
@@ -17,6 +18,13 @@ let package = Package(
       linkerSettings: [
         .linkedFramework("Cocoa"),
         .linkedFramework("ApplicationServices"),
+      ],
+    ),
+    .executableTarget(
+      name: "SettingsWindow",
+      linkerSettings: [
+        .linkedFramework("Cocoa"),
+        .linkedFramework("CoreGraphics"),
       ],
     ),
     .executableTarget(

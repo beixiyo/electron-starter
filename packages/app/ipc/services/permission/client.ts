@@ -5,4 +5,7 @@ export const permissionClient = createServiceClient<PermissionContract>('permiss
   'get',
   'request',
   'openSettings',
+  'getDragGuideState',
+  'dragGuideDrag',
+  'dragGuideDismiss',
 ])

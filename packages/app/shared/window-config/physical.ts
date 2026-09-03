@@ -3,6 +3,7 @@ import {
   FLOATING_STATUS_POOL_WINDOW_SIZE,
   GLOBAL_TOAST_WINDOW_SIZE,
   MENUBAR_WINDOW_SIZE,
+  PERMISSION_DRAG_GUIDE_WINDOW_SIZE,
   UTILITY_PANEL_POOL_WINDOW_SIZE,
   VOICE_IME_WINDOW_SIZE,
 } from './metrics'
@@ -162,6 +163,63 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     macFullscreenAuxiliary: true,
     openDevTools: false,
   },
+
+  [WindowType.PERMISSION_DRAG_GUIDE]: {
+    width: PERMISSION_DRAG_GUIDE_WINDOW_SIZE.width,
+    height: PERMISSION_DRAG_GUIDE_WINDOW_SIZE.height,
+    /** 建出来先落在底部居中；真实位置由 `main/permissions/drag-guide` 按系统设置窗口实时贴合 */
+    position: 'bottom-center',
+    title: 'Permission Drag Guide',
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    /**
+     * 卡片是毛玻璃，要透出的是**系统设置这个别的进程的窗口**
+     * CSS 的 backdrop-filter 只能模糊本窗口自己的内容，做不到；
+     * 只有原生 NSVisualEffectView 能采样屏幕上的其他窗口，这就是 vibrancy
+     * popover 材质在浅色下是接近系统弹层的浅灰半透明底
+     *
+     * 代价：圆角由系统按 frameless 窗口的标准半径画（roundedCorners 默认开启），
+     * 不能自定义；投影也改由系统画（hasShadow）
+     */
+    vibrancy: 'popover',
+    /**
+     * 必须固定为 active：默认的 followWindow 只在窗口处于激活态时渲染毛玻璃，
+     * 非激活态 macOS 会把材质压成一块实色。本窗永远不可聚焦、永远 showInactive，
+     * 不写这一条就永远看不到透明效果（实测卡片是一块实心浅灰）
+     */
+    visualEffectState: 'active',
+    /**
+     * `window-factory.ts` 对任意 `alwaysOnTop: true` 的窗口统一 `setAlwaysOnTop(true, 'floating')`，
+     * 层级由此固定为 floating（3），配置里没有也不需要单独的层级字段
+     *
+     * floating 必须高于「系统设置」（普通层级 0），否则卡片会被它盖住——引导整个失去意义
+     *
+     * 不能用更高的 screen-saver（1000）：macOS 的拖拽图像窗口在 kCGDraggingWindowLevel（500），
+     * 低于 screen-saver。本窗虽然只是拖拽**源**、不接收 drop，但按下瞬间光标仍在卡片范围内，
+     * 跟手的图标会被卡片自己盖住，直到光标离开卡片才出现
+     * 浮于全屏 App 之上由 macFullscreenAuxiliary 的 collectionBehavior 保证，与层级无关
+     */
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    /**
+     * 绝不可聚焦
+     *
+     * 卡片一旦抢走焦点，「系统设置」就不再是 key window，拖拽途中它的列表放置高亮会消失，
+     * 用户等于对着一个看起来不接受拖放的窗口在拖。这一条与 showInactive() 是成对的，
+     * 缺任何一半都会让手势本身失效，而不只是观感变差
+     */
+    focusable: false,
+    /** vibrancy 给了窗口实体形状，系统投影据此成立；CSS 投影反而会在毛玻璃外侧留一圈脏边 */
+    hasShadow: true,
+    htmlPath: 'windows/permission-drag-guide/index.html',
+    show: false,
+    /** 用户可能在全屏 App 里操作系统设置；同时带来 canJoinAllSpaces，Stage Manager 下不会被收走 */
+    macFullscreenAuxiliary: true,
+    openDevTools: false,
+  },
 } as const satisfies Record<PhysicalWindowType, WindowConfig>
 
 export type PhysicalWindowType =
@@ -172,3 +230,4 @@ export type PhysicalWindowType =
   | WindowType.GLOBAL_TOAST
   | WindowType.FLOATING_STATUS_POOL
   | WindowType.UTILITY_PANEL_POOL
+  | WindowType.PERMISSION_DRAG_GUIDE

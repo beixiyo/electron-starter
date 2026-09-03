@@ -54,6 +54,8 @@ export enum WindowType {
   FLOATING_STATUS_POOL = 'floating-status-pool',
   /** 工具面板浮窗池 */
   UTILITY_PANEL_POOL = 'utility-panel-pool',
+  /** 系统权限拖拽引导卡片：贴在「系统设置」窗口下方，供用户把 App 拖进隐私列表 */
+  PERMISSION_DRAG_GUIDE = 'permission-drag-guide',
 }
 
 /**

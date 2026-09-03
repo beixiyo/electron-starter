@@ -1,10 +1,10 @@
 # macOS SwiftPM helpers
 
-六个原生 helper 按最低系统版本拆成五个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
+七个原生 helper 按最低系统版本拆成五个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
 
 | package | products | minimum macOS |
 | --- | --- | --- |
-| `accessibility/` | `focus-check`, `fn-listener` | 11.0 |
+| `accessibility/` | `focus-check`, `fn-listener`, `settings-window` | 11.0 |
 | `hour-cycle/` | `hour-cycle` | 14.2 |
 | `audio-recorder/` | `audio-recorder` | 14.0 |
 | `audio-monitor/` | `audio-monitor` | 14.2 |
@@ -30,6 +30,7 @@ swift test --package-path packages/app/native/mac/accessibility/Tests
 
 ```text
 resources/native/mac/focus-check
+resources/native/mac/settings-window
 resources/native/mac/hour-cycle
 resources/native/mac/fn-listener
 resources/native/mac/audio-monitor

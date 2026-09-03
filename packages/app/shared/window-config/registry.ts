@@ -46,6 +46,14 @@ export const LOGICAL_WINDOW_REGISTRY = {
     strategy: 'lazy',
     physicalWindow: WindowType.GLOBAL_TOAST,
   },
+  /**
+   * 懒建：只在用户点「去授权」时出现，一次性用完即销毁
+   * 生命周期由 `main/permissions/drag-guide` 全权掌握，不参与启动预热
+   */
+  [WindowType.PERMISSION_DRAG_GUIDE]: {
+    strategy: 'lazy',
+    physicalWindow: WindowType.PERMISSION_DRAG_GUIDE,
+  },
   [WindowType.MEETING_TOAST]: {
     strategy: 'pool',
     pool: WindowType.FLOATING_STATUS_POOL,
