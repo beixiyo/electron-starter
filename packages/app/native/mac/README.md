@@ -4,7 +4,7 @@
 
 | package | products | minimum macOS |
 | --- | --- | --- |
-| `accessibility/` | `focus-check`, `fn-listener`, `settings-window` | 11.0 |
+| `accessibility/` | `focus-check`, `fn-listener`, `settings-window`, `insert-text` | 11.0 |
 | `hour-cycle/` | `hour-cycle` | 14.2 |
 | `audio-recorder/` | `audio-recorder` | 14.0 |
 | `audio-monitor/` | `audio-monitor` | 14.2 |
@@ -31,6 +31,7 @@ swift test --package-path packages/app/native/mac/accessibility/Tests
 ```text
 resources/native/mac/focus-check
 resources/native/mac/settings-window
+resources/native/mac/insert-text
 resources/native/mac/hour-cycle
 resources/native/mac/fn-listener
 resources/native/mac/audio-monitor

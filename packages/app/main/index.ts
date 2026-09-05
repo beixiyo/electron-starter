@@ -16,6 +16,7 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
 import { join } from 'node:path'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
+import { injectTextToExternalInput } from './external-text-inject'
 import { checkFocusedTextInput } from './focus-check'
 import { createMainDiagnosticLogger, initAppLogging } from './logging'
 import { setupDisplayMediaHandler } from './media/display-media'
@@ -30,7 +31,6 @@ import { initSelectionHook } from './selection'
 import { holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync, setupFnKeyIpc } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
-import { pasteText } from './utils'
 import { createVoiceImeShortcutController } from './voice-ime-shortcut'
 import { createWindowsSequentially, getShortcutTestWindowBounds, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
@@ -223,7 +223,14 @@ async function handleVoiceImeRelease(raw: unknown): Promise<void> {
   windowManager.hide(WindowType.VOICE_IME)
 
   const mockText = '[Test] Voice IME — 这是模拟语音识别结果'
-  await pasteText(mockText)
+  const outcome = await injectTextToExternalInput(mockText)
+  if (outcome.method === 'clipboard') {
+    createMainDiagnosticLogger('voice-ime').warn(
+      'external-text.fallback',
+      'external text insertion fell back to clipboard paste',
+      { reason: outcome.fallbackReason },
+    )
+  }
 }
 
 // ─────────────────────────────────────────────
