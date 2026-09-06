@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process'
 import { getNativeBinaryPath } from './native-bridge'
 
-/** 键盘路径逐块投递，长文本要给足时间；正常几百字在百毫秒量级 */
+/** 粘贴路径要等目标 App 读完剪贴板再写回快照，单次约半秒；留足余量 */
 const INSERT_TEXT_TIMEOUT_MS = 5_000
 
 /**
@@ -48,7 +48,8 @@ export function insertTextAtFocusedInput(text: string, options: InsertTextOption
   })
 }
 
-export type InsertTextMethod = 'ax' | 'keyboard'
+/** ax：辅助功能直写，完全不碰剪贴板；paste：快照 → 写入 → Cmd+V → 写回，用户剪贴板前后内容不变 */
+export type InsertTextMethod = 'ax' | 'paste'
 
 export type InsertTextOptions = {
   /**

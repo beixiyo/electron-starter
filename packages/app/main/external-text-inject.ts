@@ -6,9 +6,9 @@ import { pasteText } from './utils'
 /**
  * 把文本投进前台外部 App 的焦点输入框
  *
- * 剪贴板粘贴会把转写文本留在用户剪贴板里、覆盖用户原先复制的内容。macOS 上有辅助功能
- * 与键盘事件两条不碰剪贴板的路径（见 `insert-text` 辅助程序），所以先走它；
- * 只有原生路径不可用（辅助程序缺失、目标 App 两条路径都不吃）或非 macOS 时才回到粘贴，
+ * 直接调 pasteText 会把转写文本留在用户剪贴板里、覆盖用户原先复制的内容。macOS 上由
+ * `insert-text` 辅助程序先试辅助功能直写，不行再做「快照 → 粘贴 → 写回」，用户剪贴板前后不变；
+ * 只有原生路径不可用（辅助程序缺失、两条路径都失败）或非 macOS 时才回到裸粘贴，
  * 保证文本永远送达、不因新路径的兼容性问题丢掉整段输入
  */
 export async function injectTextToExternalInput(
@@ -40,7 +40,8 @@ export async function injectTextToExternalInput(
   return { method: 'clipboard', fallbackReason }
 }
 
-export type ExternalTextInjectMethod = 'ax' | 'keyboard' | 'clipboard'
+/** ax / paste 见 InsertTextMethod；clipboard 是最后的兜底 pasteText，会把文本留在用户剪贴板 */
+export type ExternalTextInjectMethod = 'ax' | 'paste' | 'clipboard'
 
 export type InjectTextToExternalInputOptions = {
   /**

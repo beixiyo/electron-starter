@@ -32,12 +32,12 @@ describe('外部 App 文本投递策略', () => {
   })
 
   it('两条原生路径都失败时回退剪贴板粘贴并带回原因', async () => {
-    harness.insertTextAtFocusedInput.mockResolvedValue({ ok: false, method: null, reason: 'keyboard-post-failed', app: 'Terminal' })
+    harness.insertTextAtFocusedInput.mockResolvedValue({ ok: false, method: null, reason: 'paste-event-failed', app: 'Terminal' })
 
     const outcome = await injectTextToExternalInput('你好', { platform: 'darwin' })
 
     expect(harness.pasteText).toHaveBeenCalledWith('你好')
-    expect(outcome).toEqual({ method: 'clipboard', fallbackReason: 'keyboard-post-failed' })
+    expect(outcome).toEqual({ method: 'clipboard', fallbackReason: 'paste-event-failed' })
   })
 
   it('辅助程序缺失或崩溃时同样回退，不丢文本', async () => {
