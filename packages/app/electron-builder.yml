@@ -43,6 +43,7 @@ mac:
     - Contents/Resources/native/mac/fn-listener
     - Contents/Resources/native/mac/focus-check
     - Contents/Resources/native/mac/settings-window
+    - Contents/Resources/native/mac/insert-text
     - Contents/Resources/native/mac/hour-cycle
     - Contents/Resources/native/mac/audio-monitor
     - Contents/Resources/native/mac/audio-recorder
@@ -61,6 +62,8 @@ mac:
       to: native/mac/focus-check
     - from: resources/native/mac/settings-window
       to: native/mac/settings-window
+    - from: resources/native/mac/insert-text
+      to: native/mac/insert-text
     - from: resources/native/mac/hour-cycle
       to: native/mac/hour-cycle
     - from: resources/native/mac/audio-monitor
