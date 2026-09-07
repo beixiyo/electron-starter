@@ -34,7 +34,18 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: true,
     htmlPath: 'index.html',
     autoHideMenuBar: true,
-    show: false,
+    /**
+     * 创建即显示，不等 ready-to-show
+     *
+     * ready-to-show 要等渲染进程首次「非空绘制」，而 #root 原本是空的，首帧要等 React
+     * 提交完成才有，冷启动期间窗口完全不可见。此前用独立 splash 窗补这段空白，代价是
+     * 多一个渲染进程加四路兜底销毁；改为主窗立即显示，首帧由 index.html 内不依赖 React
+     * 的静态 splash 提供，backgroundColor 与 splash 同为白底，窗口露面到 HTML 解析完之间不闪色
+     *
+     * 注意 Electron 只对尚未显示的窗口发 ready-to-show，主进程的启动期初始化已改挂 did-finish-load
+     */
+    show: true,
+    backgroundColor: '#ffffff',
     openDevTools: false,
   },
 

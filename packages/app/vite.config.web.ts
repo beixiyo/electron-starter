@@ -51,7 +51,6 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       rollupOptions: {
         input: {
           index: resolve(__dirname, './renderer/index.html'),
-          splash: resolve(__dirname, './renderer/windows/splash/index.html'),
           voiceIme: resolve(__dirname, './renderer/windows/voice-ime/index.html'),
           screenshot: resolve(__dirname, './renderer/windows/screenshot/index.html'),
           menubar: resolve(__dirname, './renderer/windows/menubar/index.html'),

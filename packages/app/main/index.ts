@@ -12,8 +12,7 @@ import { startSystemPreferencesListener } from '@ipc/services/system-preferences
 import { initAutoUpdater } from '@ipc/services/update/service'
 import { voiceImeToRenderer } from '@ipc/services/voice-ime/toRenderer'
 import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUT_ACTIONS, WindowType } from '@shared'
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron'
-import { join } from 'node:path'
+import { app, ipcMain, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
 import { injectTextToExternalInput } from './external-text-inject'
@@ -296,55 +295,7 @@ function showOrCreateMainWindow(): void {
   createMainWindow()
 }
 
-const SPLASH_WINDOW_SIZE = {
-  width: 256,
-  height: 220,
-} as const
-
-function createSplashWindow(): BrowserWindow {
-  const splash = new BrowserWindow({
-    width: SPLASH_WINDOW_SIZE.width,
-    height: SPLASH_WINDOW_SIZE.height,
-    frame: false,
-    transparent: true,
-    hasShadow: false,
-    roundedCorners: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    movable: false,
-    center: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  })
-
-  if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    splash.loadURL(`${process.env.ELECTRON_RENDERER_URL}/windows/splash/index.html`)
-  }
-  else {
-    splash.loadFile(join(app.getAppPath(), 'out', 'renderer', 'windows', 'splash', 'index.html'))
-  }
-
-  return splash
-}
-
 function createMainWindow(): void {
-  const splash = createSplashWindow()
-
-  /**
-   * splash 兜底销毁：正常路径是主窗 ready-to-show，但主窗加载失败/渲染进程崩溃/先被关闭时
-   * ready-to-show 永不触发，置顶透明 splash 及其渲染进程会永活。三路兜底共用此幂等销毁
-   */
-  const destroySplash = (): void => {
-    clearTimeout(splashFallbackTimer)
-    if (!splash.isDestroyed()) splash.destroy()
-  }
-
-  /** 渲染进程挂死等一切未覆盖异常路径的最后兜底 */
-  const splashFallbackTimer = setTimeout(destroySplash, 15_000)
-
   const mainWindow = windowManager.create(WindowType.MAIN, {
     ...(process.platform === 'darwin'
       ? {
@@ -361,19 +312,12 @@ function createMainWindow(): void {
     setupFnKeyIpc(mainWindow)
   }
 
-  /** 主窗先于 ready-to-show 被关闭（启动即退出/崩溃销毁）时回收 splash */
-  mainWindow.on('closed', destroySplash)
-
-  /** 主框架加载失败后不再有 ready-to-show；-3（ERR_ABORTED，如导航中断/重试）不算失败，等后续加载 */
-  mainWindow.webContents.on('did-fail-load', (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3) destroySplash()
-  })
-
-  mainWindow.once('ready-to-show', () => {
-    destroySplash()
-    mainWindow.show()
-
-    /** 主窗口显示后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
+  /**
+   * 主窗创建即显示（见 PHYSICAL_WINDOW_CONFIGS[MAIN]），首帧由 index.html 内的静态 splash 提供；
+   * Electron 只对尚未显示的窗口发 ready-to-show，启动期的一次性初始化改挂 did-finish-load
+   */
+  mainWindow.webContents.once('did-finish-load', () => {
+    /** 主窗口加载完成后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
     /** SELECTION / SHORTCUT_TEST 按需懒创建，不在此列 */
     initTray({ onOpenMain: showOrCreateMainWindow })
     void createWindowsSequentially([

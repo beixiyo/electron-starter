@@ -31,10 +31,101 @@
         http://localhost:*
         ws://localhost:*;
     " />
+
+  <!--
+    React 挂载前的静态 splash。主窗创建即显示（不再等 ready-to-show，也不再开独立 splash 窗），
+    #root 里的骨架保证首帧就有内容；React 首次提交会清空 #root 把它换掉
+    必须内联：dev 下 tailwind.css 由 JS 注入，此时尚未加载
+  -->
+  <style>
+    .app-splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      background: #fff;
+      user-select: none;
+    }
+
+    /*
+      球宽 S=48px，球2 left=S/2=24px，横移距离=S=48px
+      球2 最右端 = 24 + 48 + 48 = 120px，轨道据此保持视觉居中
+    */
+    .app-splash__balls {
+      position: relative;
+      width: 120px;
+      height: 48px;
+    }
+
+    .app-splash__balls span {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background-color: #5989ff;
+      animation: app-splash-swing 2s ease-in-out infinite;
+    }
+
+    .app-splash__balls span:nth-of-type(2) {
+      left: 24px;
+      border: 1px solid rgba(89, 137, 255, 0.3);
+      background-color: rgba(24, 71, 224, 0.15);
+      backdrop-filter: blur(10px);
+      animation-delay: -1s;
+    }
+
+    .app-splash__balls span::before {
+      position: absolute;
+      bottom: -8px;
+      left: 50%;
+      width: 26px;
+      height: 4px;
+      border-radius: 50%;
+      background: radial-gradient(rgba(0, 0, 0, 0.14), transparent);
+      content: "";
+      transform: translateX(-50%);
+    }
+
+    .app-splash__title {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #999;
+      letter-spacing: 0.4px;
+    }
+
+    @keyframes app-splash-swing {
+      0%, 100% {
+        transform: translateX(0);
+      }
+      50% {
+        transform: translateX(48px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .app-splash__balls span {
+        animation: none;
+      }
+    }
+  </style>
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <div class="app-splash">
+      <div class="app-splash__balls" aria-hidden="true">
+        <span></span>
+        <span></span>
+      </div>
+      <div class="app-splash__title">Demo</div>
+    </div>
+  </div>
   <script type="module" src="./main.tsx"></script>
 </body>
 
