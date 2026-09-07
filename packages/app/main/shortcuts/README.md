@@ -75,7 +75,7 @@ shortcuts/
 - **键盘手势状态机共享**：全局 uiohook 和窗口内 DOM backend 都复用 `shared/shortcuts/gesture-engine.ts`，避免 press / doublePress / hold 的判断在不同平台漂移
 - **快捷键录制状态机共享**：设置页录制复用 `shared/shortcuts/record-engine.ts`，录制层只负责把 native / uiohook / DOM 事件归一为 `ShortcutRecordEvent`
 - **runtime 暂停统一**：`suspension.ts` 在录制期间同时暂停 Fn 与全局 keyboard gesture engine
-- **uiohook 共享生命周期**：`global/gesture` 和 `record/detector` 均通过 `uiohook-lifecycle` 共用同一个 Worker。首次消费者启动 native hook，后续只增减消费者引用与业务 listener；消费者归零不调用 `uIOhook.stop()`，Worker 已 `unref()` 并随 App 进程退出。`uiohook-napi` 的 native abort 无法由 Node Worker 隔离，不得把按会话 start/stop 加回来，也不得在 Electron 主线程直接调用
+- **uiohook 共享生命周期**：`global/gesture` 和 `record/detector` 均通过 `uiohook-lifecycle` 共用同一个 Worker。首次消费者启动 native hook，后续只增减消费者引用与业务 listener；消费者归零不调用 `uIOhook.stop()`，Worker 已 `unref()` 并随 App 进程退出。`uiohook-napi` 的 native abort 无法由 Node Worker 隔离，不得把按会话 start/stop 加回来，也不得在 Electron 主线程直接调用。同理，主进程任何地方都不得**值导入** `uiohook-napi`（哪怕只为了 `UiohookKey` 常量）：addon 会按 Environment 各注册一次 cleanup hook，但其运行状态是进程级静态变量，主线程与 Worker 各 `hook_stop()` 一次会在退出时崩溃；键码统一从 `uiohook-key.ts` 取，只有 `uiohook-worker.ts` 允许值导入
 - **Swift 只归一物理输入**：native helper 输出 Fn/Fn combo 的 raw down/up/reset，不判断 press、doublePress、hold、scope 或 action
 - **录制事件统一**：不同 backend 可以提供 `down/up` 或完整 `press`，但设置页只消费 `ShortcutRecordEvent`，不直接感知 Fn IPC、uiohook 或 DOM KeyboardEvent。录制状态机只输出 `gesture + chord`，保存边界才附加 `global/local` scope
 - **抽象修饰键延迟归一**：配置里可以保留 `Primary`，运行时注册和冲突比较再映射为当前平台真实修饰键，避免把跨平台配置写死到某个系统

@@ -10,7 +10,7 @@ import {
   pressKeyboardShortcutChord,
   releaseActiveKeyboardChords,
 } from '@shared/shortcuts'
-import { UiohookKey } from 'uiohook-napi'
+import { UiohookKey } from '../uiohook-key'
 import { acquireHook, addUiohookKeyboardListeners, releaseHook } from '../uiohook-lifecycle'
 
 const IGNORED_KEY_CODES: ReadonlySet<number> = new Set([

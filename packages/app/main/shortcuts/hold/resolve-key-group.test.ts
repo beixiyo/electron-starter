@@ -1,5 +1,5 @@
 /** 验证全局运行时将物理修饰键侧别解析为正确的 uiohook keycode */
-import { UiohookKey } from 'uiohook-napi'
+import { UiohookKey } from '../uiohook-key'
 import { describe, expect, it } from 'vitest'
 import { resolveKeyGroup } from './resolve-key-group'
 

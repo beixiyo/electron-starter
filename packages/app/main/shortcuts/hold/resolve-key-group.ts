@@ -1,4 +1,4 @@
-import { UiohookKey } from 'uiohook-napi'
+import { UiohookKey } from '../uiohook-key'
 
 const keyLookup = buildKeyLookup()
 const isMac = process.platform === 'darwin'

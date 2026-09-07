@@ -1,6 +1,6 @@
 /** 验证 uiohook 录制边界保留左右物理修饰键，并输出可持久化 chord */
 import type { UiohookKeyboardEvent } from 'uiohook-napi'
-import { UiohookKey } from 'uiohook-napi'
+import { UiohookKey } from '../uiohook-key'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { startRecordShortcutDetection, stopRecordShortcutDetection } from './detector'
 
