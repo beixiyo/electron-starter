@@ -7,6 +7,8 @@ import { cn } from 'utils'
 import { Z } from '../../../constants/z-index'
 import { useNestedLayerPriority } from '../../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../../Animate'
+import type { FloatingArrowConfig } from '../../FloatingArrow'
+import { FloatingArrow } from '../../FloatingArrow'
 import { SafePortal } from '../../SafePortal'
 import { CONTAINER_CLASSNAME } from '../constants'
 import { useClickOutside } from '../hooks/useClickOutside'
@@ -14,6 +16,7 @@ import { usePickerFloating } from '../hooks/usePickerFloating'
 
 interface PickerBaseProps {
   isOpen: boolean
+  disabled?: boolean
   setOpen: (open: boolean) => void
   trigger: React.ReactNode
   dropdown: React.ReactNode
@@ -21,10 +24,10 @@ interface PickerBaseProps {
   offset?: number
   onClickOutside?: () => void
   onDismiss?: (reason: PickerDismissReason) => void
-  onConfirm?: () => void
   onBlur?: () => void
   className?: string
   dropdownClassName?: string
+  arrow?: FloatingArrowConfig
   dropdownZIndex?: number
   error?: boolean
   errorMessage?: React.ReactNode
@@ -33,17 +36,18 @@ interface PickerBaseProps {
 
 export const PickerBase = memo<PickerBaseProps>(({
   isOpen,
+  disabled = false,
   setOpen,
   trigger,
   dropdown,
   placement = 'bottom-start',
-  offset = 4,
+  offset = 8,
   onClickOutside,
   onDismiss,
-  onConfirm,
   onBlur,
   className,
   dropdownClassName,
+  arrow = true,
   dropdownZIndex,
   error,
   errorMessage,
@@ -53,12 +57,18 @@ export const PickerBase = memo<PickerBaseProps>(({
   const triggerRef = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const { style, shouldAnimate } = usePickerFloating({
+  const {
+    style,
+    shouldAnimate,
+    arrowProps,
+  } = usePickerFloating({
     enabled: isOpen,
     triggerRef,
     dropdownRef,
     placement,
     offset,
+    arrow,
+    bordered: theme !== 'light',
   })
 
   useClickOutside({
@@ -67,10 +77,8 @@ export const PickerBase = memo<PickerBaseProps>(({
     dropdownRef,
     onClickOutside,
     onClose: () => {
-      if (onDismiss)
-        onDismiss('outside')
-      else
-        setOpen(false)
+      if (onDismiss) onDismiss('outside')
+      else setOpen(false)
       onBlur?.()
     },
   })
@@ -79,22 +87,13 @@ export const PickerBase = memo<PickerBaseProps>(({
   const layerPriority = useNestedLayerPriority(dropdownZIndex ?? Z.dropdown)
 
   useKeyboardLayer({
-    active: isOpen,
-    keys: onConfirm
-      ? ['Escape', 'Enter']
-      : ['Escape'],
+    active: isOpen && shouldAnimate && !disabled,
+    keys: ['Escape'],
     priority: layerPriority,
     allowRepeat: false,
-    onKeyDown: (event) => {
-      if (event.key === 'Enter') {
-        onConfirm?.()
-        return
-      }
-
-      if (onDismiss)
-        onDismiss('escape')
-      else
-        setOpen(false)
+    onKeyDown: () => {
+      if (onDismiss) onDismiss('escape')
+      else setOpen(false)
       onBlur?.()
     },
   })
@@ -111,10 +110,13 @@ export const PickerBase = memo<PickerBaseProps>(({
       } }
       className={ cn(
         CONTAINER_CLASSNAME,
+        'relative',
         theme !== 'light' && 'border border-border',
+        arrowProps && 'overflow-visible',
         dropdownClassName,
       ) }
     >
+      { arrowProps && <FloatingArrow { ...arrowProps } /> }
       { dropdown }
     </AnimateShow>
   )

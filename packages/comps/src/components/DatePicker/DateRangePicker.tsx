@@ -27,7 +27,8 @@ const InnerDateRangePicker = forwardRef<DateRangePickerRef, DateRangePickerProps
   renderTrigger,
   onTriggerClick,
   placement = 'bottom-start',
-  offset = 4,
+  offset = 8,
+  arrow,
   format: dateFormat,
   startPlaceholder: propsStartPlaceholder,
   endPlaceholder: propsEndPlaceholder,
@@ -55,8 +56,10 @@ const InnerDateRangePicker = forwardRef<DateRangePickerRef, DateRangePickerProps
   use12Hours = false,
   minuteStep = 1,
   quickTimeStep,
+  enableQuickTimePopover = true,
+  enableQuickTimeScrollAnimation = false,
   enableTimeKeyboardInput = true,
-  enableTimeUnitPopover = true,
+  enableTimeUnitPopover = false,
   enableTimeUnitScrollAnimation = true,
   enableTimeInputWheel = true,
   icon,
@@ -267,9 +270,7 @@ const InnerDateRangePicker = forwardRef<DateRangePickerRef, DateRangePickerProps
         onClear={ handleClear }
         onInputClick={ handleInputClick }
         onIconClick={ () => handleInputClick(iconTarget) }
-        iconLabel={ iconTarget === 'start'
-          ? startPlaceholder
-          : endPlaceholder }
+        iconLabel={ t('datePicker.placeholder') }
         inputClassName={ inputClassName }
         icon={ icon }
         clearIcon={ clearIcon }
@@ -283,18 +284,61 @@ const InnerDateRangePicker = forwardRef<DateRangePickerRef, DateRangePickerProps
       />
     )
 
+  const dropdown = (
+    <CalendarComponent
+      currentMonth={ currentMonth }
+      onCurrentMonthChange={ setCurrentMonth }
+      onSelect={ handleDateSelect }
+      disabledDate={ disabledDate }
+      minDate={ minDate }
+      maxDate={ maxDate }
+      className={ calendarClassName }
+      weekStartsOn={ weekStartsOn }
+      rangeMode
+      enableRangeHoverPreview={ enableRangeHoverPreview }
+      selectedRange={ internalValue }
+      selectingType={ selectingType }
+      onSelectingTypeChange={ setSelectingType }
+      tempDate={ tempDate }
+      onDateHover={ setTempDate }
+      precision={ precision }
+      use12Hours={ use12Hours }
+      onMouseLeave={ () => setTempDate(null) }
+      onTimeChange={ changeTime }
+      onConfirm={ () => void handleConfirm() }
+      confirmLoading={ confirming }
+      prevIcon={ prevIcon }
+      nextIcon={ nextIcon }
+      superPrevIcon={ superPrevIcon }
+      superNextIcon={ superNextIcon }
+      timeIcon={ timeIcon }
+      timeDropdownClassName={ timeDropdownClassName }
+      timeDropdownZIndex={ timeDropdownZIndex }
+      extraFooter={ extraFooter }
+      renderCell={ renderCell }
+      minuteStep={ minuteStep }
+      quickTimeStep={ quickTimeStep }
+      enableQuickTimePopover={ enableQuickTimePopover }
+      enableQuickTimeScrollAnimation={ enableQuickTimeScrollAnimation }
+      enableTimeKeyboardInput={ enableTimeKeyboardInput }
+      enableTimeUnitPopover={ enableTimeUnitPopover }
+      enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
+      enableTimeInputWheel={ enableTimeInputWheel }
+      onAddTime={ onAddTime }
+    />
+  )
+
   return (
     <PickerBase
       isOpen={ isOpen }
+      disabled={ disabled }
       setOpen={ setOpen }
       trigger={ triggerContent }
       placement={ placement }
       offset={ offset }
+      arrow={ arrow }
       onClickOutside={ onClickOutside }
       onDismiss={ handleCancel }
-      onConfirm={ () => {
-        void handleConfirm()
-      } }
       onBlur={ handleBlur }
       className={ className }
       dropdownClassName={ dropdownClassName }
@@ -303,51 +347,7 @@ const InnerDateRangePicker = forwardRef<DateRangePickerRef, DateRangePickerProps
       errorMessage={ actualError
         ? actualErrorMessage
         : validationMessage }
-      dropdown={
-        <CalendarComponent
-          currentMonth={ currentMonth }
-          onCurrentMonthChange={ setCurrentMonth }
-          onSelect={ handleDateSelect }
-          disabledDate={ disabledDate }
-          minDate={ minDate }
-          maxDate={ maxDate }
-          className={ calendarClassName }
-          weekStartsOn={ weekStartsOn }
-          rangeMode={ true }
-          enableRangeHoverPreview={ enableRangeHoverPreview }
-          selectedRange={ internalValue }
-          selectingType={ selectingType }
-          onSelectingTypeChange={ setSelectingType }
-          tempDate={ tempDate }
-          onDateHover={ setTempDate }
-          precision={ precision }
-          use12Hours={ use12Hours }
-          onMouseLeave={ () => setTempDate(null) }
-          onTimeChange={ (date) => {
-            changeTime(date)
-          } }
-          onConfirm={ () => {
-            void handleConfirm()
-          } }
-          confirmLoading={ confirming }
-          prevIcon={ prevIcon }
-          nextIcon={ nextIcon }
-          superPrevIcon={ superPrevIcon }
-          superNextIcon={ superNextIcon }
-          timeIcon={ timeIcon }
-          timeDropdownClassName={ timeDropdownClassName }
-          timeDropdownZIndex={ timeDropdownZIndex }
-          extraFooter={ extraFooter }
-          renderCell={ renderCell }
-          minuteStep={ minuteStep }
-          quickTimeStep={ quickTimeStep }
-          enableTimeKeyboardInput={ enableTimeKeyboardInput }
-          enableTimeUnitPopover={ enableTimeUnitPopover }
-          enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }
-          enableTimeInputWheel={ enableTimeInputWheel }
-          onAddTime={ onAddTime }
-        />
-       }
+      dropdown={ dropdown }
     />
   )
 })

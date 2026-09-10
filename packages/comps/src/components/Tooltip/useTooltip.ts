@@ -1,13 +1,13 @@
 /**
  * Tooltip 的策略层：组合触发器交互与浮层定位，并叠加「触发器尺寸变化时自动隐藏」
  */
-import type { FloatingArrowConfig } from '../FloatingArrow'
-import type { TooltipPlacement, TooltipTrigger } from './index'
 import { useKeyboardLayer, useResizeObserver } from 'hooks'
 import { useRef } from 'react'
 import { Z } from '../../constants/z-index'
 import { useFloatingTrigger } from '../../hooks/useFloatingTrigger'
+import type { FloatingArrowConfig } from '../FloatingArrow'
 import { useFloatingLayer } from '../FloatingArrow'
+import type { TooltipPlacement, TooltipTrigger } from './index'
 
 export function useTooltip(options: UseTooltipOptions) {
   const {
@@ -78,8 +78,7 @@ export function useTooltip(options: UseTooltipOptions) {
         return
       }
 
-      if (autoHideOnResize && isOpen)
-        close()
+      if (autoHideOnResize && isOpen) close()
     },
   )
 

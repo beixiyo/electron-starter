@@ -1,3 +1,4 @@
+import type { TargetAndTransition, Transition } from 'motion/react'
 import type { HTMLAttributes, ReactNode, Ref } from 'react'
 
 /**
@@ -35,6 +36,31 @@ export type TanstackVirtualListProps<T> = {
    * @default 5
    */
   overscan?: number
+
+  /**
+   * 可选的虚拟行布局动画
+   *
+   * 开启后由虚拟列表负责滚动坐标和测量，Motion 负责数据增删、换序产生的
+   * 可见行位移与出入场动画；只动画已挂载的可见行和 overscan 行
+   * @default undefined
+   */
+  layoutAnimation?: VirtualListLayoutAnimationOptions<T>
+
+  /**
+   * 让一组行的尺寸由同一个进度逐帧驱动，而不是由 DOM 测量决定
+   *
+   * 折叠/展开这类「一整段高度整体变化」的场景，如果直接增删行，
+   * virtualizer 的 totalSize 与后续行 start 会在同一帧跳到终态，动画只能作为
+   * 贴纸叠在上面：中途进入可视区的行没有 FLIP 起点，必然直接落在终点位置，
+   * 与仍在收缩的内容重叠
+   *
+   * 这里让这些行留在行模型里、保持挂载，用 `resizeItem` 逐帧改写每一行的尺寸
+   * （手风琴式：靠前的行满高、边缘行被裁、之后的行为 0），让 virtualizer 的几何
+   * 本身成为动画的唯一真相源；后续行、滚动锚定、可视范围推进因此全部自洽，
+   * 起播时也不需要挂载或卸载任何东西
+   * @default undefined
+   */
+  sizeTransition?: VirtualSizeTransitionOptions<T>
 
   /**
    * 测量时直接复用缓存尺寸，完全跳过 DOM 测量
@@ -118,6 +144,87 @@ export type VirtualScrollToOptions = {
 }
 
 /**
+ * 通用虚拟行布局动画配置
+ *
+ * 虚拟列表固定使用 `layout="position"`，避免动态高度卡片在换序时被缩放；
+ * 尺寸驱动动画（sizeTransition）进行期间几何已经逐帧连续，位移动画会自动停用
+ */
+export type VirtualListLayoutAnimationOptions<T> = {
+  /**
+   * 行 key 未变化、仅内容尺寸变化时是否继续播放外层布局动画
+   * 内部已经负责高度动画的动态行应关闭，避免两层动画先后追赶同一高度
+   * @default true
+   */
+  animateSizeChanges?: boolean
+  /** 跨 key 或跨分组移动时使用的 Motion layoutId */
+  getLayoutId?: (item: T, index: number) => string | undefined
+  /**
+   * 新增数据项的初始状态；滚动导致的普通虚拟行挂载不会播放
+   * @default { opacity: 0 }
+   */
+  initial?: false | TargetAndTransition
+  /**
+   * 数据项的常驻状态
+   * @default { opacity: 1 }
+   */
+  animate?: TargetAndTransition
+  /**
+   * 删除数据项的退出状态；滚动导致的普通虚拟行卸载不会播放
+   * @default { opacity: 0 }
+   */
+  exit?: TargetAndTransition
+  /** Motion 布局、进入和退出动画的过渡配置 */
+  transition?: Transition
+}
+
+/** 尺寸驱动的方向 */
+export type VirtualSizeTransitionDirection = 'collapse' | 'expand'
+
+/**
+ * 尺寸驱动行的规格
+ *
+ * 同一 `group` 的行必须在数据里连续出现，它们共用一个进度：
+ * collapse 时整组从满高缩到 0，expand 时从 0 长到满高；满高取每行的
+ * 实测高度（展开时量挂载节点的内容高度，未挂载的行按 estimateSize）
+ */
+export type VirtualSizeTransitionSpec = {
+  /** 所属驱动组，同组行共用一个进度值 */
+  group: string | number
+  /** collapse 从满高动到 0，expand 从 0 动到满高 */
+  direction: VirtualSizeTransitionDirection
+}
+
+/**
+ * 尺寸驱动动画配置
+ *
+ * 组件只负责「逐帧把尺寸写进 virtualizer」这一通用机制，
+ * 哪些行进入驱动、何时切回普通行都由调用方决定
+ */
+export type VirtualSizeTransitionOptions<T> = {
+  /** 返回该行的驱动规格；返回 undefined 表示该行按普通行测量 */
+  getSpec: (item: T, index: number) => VirtualSizeTransitionSpec | undefined
+  /**
+   * 某个驱动组播完的回调（含 prefers-reduced-motion 下的立即结束）
+   * 调用方据此把该组的行切回普通行（收起的组通常是移出行模型）
+   */
+  onSettled: (group: string | number) => void
+  /**
+   * 驱动过渡。默认使用 duration-first spring，时长与距离解耦，
+   * 分组长短不改变收放手感
+   * @default { type: 'spring', visualDuration: 0.32, bounce: 0, restDelta: 0.5, restSpeed: 10 }
+   */
+  transition?: Transition
+  /**
+   * 动画距离上限（px），超出部分瞬时完成
+   *
+   * 收放由用户点击组头触发时，组头必在视口内，组体超出一个视口的部分本来就
+   * 看不见；夹取同时给了动画速度一个上界，长分组不会既慢又要驱动大量行
+   * @default 滚动容器的 clientHeight
+   */
+  maxDistance?: number
+}
+
+/**
  * 分组虚拟列表的单个分组定义
  */
 export interface VirtualGroupSection<T> {
@@ -162,18 +269,38 @@ export interface VirtualGroupItemCtx<T> {
 }
 
 /**
+ * 收放动画期间行所属的驱动组
+ *
+ * - `items:<section>`：整组 item 行，收起时从满高缩到 0、展开时从 0 长到满高
+ * - `preview:<section>`：展开时的收起态预览行，从预览高度缩到 0；收起时预览行
+ *   直接作为普通行出现在组体下方，动画结束时几何已经是终态
+ */
+export type VirtualGroupRowTransition = {
+  group: string
+  direction: VirtualSizeTransitionDirection
+}
+
+/**
  * 扁平化后的异构虚拟行
  */
-export type VirtualGroupRow<T>
-  = | { type: 'header', key: string, section: VirtualGroupSection<T>, expanded: boolean }
-    | { type: 'item', key: string, section: VirtualGroupSection<T>, item: T, ctx: VirtualGroupItemCtx<T> }
-    | { type: 'preview', key: string, section: VirtualGroupSection<T> }
-    | { type: 'loader', key: string, section: VirtualGroupSection<T> }
+export type VirtualGroupRow<T> =
+  | { type: 'header'; key: string; section: VirtualGroupSection<T>; expanded: boolean }
+  | {
+    type: 'item'
+    key: string
+    section: VirtualGroupSection<T>
+    item: T
+    ctx: VirtualGroupItemCtx<T>
+    /** 收放动画期间该行所属的驱动组 */
+    transition?: VirtualGroupRowTransition
+  }
+  | { type: 'preview'; key: string; section: VirtualGroupSection<T>; transition?: VirtualGroupRowTransition }
+  | { type: 'loader'; key: string; section: VirtualGroupSection<T> }
 
 /**
  * 分组虚拟列表属性
  *
- * 组件自身即滚动容器（继承 TanstackVirtualList），必须通过 className/style 给定高度上限。
+ * 组件自身即滚动容器（继承 TanstackVirtualList），必须通过 className/style 给定高度上限
  * 所有分组共用一个滚动条与一个虚拟化实例，组头/卡片/收起预览/loading 都是虚拟行
  */
 export type VirtualGroupListProps<T> = {
@@ -225,6 +352,22 @@ export type VirtualGroupListProps<T> = {
   overscan?: number
 
   /**
+   * 可选的分组虚拟行布局动画；layoutId 仅应用于 item 行
+   * @default undefined
+   */
+  layoutAnimation?: VirtualGroupLayoutAnimationOptions<T>
+
+  /**
+   * 分组收放动画；不传则收放为瞬时切换
+   *
+   * 开启后，任何原因导致的展开态翻转（点击组头 / 预览、受控 expanded 改变）
+   * 都会播放：收放期间整组 item 行留在行模型里、保持挂载，尺寸由同一个进度
+   * 逐帧驱动，virtualizer 的几何逐帧跟随动画，组后面的行不会先跳到终态再补动画
+   * @default undefined
+   */
+  collapseAnimation?: VirtualGroupCollapseAnimationOptions
+
+  /**
    * 同 TanstackVirtualListProps.useCachedMeasurements
    * @default false
    */
@@ -251,6 +394,34 @@ export type VirtualGroupListProps<T> = {
   /** 所有分组拍平后无任何行时渲染的空态内容 */
   empty?: ReactNode
 
+  /** 虚拟内容容器类名，用于约束内容宽度而保持滚动条贴外层边缘 */
+  contentClassName?: string
+
   /** 滚动容器元素 ref（滚动位置保存/恢复等场景） */
   scrollRef?: Ref<HTMLDivElement>
 } & Omit<HTMLAttributes<HTMLDivElement>, 'children'>
+
+/** 分组虚拟列表的布局动画配置 */
+export type VirtualGroupLayoutAnimationOptions<T> =
+  & Omit<VirtualListLayoutAnimationOptions<VirtualGroupRow<T>>, 'getLayoutId'>
+  & {
+    /** 为业务 item 提供跨分组共享布局标识 */
+    getItemLayoutId?: (item: T, ctx: VirtualGroupItemCtx<T>) => string | undefined
+  }
+
+/**
+ * 分组收放动画配置
+ */
+export type VirtualGroupCollapseAnimationOptions = {
+  /**
+   * 收放过渡。默认 duration-first spring，时长与折叠距离解耦：
+   * 3 项和 300 项的分组收放手感一致
+   * @default { type: 'spring', visualDuration: 0.32, bounce: 0, restDelta: 0.5, restSpeed: 10 }
+   */
+  transition?: Transition
+  /**
+   * 动画距离上限（px），超出部分瞬时完成
+   * @default 滚动容器的 clientHeight
+   */
+  maxDistance?: number
+}

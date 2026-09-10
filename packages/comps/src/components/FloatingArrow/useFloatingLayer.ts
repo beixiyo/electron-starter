@@ -52,6 +52,8 @@ export function useFloatingLayer(
         placement: position.placement,
         centerOffset: arrowState.centerOffset,
         size: arrowState.options.size,
+        tipRadius: arrowState.options.tipRadius,
+        baseRadius: arrowState.options.baseRadius,
         bordered,
         fill: arrowState.fill,
         className: arrowState.options.className,

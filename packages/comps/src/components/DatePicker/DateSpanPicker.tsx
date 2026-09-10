@@ -1,6 +1,5 @@
 'use client'
 
-import type { DateSpanPickerProps, DateSpanPickerRef, DateSpanPickerTriggerContext } from './types'
 import { useLatestCallback } from 'hooks'
 import { forwardRef, memo } from 'react'
 import { formatDatePickerDate } from 'utils'
@@ -12,14 +11,15 @@ import { DateSpanCalendar } from './DateSpanCalendar'
 import { useDateRangePickerSession } from './hooks/useDateRangePickerSession'
 import { useDateSpanSelection } from './hooks/useDateSpanSelection'
 import { usePickerState } from './hooks/usePickerState'
+import type { DateSpanPickerProps, DateSpanPickerRef, DateSpanPickerTriggerContext } from './types'
 import { getFormatByPrecision } from './utils'
 
 const EMPTY_DATE_SPAN = { start: null, end: null }
 
 /**
- * 在同一日历中连续选择单日或日期区间的 Picker。
+ * 在同一日历中连续选择单日或日期区间的 Picker
  *
- * 点选规则固定为：空 → 单日 → 区间 → 新单日；再次点击当前单日则清空。
+ * 点选规则固定为：空 → 单日 → 区间 → 新单日；再次点击当前单日则清空
  */
 const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>(({
   value,
@@ -34,7 +34,8 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
   renderTrigger,
   onTriggerClick,
   placement = 'bottom-start',
-  offset = 4,
+  offset = 8,
+  arrow,
   format: dateFormat,
   placeholder: propsPlaceholder,
   separator = ' ~ ',
@@ -108,7 +109,7 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
   } = useDateSpanSelection({
     externalValue: actualValue,
     initialValue: actualValue ?? defaultValue ?? EMPTY_DATE_SPAN,
-    onChange: nextValue => handleChangeVal(nextValue, undefined as any),
+    onChange: (nextValue) => handleChangeVal(nextValue, undefined as any),
     onDraftChange: () => resetRejection(),
   })
 
@@ -174,34 +175,66 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
   const triggerContent = renderTrigger
     ? renderTrigger(defaultTriggerContext)
     : trigger
-      ? <div onClick={ handleToggle }>{ trigger }</div>
-      : (
-          <SpanPickerInput
-            displayValue={ displayValue }
-            placeholder={ placeholder }
-            disabled={ disabled }
-            showClear={ showClear }
-            error={ !!actualError || confirmRejected }
-            canShowClear={ defaultTriggerContext.canShowClear }
-            onClear={ handleClear }
-            onClick={ handleToggle }
-            inputClassName={ inputClassName }
-            icon={ icon }
-            clearIcon={ clearIcon }
-            triggerVariant={ triggerVariant }
-          />
-        )
+    ? <div onClick={ handleToggle }>{ trigger }</div>
+    : (
+      <SpanPickerInput
+        displayValue={ displayValue }
+        placeholder={ placeholder }
+        disabled={ disabled }
+        showClear={ showClear }
+        error={ !!actualError || confirmRejected }
+        canShowClear={ defaultTriggerContext.canShowClear }
+        onClear={ handleClear }
+        onClick={ handleToggle }
+        inputClassName={ inputClassName }
+        icon={ icon }
+        clearIcon={ clearIcon }
+        triggerVariant={ triggerVariant }
+      />
+    )
+
+  const dropdown = (
+    <DateSpanCalendar
+      currentMonth={ currentMonth }
+      onCurrentMonthChange={ setCurrentMonth }
+      value={ internalValue }
+      tempDate={ tempDate }
+      onSelect={ selectDate }
+      onDateHover={ setTempDate }
+      disabledDate={ disabledDate }
+      minDate={ minDate }
+      maxDate={ maxDate }
+      className={ calendarClassName }
+      weekStartsOn={ weekStartsOn }
+      enableRangeHoverPreview={ enableRangeHoverPreview }
+      onMouseLeave={ () => setTempDate(null) }
+      onConfirm={ () => {
+        void handleConfirm()
+      } }
+      confirmLoading={ confirming }
+      yearRange={ yearRange }
+      prevIcon={ prevIcon }
+      nextIcon={ nextIcon }
+      superPrevIcon={ superPrevIcon }
+      superNextIcon={ superNextIcon }
+      timeIcon={ timeIcon }
+      extraFooter={ extraFooter }
+      renderCell={ renderCell }
+      onAddTime={ onAddTime }
+    />
+  )
 
   return (
     <PickerBase
       isOpen={ isOpen }
+      disabled={ disabled }
       setOpen={ setOpen }
       trigger={ triggerContent }
       placement={ placement }
       offset={ offset }
+      arrow={ arrow }
       onClickOutside={ onClickOutside }
       onDismiss={ handleCancel }
-      onConfirm={ () => { void handleConfirm() } }
       onBlur={ handleBlur }
       className={ className }
       dropdownClassName={ dropdownClassName }
@@ -210,34 +243,7 @@ const InnerDateSpanPicker = forwardRef<DateSpanPickerRef, DateSpanPickerProps>((
       errorMessage={ actualError
         ? actualErrorMessage
         : validationMessage }
-      dropdown={
-        <DateSpanCalendar
-          currentMonth={ currentMonth }
-          onCurrentMonthChange={ setCurrentMonth }
-          value={ internalValue }
-          tempDate={ tempDate }
-          onSelect={ selectDate }
-          onDateHover={ setTempDate }
-          disabledDate={ disabledDate }
-          minDate={ minDate }
-          maxDate={ maxDate }
-          className={ calendarClassName }
-          weekStartsOn={ weekStartsOn }
-          enableRangeHoverPreview={ enableRangeHoverPreview }
-          onMouseLeave={ () => setTempDate(null) }
-          onConfirm={ () => { void handleConfirm() } }
-          confirmLoading={ confirming }
-          yearRange={ yearRange }
-          prevIcon={ prevIcon }
-          nextIcon={ nextIcon }
-          superPrevIcon={ superPrevIcon }
-          superNextIcon={ superNextIcon }
-          timeIcon={ timeIcon }
-          extraFooter={ extraFooter }
-          renderCell={ renderCell }
-          onAddTime={ onAddTime }
-        />
-      }
+      dropdown={ dropdown }
     />
   )
 })
@@ -252,12 +258,10 @@ function formatDateSpan(
   format: string,
   separator: string,
 ): string {
-  if (!start)
-    return ''
+  if (!start) return ''
 
   const formattedStart = formatDatePickerDate(start, { dateFormat: format })
-  if (!end)
-    return formattedStart
+  if (!end) return formattedStart
 
   return `${formattedStart}${separator}${formatDatePickerDate(end, { dateFormat: format })}`
 }

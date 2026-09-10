@@ -1,10 +1,11 @@
 'use client'
 
+import { useClickOutside, useFloatingPosition, useKeyboardLayer, useLatestCallback } from 'hooks'
 import type { Variants } from 'motion/react'
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
-import { useClickOutside, useFloatingPosition, useKeyboardLayer, useLatestCallback } from 'hooks'
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { forwardRef, memo, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { focusElement } from 'utils/keyboard'
 import { Z } from '../../constants/z-index'
 import { useNestedLayerPriority } from '../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../Animate'
@@ -50,6 +51,10 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
     : internalOpen
   /** 菜单内容引用 */
   const menuRef = useRef<HTMLDivElement>(null)
+  /** 打开前的焦点，用于关闭后恢复 */
+  const previousFocusedRef = useRef<HTMLElement | null>(null)
+  /** 标记是否曾经打开，避免首次关闭态触发焦点恢复 */
+  const wasOpenRef = useRef(false)
   /** 鼠标点击位置的虚拟 reference */
   const [virtualReference, setVirtualReference] = useState<DOMRect | null>(null)
 
@@ -72,10 +77,19 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
 
   /**
    * 打开菜单
+   *
+   * 默认以鼠标点为虚拟 reference；传入 `options.anchor` 时改以锚元素的包围盒定位，
+   * 菜单左缘对齐锚的左缘、出现在其下方，不随右键落点漂移
    */
-  const handleOpen = useLatestCallback((event: MouseEvent) => {
+  const handleOpen = useLatestCallback((event: MouseEvent, options?: ContextMenuOpenOptions) => {
     event.preventDefault()
     event.stopPropagation()
+
+    if (!isOpen) {
+      previousFocusedRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    }
 
     if (isControlled) {
       /** 受控模式：通知外部状态变化 */
@@ -86,6 +100,14 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
       /** 非受控模式：更新内部状态 */
       setInternalOpen(true)
       onOpen?.()
+    }
+
+    const anchor = options?.anchor
+    if (anchor) {
+      setVirtualReference(anchor instanceof Element
+        ? anchor.getBoundingClientRect()
+        : anchor)
+      return
     }
 
     /** 设置虚拟 reference 为鼠标点击位置 */
@@ -123,7 +145,7 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
   /**
    * 处理菜单内容点击，如果启用 closeOnClick 则关闭菜单
    */
-  const handleMenuClick = useCallback((event: ReactMouseEvent) => {
+  const handleMenuClick = useLatestCallback((event: ReactMouseEvent) => {
     if (closeOnClick) {
       /** 检查是否点击在忽略选择器区域内 */
       if (closeOnClickIgnoreSelector) {
@@ -139,7 +161,7 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
       event.stopPropagation()
       handleClose()
     }
-  }, [closeOnClick, closeOnClickIgnoreSelector])
+  })
 
   /** 菜单不走 Portal，嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
   const layerPriority = useNestedLayerPriority(
@@ -156,13 +178,43 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
     onKeyDown: handleClose,
   })
 
+  useEffect(() => {
+    if (!isOpen) return
+
+    wasOpenRef.current = true
+    if (!previousFocusedRef.current) {
+      previousFocusedRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    }
+
+    const raf = requestAnimationFrame(() => {
+      const menu = menuRef.current
+      if (!menu) return
+
+      focusElement(menu)
+    })
+
+    return () => {
+      cancelAnimationFrame(raf)
+
+      if (!wasOpenRef.current) return
+
+      wasOpenRef.current = false
+      const previous = previousFocusedRef.current
+      previousFocusedRef.current = null
+      if (!previous || !document.contains(previous)) return
+
+      focusElement(previous)
+    }
+  }, [isOpen, menuRef, previousFocusedRef])
+
   /**
    * 监听全局右键事件（仅在非受控模式下）
    */
   useEffect(() => {
     /** 受控模式下不监听全局事件 */
-    if (isControlled)
-      return
+    if (isControlled) return
 
     const handleContextMenu = (event: MouseEvent) => {
       handleOpen(event)
@@ -173,7 +225,7 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
     return () => {
       window.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [isControlled])
+  }, [handleOpen, isControlled])
 
   /**
    * 点击外部关闭菜单
@@ -193,11 +245,11 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
    * 暴露给外部的方法
    */
   useImperativeHandle(ref, () => ({
-    open: (event: MouseEvent) => {
-      handleOpen(event)
+    open: (event: MouseEvent, options?: ContextMenuOpenOptions) => {
+      handleOpen(event, options)
     },
     close: handleClose,
-  }))
+  }), [handleClose, handleOpen])
 
   return (
     <AnimateShow
@@ -207,6 +259,8 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
         'fixed z-dropdown rounded-2xl bg-background shadow-lg',
         className,
       ) }
+      role="menu"
+      tabIndex={ -1 }
       style={ {
         ...floatingStyle,
         width: `${width}px`,
@@ -279,13 +333,26 @@ export type ContextMenuProps = {
 }
 
 /**
+ * `ContextMenuRef.open` 的定位选项
+ */
+export type ContextMenuOpenOptions = {
+  /**
+   * 定位锚：传元素或包围盒时，菜单左缘对齐锚的左缘、出现在锚下方（越界仍会翻转 / 平移），
+   * 位置与右键落点无关；省略则以鼠标点定位
+   */
+  anchor?: Element | DOMRect
+}
+
+/**
  * ContextMenu 组件的 Ref
  */
 export interface ContextMenuRef {
   /**
    * 手动打开菜单
+   *
+   * @param options 定位选项，见 {@link ContextMenuOpenOptions}
    */
-  open: (event: MouseEvent) => void
+  open: (event: MouseEvent, options?: ContextMenuOpenOptions) => void
   /**
    * 手动关闭菜单
    */

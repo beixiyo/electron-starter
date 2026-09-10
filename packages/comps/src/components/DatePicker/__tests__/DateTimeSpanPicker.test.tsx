@@ -101,7 +101,7 @@ describe('dateTimeSpanPicker', () => {
     expect(initialValue.end).toBeNull()
     expect(initialValue.hasTime).toBe(false)
 
-    fireEvent.click(screen.getByRole('checkbox', { name: '添加时间' }))
+    fireEvent.click(screen.getByRole('switch', { name: '添加时间' }))
 
     const timeValue = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
     expect(timeValue.hasTime).toBe(true)
@@ -122,7 +122,7 @@ describe('dateTimeSpanPicker', () => {
 
     expect(rangedValue.end?.getTime()).toBe(expectedEnd.getTime())
 
-    fireEvent.click(screen.getByRole('checkbox', { name: '添加时间' }))
+    fireEvent.click(screen.getByRole('switch', { name: '添加时间' }))
 
     const clearedTimeValue = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
     expect(clearedTimeValue.hasTime).toBe(false)
@@ -130,7 +130,7 @@ describe('dateTimeSpanPicker', () => {
     expect(clearedTimeValue.end).toBeNull()
   })
 
-  it('日期段开启 Add time 后保留日期，并按外部配置生成结束时刻', async () => {
+  it('日期段开启 Add time 后保留日期，并按默认偏移生成结束时刻', async () => {
     const onChange = vi.fn()
     const startDate = addDays(startOfMonth(new Date()), 9)
     const endDate = addDays(startDate, 2)
@@ -139,7 +139,7 @@ describe('dateTimeSpanPicker', () => {
     fireEvent.click(screen.getByText('选择日期'))
     fireEvent.click(await screen.findByRole('button', { name: format(startDate, 'yyyy-MM-dd') }))
     fireEvent.click(screen.getByRole('button', { name: format(endDate, 'yyyy-MM-dd') }))
-    fireEvent.click(screen.getByRole('checkbox', { name: '添加时间' }))
+    fireEvent.click(screen.getByRole('switch', { name: '添加时间' }))
 
     const value = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
     expect(value.hasTime).toBe(true)
@@ -150,7 +150,7 @@ describe('dateTimeSpanPicker', () => {
     expect(value.end?.getMinutes()).toBe(expectedEndTime.getMinutes())
   })
 
-  it('已有单日开始时刻时，点击其他日期按外部配置生成区间结束时刻', async () => {
+  it('已有单日开始时刻时，点击其他日期支持配置结束时刻偏移', async () => {
     const onChange = vi.fn()
     renderWithI18n(
       <DateTimeSpanPicker
@@ -159,7 +159,7 @@ describe('dateTimeSpanPicker', () => {
           end: null,
           hasTime: true,
         } }
-        defaultEndTimeOffsetMinutes={ 15 }
+        defaultEndTimeOffsetMinutes={ 30 }
         onChange={ onChange }
       />,
     )
@@ -169,7 +169,7 @@ describe('dateTimeSpanPicker', () => {
 
     const value = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
     expect(value.start?.getTime()).toBe(parseISO('2026-07-04T16:49:00').getTime())
-    expect(value.end?.getTime()).toBe(parseISO('2026-07-06T17:04:00').getTime())
+    expect(value.end?.getTime()).toBe(parseISO('2026-07-06T17:19:00').getTime())
   })
 
   it('跨午夜时把偏移后的时分保留在已选结束日', () => {
@@ -185,13 +185,12 @@ describe('dateTimeSpanPicker', () => {
             end: parseISO('2026-07-05T00:00:00'),
             hasTime: false,
           } }
-          defaultEndTimeOffsetMinutes={ 15 }
           onChange={ onChange }
           open
         />,
       )
 
-      fireEvent.click(screen.getByRole('checkbox', { name: '添加时间', hidden: true }))
+      fireEvent.click(screen.getByRole('switch', { name: '添加时间', hidden: true }))
 
       const value = onChange.mock.calls.at(-1)?.[0] as DateTimeSpanPickerValue
       expect(value.start?.getTime()).toBe(parseISO('2026-07-04T23:50:00').getTime())
@@ -283,13 +282,13 @@ describe('dateTimeSpanPicker', () => {
 
     expect(screen.getByRole('alert').textContent).toBe('结束时间不得早于开始时间')
 
-    const confirmButton = screen.getByRole('button', { name: '完成' })
+    const confirmButton = screen.getByRole('button', { name: '确认' })
     expect(confirmButton).toHaveProperty('disabled', true)
     fireEvent.click(confirmButton)
     fireEvent.keyDown(document, { key: 'Enter' })
 
     expect(onConfirm).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: '完成' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
   })
 
   it('将调用方的 Start / End 业务校验映射到对应时刻字段', async () => {
@@ -312,6 +311,34 @@ describe('dateTimeSpanPicker', () => {
     expect(endHour.closest('[aria-invalid="true"]')).toBeNull()
   })
 
+  it('使用左右方向键在 Start 与 End 的时间片段之间连续移动焦点', async () => {
+    renderWithI18n(
+      <DateTimeSpanPicker
+        value={ {
+          start: parseISO('2026-07-04T10:15:00'),
+          end: parseISO('2026-07-04T11:30:00'),
+          hasTime: true,
+        } }
+        open
+        precision="minute"
+      />,
+    )
+
+    const [startHour, endHour] = await screen.findAllByRole('textbox', { name: '时' })
+    const [startMinute] = await screen.findAllByRole('textbox', { name: '分' })
+
+    startMinute.focus()
+    fireEvent.keyDown(startMinute, { key: 'ArrowRight' })
+    expect(document.activeElement).toBe(endHour)
+
+    fireEvent.keyDown(endHour, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(startMinute)
+
+    startHour.focus()
+    fireEvent.keyDown(startHour, { key: 'ArrowLeft' })
+    expect(document.activeElement).toBe(startHour)
+  })
+
   it('透传 enableTimeKeyboardInput 与 enableTimeUnitPopover 到内部 TimePicker', async () => {
     renderWithI18n(
       <DateTimeSpanPicker
@@ -324,7 +351,7 @@ describe('dateTimeSpanPicker', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('checkbox', { name: '添加时间' }))
+    fireEvent.click(await screen.findByRole('switch', { name: '添加时间' }))
 
     expect(screen.queryByRole('textbox', { name: '时' })).toBeNull()
     expect(screen.queryByRole('button', { name: '时' })).toBeNull()

@@ -1,14 +1,18 @@
-// oxlint-disable no-unused-vars
 'use client'
 
 import type { Recorder } from '@jl-org/tool'
+import type { LiveWaveAudioProps, RecordingControls } from './types'
 import { useTheme } from 'hooks'
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { cn } from 'utils'
-import { normalizeAudioLevel } from './audioLevel'
 import { DEFAULT_PROPS } from './constants'
-import { useCanvasResize, useExternalStream, useMicrophone, useProcessingAnimation, useWaveformDrawer } from './hooks'
-import type { LiveWaveAudioProps, RecordingControls } from './types'
+import {
+  useCanvasResize,
+  useExternalStream,
+  useMicrophone,
+  useProcessingAnimation,
+  useWaveformDrawer,
+} from './hooks'
 
 /**
  * @link https://ui.elevenlabs.io/r/live-waveform.json
@@ -21,12 +25,9 @@ import type { LiveWaveAudioProps, RecordingControls } from './types'
 export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((props, ref) => {
   const {
     className,
-    // oxlint-disable-next-line no-unused-vars
     externalStream,
-    // oxlint-disable-next-line no-unused-vars
     deviceId,
     preferredMimeTypes,
-    // oxlint-disable-next-line no-unused-vars
     barColor,
     state = DEFAULT_PROPS.state,
     barWidth = DEFAULT_PROPS.barWidth,
@@ -41,11 +42,8 @@ export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((
     historySize = DEFAULT_PROPS.historySize,
     updateRate = DEFAULT_PROPS.updateRate,
     mode = DEFAULT_PROPS.mode,
-    // oxlint-disable-next-line no-unused-vars
     onError,
-    // oxlint-disable-next-line no-unused-vars
     onStreamReady,
-    // oxlint-disable-next-line no-unused-vars
     onStreamEnd,
     onRecordingFinish,
     ...rest
@@ -68,7 +66,6 @@ export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((
   const gradientCacheRef = useRef<CanvasGradient | null>(null)
   const lastWidthRef = useRef(0)
   const recorderRef = useRef<Recorder | null>(null)
-  const audioLevelBufferRef = useRef<Uint8Array<ArrayBuffer> | null>(null)
 
   const heightStyle = typeof height === 'number'
     ? `${height}px`
@@ -93,25 +90,7 @@ export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((
     recorderRef,
   }
 
-  const hookProps = {
-    ...props,
-    state,
-    barWidth,
-    barGap,
-    barRadius,
-    fadeEdges,
-    fadeWidth,
-    height,
-    sensitivity,
-    smoothingTimeConstant,
-    fftSize,
-    historySize,
-    updateRate,
-    mode,
-    preferredMimeTypes,
-    onRecordingFinish,
-    theme,
-  }
+  const hookProps = { ...props, state, barWidth, barGap, barRadius, fadeEdges, fadeWidth, height, sensitivity, smoothingTimeConstant, fftSize, historySize, updateRate, mode, preferredMimeTypes, onRecordingFinish, theme }
 
   useCanvasResize({
     refs,
@@ -207,16 +186,6 @@ export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((
     getRecorder: () => {
       return getRecorder()
     },
-    getAudioLevel: () => {
-      const analyser = analyserRef.current
-      if (!analyser) return 0
-
-      if (audioLevelBufferRef.current?.length !== analyser.frequencyBinCount) {
-        audioLevelBufferRef.current = new Uint8Array(analyser.frequencyBinCount)
-      }
-      analyser.getByteFrequencyData(audioLevelBufferRef.current)
-      return normalizeAudioLevel(audioLevelBufferRef.current)
-    },
   }), [getRecorder, ensureRecorder, destroyMicrophone, hasExternalStream, cleanupExternalStream])
 
   return (
@@ -227,11 +196,13 @@ export const LiveWaveAudio = forwardRef<RecordingControls, LiveWaveAudioProps>((
       ) }
       ref={ containerRef }
       style={ { height: heightStyle } }
-      aria-label={ state === 'recording'
-        ? 'Live audio waveform'
-        : state === 'idle'
-        ? 'Audio waveform idle'
-        : 'Audio waveform stopped' }
+      aria-label={
+        state === 'recording'
+          ? 'Live audio waveform'
+          : state === 'idle'
+            ? 'Audio waveform idle'
+            : 'Audio waveform stopped'
+      }
       role="img"
       { ...rest }
     >

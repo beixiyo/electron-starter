@@ -2,12 +2,12 @@
  * Popover 的策略层：在通用触发器交互之上叠加点击外部关闭、键盘关闭、
  * 打开/关闭回调、焦点恢复与命令式 open / close
  */
-import type { RefObject } from 'react'
-import type { PopoverProps, PopoverRef } from './types'
 import { useClickOutside, useKeyboardLayer, useRestoreFocus } from 'hooks'
+import type { RefObject } from 'react'
 import { useEffect, useImperativeHandle, useRef } from 'react'
 import { Z } from '../../constants/z-index'
 import { useFloatingTrigger } from '../../hooks/useFloatingTrigger'
+import type { PopoverProps, PopoverRef } from './types'
 
 export function usePopoverInteractions(options: UsePopoverInteractionsOptions) {
   const {
@@ -69,6 +69,17 @@ export function usePopoverInteractions(options: UsePopoverInteractionsOptions) {
     keys: closeKeys,
     priority: layerPriority,
     allowRepeat: false,
+    when: (event) => {
+      if (event.key === 'Escape') return true
+
+      const target = event.target as Node | null
+      return Boolean(
+        target && (
+          triggerRef.current?.contains(target)
+          || contentRef.current?.contains(target)
+        ),
+      )
+    },
     onKeyDown: close,
   })
 
@@ -85,8 +96,7 @@ export function usePopoverInteractions(options: UsePopoverInteractionsOptions) {
 
   useImperativeHandle(popoverRef, () => ({
     open: () => {
-      if (disabled || isOpen)
-        return
+      if (disabled || isOpen) return
 
       if (restoreFocusOnOpen) {
         activeElementBeforeOpenRef.current = document.activeElement as HTMLElement | null

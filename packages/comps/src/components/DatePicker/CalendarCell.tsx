@@ -73,6 +73,10 @@ export const CalendarCell = memo<CalendarCellProps>(({
       aria-label={ formatDate(date, 'yyyy-MM-dd') }
       aria-selected={ isConfirmed || isTemp }
       aria-disabled={ isDisabled }
+      { ...{
+        [DATA_ATTR.selected]: isConfirmed || isTemp,
+        [DATA_ATTR.disabled]: isDisabled,
+      } }
       { ...{ [DATA_ATTR.datePicker.rangePosition]: rangePosition } }
       className={ cn(
         'relative flex h-10 w-full items-end justify-center p-0',

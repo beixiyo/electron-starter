@@ -1,5 +1,5 @@
-import type { RefObject } from 'react'
 import { useClickOutside, useLatestCallback } from 'hooks'
+import type { RefObject } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 
@@ -39,13 +39,13 @@ export function usePanelManager(containerRef: RefObject<HTMLDivElement | null>) 
   )
 
   const handleShowPromptPanelToggle = useLatestCallback(() => {
-    setShowPromptPanel(prev => !prev)
+    setShowPromptPanel((prev) => !prev)
     setShowHistoryPanel(false)
     setShowAutoComplete(false)
   })
 
   const handleShowHistoryPanelToggle = useLatestCallback(() => {
-    setShowHistoryPanel(prev => !prev)
+    setShowHistoryPanel((prev) => !prev)
     setShowPromptPanel(false)
     setShowAutoComplete(false)
   })

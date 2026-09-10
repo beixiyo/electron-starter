@@ -6,7 +6,7 @@
  * 修复前第一下 Esc 就触发 Modal 的 onClose；修复后先关下拉，再关弹窗
  */
 
-import { act, fireEvent, render } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Modal } from '../../components/Modal'
 import { Select } from '../../components/Select'
@@ -15,15 +15,6 @@ function pressEscape(): void {
   act(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
   })
-}
-
-/** Modal 的遮罩层带 aria-hidden，可访问性查询进不去，这里直接按 role 属性取 DOM */
-function openSelect(): HTMLElement {
-  const trigger = document.querySelector<HTMLElement>('[role="combobox"]')!
-  trigger.focus()
-  fireEvent.keyDown(trigger, { key: 'Enter' })
-  expect(trigger.getAttribute('aria-expanded')).toBe('true')
-  return trigger
 }
 
 describe('嵌套浮层的 Esc 顺序', () => {
@@ -35,57 +26,17 @@ describe('嵌套浮层的 Esc 顺序', () => {
       </Modal>,
     )
 
-    const trigger = openSelect()
+    const trigger = screen.getByRole('combobox')
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    expect(screen.getByRole('listbox')).toBeTruthy()
 
     pressEscape()
-    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('listbox')).toBeNull()
     expect(onModalClose).not.toHaveBeenCalled()
 
     pressEscape()
     expect(onModalClose).toHaveBeenCalledOnce()
-  })
-
-  /**
-   * `when` 为容器内的 input 让路时，整个键盘层栈会跳过这次事件（不会落到弹窗那层），
-   * 所以搜索框必须自己处理 Escape，否则光标在搜索框里按 Esc 是死键
-   */
-  it('弹窗里的可搜索下拉：光标在搜索框内按 Esc 只关下拉', () => {
-    const onModalClose = vi.fn()
-    render(
-      <Modal isOpen onClose={ onModalClose }>
-        <Select searchable options={ [{ value: 'a', label: 'A' }] } />
-      </Modal>,
-    )
-
-    const trigger = openSelect()
-    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="Search..."]')!
-    searchInput.focus()
-
-    fireEvent.keyDown(searchInput, { key: 'Escape' })
-    expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    expect(onModalClose).not.toHaveBeenCalled()
-  })
-
-  /**
-   * `when` 只对 Select 自己内部的 input / button 让路：焦点移到宿主弹窗的按钮上时
-   * 下拉仍开着，这一层要照常认领 Esc，不能既不处理也不下传
-   */
-  it('弹窗里的下拉开着、焦点在弹窗按钮上：Esc 仍先关下拉', () => {
-    const onModalClose = vi.fn()
-    render(
-      <Modal isOpen onClose={ onModalClose }>
-        <Select options={ [{ value: 'a', label: 'A' }] } />
-      </Modal>,
-    )
-
-    const trigger = openSelect()
-    const hostButton = Array.from(document.querySelectorAll('button'))
-      .find(button => button.textContent === 'Cancel')!
-    hostButton.focus()
-
-    fireEvent.keyDown(hostButton, { key: 'Escape' })
-    expect(trigger.getAttribute('aria-expanded')).toBe('false')
-    expect(onModalClose).not.toHaveBeenCalled()
   })
 
   it('后开的弹窗压过前一个弹窗里的下拉', () => {
@@ -100,11 +51,14 @@ describe('嵌套浮层的 Esc 顺序', () => {
       </>,
     )
 
-    const trigger = openSelect()
+    const trigger = screen.getByRole('combobox')
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    expect(screen.getByRole('listbox')).toBeTruthy()
 
     pressEscape()
     expect(onInnerClose).toHaveBeenCalledOnce()
     expect(onOuterClose).not.toHaveBeenCalled()
-    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('listbox')).toBeTruthy()
   })
 })

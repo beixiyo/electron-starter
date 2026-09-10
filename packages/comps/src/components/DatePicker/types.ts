@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { DatePickerRangeFormatter } from 'utils'
+import type { FloatingArrowConfig } from '../FloatingArrow'
 
 /** 日期精度类型（DatePicker 只支持日期+时间精度，选择年月请使用 MonthPicker/YearPicker） */
 export type DatePrecision = 'day' | 'hour' | 'minute' | 'second'
@@ -182,7 +183,10 @@ export interface BasePickerProps extends SharedUIProps {
   onTriggerClick?: () => void
   /** 下拉面板的定位方式 */
   placement?: 'bottom-start' | 'bottom-end' | 'top-start' | 'top-end' | 'right-start' | 'right-end' | 'left-start' | 'left-end'
-  /** 下拉面板的偏移量 */
+  /**
+   * 触发器到下拉面板可见边缘的间距，单位 px；开启箭头时以箭头尖端为准
+   * @default 8
+   */
   offset?: number
   /** 日期格式 */
   format?: string
@@ -205,6 +209,11 @@ export interface BasePickerProps extends SharedUIProps {
   triggerVariant?: PickerTriggerVariant
   /** 下拉面板类名 */
   dropdownClassName?: string
+  /**
+   * 下拉面板箭头；传入配置对象可调整尺寸、偏移和样式
+   * @default true
+   */
+  arrow?: FloatingArrowConfig
   /** 下拉面板层级 */
   dropdownZIndex?: number
   /** 时间选择浮层类名（小时 / 分钟 / 秒 / AMPM 二级浮层） */
@@ -278,6 +287,12 @@ export interface DatePickerProps extends PickerProps<Date> {
   weekStartsOn?: 0 | 1 | 2 | 3 | 4 | 5 | 6
   /** 日期精度，默认为 'day' */
   precision?: DatePrecision
+  /** 快捷时刻列表的分钟步进 @default 30 */
+  quickTimeStep?: number
+  /** 是否允许点击时刻块空白打开快捷时刻浮层 @default true */
+  enableQuickTimePopover?: boolean
+  /** 快捷时刻浮层自动定位当前已选时刻附近选项时是否使用平滑滚动 @default false */
+  enableQuickTimeScrollAnimation?: boolean
   /**
    * 是否允许键盘直接编辑时、分、秒
    * @default true
@@ -285,7 +300,7 @@ export interface DatePickerProps extends PickerProps<Date> {
   enableTimeKeyboardInput?: boolean
   /**
    * 是否允许通过数字浮层选择时、分、秒
-   * @default true
+   * @default false
    */
   enableTimeUnitPopover?: boolean
   /**
@@ -341,8 +356,12 @@ export interface CalendarProps extends BaseCalendarProps, RangeSelectionProps, S
   use12Hours?: boolean
   /** 分钟选择步进 */
   minuteStep?: number
-  /** 快捷时刻列表步进；不传则不显示快捷时刻入口 */
+  /** 快捷时刻列表步进 @default 30 */
   quickTimeStep?: number
+  /** 是否允许点击时刻块空白打开快捷时刻浮层 @default true */
+  enableQuickTimePopover?: boolean
+  /** 快捷时刻浮层自动定位当前已选时刻附近选项时是否使用平滑滚动 @default false */
+  enableQuickTimeScrollAnimation?: boolean
   /** 时间选择浮层类名（小时 / 分钟 / 秒 / AMPM 二级浮层） */
   timeDropdownClassName?: string
   /** 时间选择浮层层级（小时 / 分钟 / 秒 / AMPM 二级浮层） */
@@ -499,7 +518,7 @@ export interface DateRangePickerProps extends Omit<PickerProps<DateRangePickerVa
   enableTimeKeyboardInput?: boolean
   /**
    * 是否允许通过数字浮层选择时、分、秒
-   * @default true
+   * @default false
    */
   enableTimeUnitPopover?: boolean
   /**
@@ -515,11 +534,16 @@ export interface DateRangePickerProps extends Omit<PickerProps<DateRangePickerVa
   /** 是否使用 12 小时制 */
   use12Hours?: boolean
   /**
-   * 快捷时刻列表的分钟步进；不传则不显示快捷时刻入口
+   * 快捷时刻列表的分钟步进
    *
    * TimePicker 消费边界会将有限数值取整并限制在 5～1440 分钟
+   * @default 30
    */
   quickTimeStep?: number
+  /** 是否允许点击时刻块空白打开快捷时刻浮层 @default true */
+  enableQuickTimePopover?: boolean
+  /** 快捷时刻浮层自动定位当前已选时刻附近选项时是否使用平滑滚动 @default false */
+  enableQuickTimeScrollAnimation?: boolean
   /** 点击「添加时间」时的回调（仅 precision 为 day 时展示 Add Time 按钮） */
   onAddTime?: () => void
   /**
@@ -603,13 +627,12 @@ export interface DateTimeSpanPickerProps
   syncEndTimeWithStart?: boolean
   /**
    * 默认生成 End 时刻时，相对 Start 增加的分钟数
-   * 未传时沿用 minuteStep
-   * @default minuteStep
+   * @default 15
    */
   defaultEndTimeOffsetMinutes?: number
   /** 是否允许键盘直接编辑时、分、秒 */
   enableTimeKeyboardInput?: boolean
-  /** 是否允许通过数字浮层选择时、分、秒 */
+  /** 是否允许通过数字浮层选择时、分、秒 @default false */
   enableTimeUnitPopover?: boolean
   /** 自动定位已选中时、分、秒选项时是否使用平滑滚动 @default true */
   enableTimeUnitScrollAnimation?: boolean
@@ -629,13 +652,17 @@ export interface DateTimeSpanPickerProps
   use12Hours?: boolean
   /** 分钟选择步进 */
   minuteStep?: number
-  /** 快捷时刻列表的分钟步进 */
+  /** 快捷时刻列表的分钟步进 @default 30 */
   quickTimeStep?: number
+  /** 是否允许点击时刻块空白打开快捷时刻浮层 @default true */
+  enableQuickTimePopover?: boolean
+  /** 快捷时刻浮层自动定位当前已选时刻附近选项时是否使用平滑滚动 @default false */
+  enableQuickTimeScrollAnimation?: boolean
   /** 时刻选择浮层类名 */
   timeDropdownClassName?: string
   /** 时刻选择浮层层级 */
   timeDropdownZIndex?: number
-  /** 时刻块快捷选择图标 */
+  /** 自定义时刻图标；保留用于兼容既有调用方 */
   timeIcon?: ReactNode
   /** 单日时添加结束时刻的图标 */
   addEndTimeIcon?: ReactNode
@@ -722,7 +749,7 @@ export interface TimePickerProps
   enableTimeKeyboardInput?: boolean
   /**
    * 是否允许通过数字浮层选择时、分、秒
-   * @default true
+   * @default false
    */
   enableTimeUnitPopover?: boolean
   /**
@@ -743,11 +770,15 @@ export interface TimePickerProps
   showConfirm?: boolean
   /** 分钟选择步进 */
   minuteStep?: number
-  /** 快捷时刻列表步进；消费时会取整并限制在 5～1440 分钟 */
+  /** 快捷时刻列表步进；消费时会取整并限制在 5～1440 分钟 @default 30 */
   quickTimeStep?: number
+  /** 是否允许点击时刻块空白打开快捷时刻浮层 @default true */
+  enableQuickTimePopover?: boolean
+  /** 快捷时刻浮层自动定位当前已选时刻附近选项时是否使用平滑滚动 @default false */
+  enableQuickTimeScrollAnimation?: boolean
   /**
    * 时刻块的视觉布局
-   * `combined` 将 AM/PM、快捷时刻图标和时分编辑合并到同一个输入底色中
+   * `combined` 将 AM/PM 和时分编辑合并到同一个输入底色中
    * @default 'separate'
    */
   layout?: 'separate' | 'combined'

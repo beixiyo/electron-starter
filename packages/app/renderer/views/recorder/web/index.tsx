@@ -2,9 +2,9 @@
 import type { CaptureKind, RecorderState } from '@jl-org/tool'
 import { formatDate, ScreenRecorder } from '@jl-org/tool'
 import type { RecordingControls } from 'comps'
-import { Input, LiveWaveAudio, Message, Modal } from 'comps'
-import { useConst, useLatestCallback } from 'hooks'
-import { useEffect, useRef, useState } from 'react'
+import { createAudioLevelReader, Input, LiveWaveAudio, Message, Modal } from 'comps'
+import { useConst } from 'hooks'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RecorderPageLayout } from '../shared/components/RecorderPageLayout'
 import { recorderStorage } from '../utils/storage'
@@ -149,13 +149,10 @@ export default function WebRecorderPage() {
     })
   }, [captureKind, systemAudio, micAudio, timeslice, recorder])
 
-  const getAudioLevel = useLatestCallback(
-    () => {
-      const getLevel = waveformRef.current?.getAudioLevel
-      return typeof getLevel === 'function'
-        ? getLevel()
-        : 0
-    },
+  /** 读取器攥住 ref 而不是录音器实例：录音器在一轮会话里会被销毁重建 */
+  const getAudioLevel = useMemo(
+    () => createAudioLevelReader(() => waveformRef.current?.getRecorder() ?? null),
+    [],
   )
 
   const revokeUrl = () => {
@@ -472,6 +469,8 @@ export default function WebRecorderPage() {
         width={ 500 }
         clickOutsideClose={ false }
         onOk={ handleSave }
+        /** handleSave 自己在成功时关闭：文件名为空或写入失败时要留在原地 */
+        closeOnOk={ false }
       >
         <div className="space-y-4">
           <div>
@@ -482,7 +481,6 @@ export default function WebRecorderPage() {
               value={ saveName }
               onChange={ (value) => setSaveName(value) }
               placeholder={ t('saveModal.namePlaceholder') }
-              onPressEnter={ handleSave }
               autoFocus
               disabled={ saving }
             />

@@ -1,32 +1,33 @@
 'use client'
 
-import type { TaskBannerItemData, TaskBannerPlacement } from './types'
-import { useKeyboardLayer, useLatestCallback } from 'hooks'
-import { AnimatePresence } from 'motion/react'
-import { memo, useState, useSyncExternalStore } from 'react'
-import { cn } from 'utils'
-import { Z } from '../../constants/z-index'
-import { TaskBannerBar } from './TaskBannerBar'
+import { memo, useRef, useSyncExternalStore } from 'react'
+import { TaskBannerStack } from './TaskBannerStack'
 import { taskBannerStore } from './taskBannerStore'
-import { TaskBannerPanel, TaskBannerSummaryBar } from './TaskBannerSummary'
+import type { TaskBannerItemData, TaskBannerPlacement } from './types'
 
-/** 不同水平定位对应的容器类（含对齐方式），默认 'top' 与历史行为完全一致 */
-const PLACEMENT_CLASS: Record<TaskBannerPlacement, string> = {
-  'top': 'left-1/2 -translate-x-1/2 items-center',
-  'top-left': 'left-4 items-start',
-  'top-right': 'right-4 items-end',
-}
+/** 栈的 DOM 顺序固定按这张表，不随条目出现的先后漂移 */
+const PLACEMENT_ORDER: readonly TaskBannerPlacement[] = [
+  'top',
+  'top-left',
+  'top-right',
+  'bottom',
+  'bottom-left',
+  'bottom-right',
+]
+
+const EMPTY_ITEMS: TaskBannerItemData[] = []
 
 /**
- * 全局唯一的任务彩条堆叠容器（首次命令式调用时挂载一次）
+ * 全局唯一的任务彩条容器（首次命令式调用时挂载一次）
  *
- * 与 MessageContainer 的关键差异：
- * - 自顶向下按提交时间排列，**最新在上**（store 头插保证）
- * - 失败彩条超过 maxVisibleFailures 后，更早的失败条收拢为一条汇总彩条；
- *   点击汇总彩条展开为面板，列出**全部**失败条目逐条重试
- * - 处理中彩条短暂存在、不计入收拢
+ * 它本身只做一件事：按定位把条目分组，每组交给一个 {@link TaskBannerStack}
  *
- * 容器本身不拦截鼠标事件，仅每条彩条可交互
+ * 分组是必要的而不是为了通用性——`placement` 从前是全局配置，
+ * 一处业务想把彩条挪到别的角落就会连带把其他业务的彩条一起挪走
+ * 现在 `placement` 落到条目上（不指定则跟随全局配置），
+ * 建卡任务留在顶部、语音取消提示落到底部这类组合才成立
+ *
+ * 排列、收拢与展开的规则见 {@link TaskBannerStack}
  */
 export const TaskBannerContainer = memo(() => {
   const items = useSyncExternalStore(
@@ -40,85 +41,46 @@ export const TaskBannerContainer = memo(() => {
     taskBannerStore.getConfig,
   )
 
+  /** 用 Map 而不是先收集定位再过滤：一次遍历即可，且天然保住「最新在前」的组内顺序 */
+  const groups = new Map<TaskBannerPlacement, TaskBannerItemData[]>()
+  for (const item of items) {
+    const placement = item.placement ?? config.placement
+    const group = groups.get(placement)
+
+    if (group) {
+      group.push(item)
+    }
+    else {
+      groups.set(placement, [item])
+    }
+  }
+
   /**
-   * 面板展开态。失败数回落到阈值内时该值不再生效（直接渲染独立彩条），
-   * 故无需手动复位；再次溢出时直接回到展开态，延续用户上次的查看状态
+   * 出现过的定位一直保留栈，空了也不卸
+   *
+   * 实测症状：关掉最后一条彩条（✕ 或 Esc）时它当场消失，没有退场动画
+   * 根因：按「当前有条目的定位」渲染栈，最后一条出栈那一刻这组为空，整个 `TaskBannerStack`
+   * 连同里面的 `AnimatePresence` 一起被卸载，退场动画没有机会播；只有栈里还剩别的条目时才正常
+   *
+   * 记在 ref 里而不是 state：这是「见过就记住」的幂等集合，渲染期写入不影响本次输出，
+   * 走 state 要多一轮渲染，而卸载在第一轮就已经发生了
    */
-  const [expanded, setExpanded] = useState(false)
-
-  const failures = items.filter(item => item.status === 'failed')
-  const overflow = failures.length > config.maxVisibleFailures
-  const showPanel = expanded && overflow
-
-  /** 收拢进汇总条的失败彩条：保留最新 N 条单独展示，更早的折叠（PRD「第 4 条及之后收拢」） */
-  const foldedIds = new Set(
-    failures
-      .slice(config.maxVisibleFailures)
-      .map(item => item.id),
-  )
-
-  /** 面板展开时失败条全部移入面板，堆叠区只剩处理中条；否则按提交时间渲染未折叠条目 */
-  const stackItems = showPanel
-    ? items.filter(item => item.status === 'pending')
-    : items.filter(item => !foldedIds.has(item.id))
-
-  useKeyboardLayer({
-    active: showPanel,
-    keys: ['Escape'],
-    priority: Z.toast,
-    allowRepeat: false,
-    onKeyDown: () => setExpanded(false),
-  })
-
-  /** 重试 = 该条出栈 + 交还业务重新发起（业务通常再 start 一条新的处理中彩条） */
-  const handleRetry = useLatestCallback((item: TaskBannerItemData) => {
-    taskBannerStore.remove(item.id)
-    item.onRetry?.()
-  })
-
-  /** 关闭 = 该条出栈 + 交还业务做关闭后的补充处理 */
-  const handleClose = useLatestCallback((item: TaskBannerItemData) => {
-    taskBannerStore.remove(item.id)
-    item.onClose?.()
-  })
+  const mountedPlacements = useRef(new Set<TaskBannerPlacement>()).current
+  for (const placement of groups.keys()) mountedPlacements.add(placement)
 
   return (
-    <div
-      style={ { zIndex: Z.toast, top: config.topOffset } }
-      className={ cn(
-        'pointer-events-none fixed flex flex-col gap-3',
-        PLACEMENT_CLASS[config.placement] ?? PLACEMENT_CLASS.top,
-      ) }
-    >
-      <AnimatePresence mode="popLayout">
-        { stackItems.map(item => (
-          <TaskBannerBar
-            key={ item.id }
-            item={ item }
-            onRetry={ handleRetry }
-            onClose={ handleClose }
+    <>
+      { PLACEMENT_ORDER
+        .filter((placement) => mountedPlacements.has(placement))
+        .map((placement) => (
+          <TaskBannerStack
+            key={ placement }
+            placement={ placement }
+            items={ groups.get(placement) ?? EMPTY_ITEMS }
+            config={ config }
           />
         )) }
-
-        { overflow && !showPanel && (
-          <TaskBannerSummaryBar
-            key="task-banner-summary"
-            count={ foldedIds.size }
-            onExpand={ () => setExpanded(true) }
-          />
-        ) }
-
-        { showPanel && (
-          <TaskBannerPanel
-            key="task-banner-panel"
-            failures={ failures }
-            onRetry={ handleRetry }
-            onClose={ handleClose }
-            onCollapse={ () => setExpanded(false) }
-          />
-        ) }
-      </AnimatePresence>
-    </div>
+    </>
   )
 })
 

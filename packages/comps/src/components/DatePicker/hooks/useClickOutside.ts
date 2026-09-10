@@ -1,5 +1,5 @@
-import type { RefObject } from 'react'
 import { useLatestCallback } from 'hooks'
+import type { RefObject } from 'react'
 import { useEffect } from 'react'
 import { DATA_ATTR } from '../../../constants/dataAttributes'
 

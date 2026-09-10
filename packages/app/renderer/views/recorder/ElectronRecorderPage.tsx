@@ -1,6 +1,6 @@
 import { useRecordingSourceState } from '@/store/recordingStore'
 import type { PermissionKind } from '@shared'
-import { Input, LiveWaveAudio, Message, Modal } from 'comps'
+import { createAudioLevelReader, Input, LiveWaveAudio, Message, Modal } from 'comps'
 import { useLatestCallback } from 'hooks'
 import { Pause, Play } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -209,7 +209,8 @@ export default function ElectronRecorderPage(): React.JSX.Element {
   const handleConfirmSourceAndStart = useCallback(() => {
     if (!audioOnly && !selectedSource) {
       Message.danger(t('sourceSelection.pleaseSelectSource', '请先选择需要录制的屏幕或窗口'))
-      return
+      /** 未选源时保持弹窗打开，让用户接着选 */
+      return false
     }
     setShowSourceSelectModal(false)
     start()
@@ -496,13 +497,10 @@ export default function ElectronRecorderPage(): React.JSX.Element {
     onError: handleLiveWaveError,
   })
 
-  const getRendererAudioLevel = useLatestCallback(
-    () => {
-      const getLevel = liveWaveControlsRef.current?.getAudioLevel
-      return typeof getLevel === 'function'
-        ? getLevel()
-        : 0
-    },
+  /** 读取器攥住 ref 而不是录音器实例：录音器在一轮会话里会被销毁重建 */
+  const getRendererAudioLevel = useMemo(
+    () => createAudioLevelReader(() => liveWaveControlsRef.current?.getRecorder() ?? null),
+    [],
   )
   const getStageAudioLevel = nativeMode
     ? getNativeAudioLevel
@@ -605,6 +603,8 @@ export default function ElectronRecorderPage(): React.JSX.Element {
         width={ 500 }
         clickOutsideClose={ false }
         onOk={ handleSaveToIndexedDB }
+        /** saveToIndexedDB 自己在成功时关闭：文件名为空或写入失败时要留在原地 */
+        closeOnOk={ false }
         okText={ t('saveModal.save', '保存') }
         cancelText={ t('saveModal.cancel', '取消') }
       >
@@ -617,7 +617,6 @@ export default function ElectronRecorderPage(): React.JSX.Element {
               value={ saveName }
               onChange={ (value) => setSaveName(value) }
               placeholder={ t('saveModal.namePlaceholder', '请输入文件名称') }
-              onPressEnter={ handleSaveToIndexedDB }
               autoFocus
               disabled={ saving }
             />

@@ -4,7 +4,8 @@ import type { CSSProperties } from 'react'
 import { memo, useId } from 'react'
 import { cn } from 'utils'
 import { DATA_ATTR } from '../../constants/dataAttributes'
-import { DEFAULT_FLOATING_ARROW_SEAM_OVERLAP, DEFAULT_FLOATING_ARROW_SIZE } from './config'
+import { DEFAULT_FLOATING_ARROW_SEAM_OVERLAP } from './config'
+import { DEFAULT_FLOATING_ARROW_SIZE, resolveFloatingArrowGeometry } from './geometry'
 
 const DEFAULT_BORDER_WIDTH = 1
 
@@ -12,13 +13,17 @@ const DEFAULT_BORDER_WIDTH = 1
  * 浮层角标
  *
  * 使用双层 SVG path 连接浮层背景与边框，并通过轻微重叠消除浏览器
- * 亚像素渲染产生的接缝。组件只负责绘制，reference 测量由调用方完成
+ * 亚像素渲染产生的接缝。轮廓走 {@link resolveFloatingArrowGeometry}：
+ * 根部与浮层边缘相切、尖端磨圆，看上去是从浮层长出来而不是贴上去的三角形。
+ * 组件只负责绘制，reference 测量由调用方完成
  */
 export const FloatingArrow = memo<FloatingArrowProps>((props) => {
   const {
     placement,
     centerOffset,
     size = DEFAULT_FLOATING_ARROW_SIZE,
+    tipRadius,
+    baseRadius,
     bordered = false,
     borderWidth = DEFAULT_BORDER_WIDTH,
     seamOverlap = DEFAULT_FLOATING_ARROW_SEAM_OVERLAP,
@@ -30,7 +35,6 @@ export const FloatingArrow = memo<FloatingArrowProps>((props) => {
   const clipPathId = useId().replaceAll(':', '')
   const [side] = placement.split('-') as [FloatingArrowSide]
   const isVerticalSide = side === 'top' || side === 'bottom'
-  const height = size / 2
   const resolvedBorderWidth = bordered
     ? borderWidth
     : 0
@@ -53,7 +57,7 @@ export const FloatingArrow = memo<FloatingArrowProps>((props) => {
     bottom: 'rotate(180deg)',
     left: 'rotate(-90deg)',
   }[side]
-  const path = `M0,0 H${size} L${size / 2},${height} Z`
+  const { path } = resolveFloatingArrowGeometry({ size, tipRadius, baseRadius })
 
   return (
     <svg
@@ -121,9 +125,19 @@ export type FloatingArrowProps = {
   centerOffset: number
   /**
    * 箭头宽度，单位 px
-   * @default 12
+   * @default 22
    */
   size?: number
+  /**
+   * 尖端圆角半径，单位 px
+   * @default size * 0.193
+   */
+  tipRadius?: number
+  /**
+   * 根部与浮层边缘衔接处的圆角半径，单位 px
+   * @default size * 0.238
+   */
+  baseRadius?: number
   /**
    * 是否绘制与浮层连续的边框
    * @default false
@@ -147,15 +161,16 @@ export type FloatingArrowProps = {
 
 export {
   DEFAULT_FLOATING_ARROW_SEAM_OVERLAP,
-  DEFAULT_FLOATING_ARROW_SIZE,
   getFloatingArrowProtrusion,
   resolveFloatingArrowOptions,
   resolveFloatingOffset,
 } from './config'
 export type { FloatingArrowConfig, FloatingArrowOptions, ResolveFloatingOffsetOptions } from './config'
+export { DEFAULT_FLOATING_ARROW_SIZE, resolveFloatingArrowGeometry } from './geometry'
+export type { FloatingArrowGeometry, FloatingArrowGeometryOptions } from './geometry'
 export { useFloatingArrow } from './useFloatingArrow'
 export type { UseFloatingArrowOptions } from './useFloatingArrow'
 export { useFloatingArrowState } from './useFloatingArrowState'
-export type { UseFloatingArrowStateOptions, UseFloatingArrowStateResult } from './useFloatingArrowState'
 export { useFloatingLayer } from './useFloatingLayer'
 export type { UseFloatingLayerOptions, UseFloatingLayerReturn } from './useFloatingLayer'
+export type { UseFloatingArrowStateOptions, UseFloatingArrowStateResult } from './useFloatingArrowState'

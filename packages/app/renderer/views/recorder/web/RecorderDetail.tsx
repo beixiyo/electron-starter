@@ -111,6 +111,8 @@ export const RecorderDetail = memo<RecorderDetailProps>((props) => {
       titleText={ metadata?.name || t('recordDetail.title') }
       width={ 800 }
       onOk={ handleDownload }
+      /** 确认键是「下载」而不是「完成」，下载后留在详情里 */
+      closeOnOk={ false }
       okText={ t('recordDetail.download') }
       cancelText={ t('recordDetail.close') }
     >

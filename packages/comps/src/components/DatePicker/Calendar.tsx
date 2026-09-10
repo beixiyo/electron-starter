@@ -48,8 +48,10 @@ export const Calendar = memo<CalendarProps>(({
   renderCell,
   minuteStep = 1,
   quickTimeStep,
+  enableQuickTimePopover = true,
+  enableQuickTimeScrollAnimation = false,
   enableTimeKeyboardInput = true,
-  enableTimeUnitPopover = true,
+  enableTimeUnitPopover = false,
   enableTimeUnitScrollAnimation = true,
   enableTimeInputWheel = true,
 }) => {
@@ -155,6 +157,8 @@ export const Calendar = memo<CalendarProps>(({
             timeDropdownZIndex={ timeDropdownZIndex }
             minuteStep={ minuteStep }
             quickTimeStep={ quickTimeStep }
+            enableQuickTimePopover={ enableQuickTimePopover }
+            enableQuickTimeScrollAnimation={ enableQuickTimeScrollAnimation }
             enableTimeKeyboardInput={ enableTimeKeyboardInput }
             enableTimeUnitPopover={ enableTimeUnitPopover }
             enableTimeUnitScrollAnimation={ enableTimeUnitScrollAnimation }

@@ -23,9 +23,8 @@ export type UseKeyboardLayerOptions = ModifierExpectation & {
   /**
    * 进一步限制按键、组合键或事件目标
    *
-   * 返回 `false` 意味着**整个层栈跳过这次事件**，而不是「本层放行给下一层」：
-   * 栈顶层不匹配时事件既不被消费，也不会交给下层的活动层。用它给内部元素让路时，
-   * 必须由那个元素自己处理该按键，否则这一下按键无人响应
+   * 返回 `false` 是「这次事件整个层栈都不处理」，不是「本层放行给下一层」：
+   * 只有栈顶层参与匹配，它不匹配时不会向下查找。想让下层接手就别让本层进栈（`active: false`）
    */
   when?: (event: KeyboardEvent) => boolean
   /**

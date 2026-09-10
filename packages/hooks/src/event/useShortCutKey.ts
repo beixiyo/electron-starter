@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { KeyCodeEnum, KeyEnum } from 'utils/keyboard'
+import type { KeyCodeEnum, KeyEnum, ModifierExpectation } from 'utils/keyboard'
 import { isComposingEvent, isFocusInEditable, matchesKey, matchesModifiers } from 'utils/keyboard'
 import { useLatestRef } from '../ref'
 
@@ -9,9 +9,8 @@ import { useLatestRef } from '../ref'
  * 传了 `onKeyDown` 才监听 `keydown`，传了 `onKeyUp` 才监听 `keyup`，两者可以同时传；
  * 两个回调共用同一份按键与修饰键匹配条件
  *
- * 监听修饰键本身时注意方向：修饰键期望对 keydown 和 keyup 是同一份，无法按事件类型分开。
- * `keydown` 时该修饰键处于按下状态（`alt: true`），`keyup` 时它已经抬起（`alt: false`，默认值），
- * 所以「按下开始、抬起结束」这类需求要写成两个 hook，不能一个 hook 同时挂两个回调
+ * 监听修饰键本身时注意方向：`keydown` 时该修饰键处于按下状态，
+ * 所以 `{ key: 'Alt', alt: true, onKeyDown }`；`keyup` 时它已经抬起，是 `alt: false`（默认值）
  * @param opts 快捷键配置选项
  * @example
  * ```tsx
@@ -21,10 +20,11 @@ import { useLatestRef } from '../ref'
  * // 元素内按 Enter 提交
  * useShortCutKey({ key: 'Enter', el: editorElement, onKeyDown: onSubmit })
  *
- * // 长按说话：监听修饰键自身的按下与抬起需要两个 hook
- * // keydown 时 Alt 已按下（alt: true），keyup 时 Alt 已抬起（alt: false），两者匹配条件相反
+ * // 长按说话：修饰键自身要拆成两个 hook
+ * // 同一个 hook 的修饰键期望对 keydown / keyup 是同一份，没法按事件类型分开写；
+ * // Alt 抬起时 altKey 已经是 false，写在一起的 { alt: true, onKeyUp } 永远不触发
  * useShortCutKey({ key: 'Alt', alt: true, onKeyDown: startRecording })
- * useShortCutKey({ key: 'Alt', onKeyUp: stopRecording })
+ * useShortCutKey({ key: 'Alt', alt: false, onKeyUp: stopRecording })
  *
  * // 带 Alt / Option 的字母组合键用 code，避开 macOS 改写字符
  * useShortCutKey({ code: 'KeyK', alt: true, onKeyDown: onToggle })
@@ -114,53 +114,13 @@ export function useShortCutKey(opts: ShortCutKeyOpts) {
   )
 }
 
-export type { KeyCodeEnum, KeyEnum, KeyEventType, ModifierExpectation } from 'utils/keyboard'
-
-/** 可挂载键盘监听的目标 */
 export type ShortCutTarget = HTMLElement | Window | Document
 
-/** 快捷键配置：修饰键期望 + 通用选项 + 按键目标 + 回调 */
 export type ShortCutKeyOpts =
-  & ShortCutKeyModifierOpts
+  & ModifierExpectation
   & ShortCutKeyBaseOpts
   & ShortCutKeyTarget
   & ShortCutKeyHandlers
-
-/**
- * 修饰键期望
- *
- * 与 `useKeyboardLayer` 的同名字段相反：这里省略等于**要求该修饰键未按下**，
- * 因为快捷键是精确组合键（`Ctrl + S` 不该被 `Ctrl + Shift + S` 命中），
- * 而键盘层是过滤器（`Escape` 层不关心是否按着 Shift）
- */
-export type ShortCutKeyModifierOpts = {
-  /**
-   * 是否要求按下当前平台的主修饰键（Apple 平台为 Command，其它平台为 Ctrl），
-   * 并要求另一个修饰键未按下；与 `ctrl` / `meta` 同时传入时以它为准
-   * @default false
-   */
-  mod?: boolean
-  /**
-   * 是否要求按下 Ctrl
-   * @default false
-   */
-  ctrl?: boolean
-  /**
-   * 是否要求按下 Shift
-   * @default false
-   */
-  shift?: boolean
-  /**
-   * 是否要求按下 Alt（macOS 的 Option 就是 Alt，无需按平台区分）
-   * @default false
-   */
-  alt?: boolean
-  /**
-   * 是否要求按下 Meta（macOS 的 Command、Windows 键）
-   * @default false
-   */
-  meta?: boolean
-}
 
 /** 至少要指定 `key` 或 `code` 之一，否则会命中所有按键 */
 export type ShortCutKeyTarget =
@@ -193,10 +153,8 @@ export type ShortCutKeyHandlers =
     onKeyUp: ShortCutKeyHandler
   }
 
-/** 命中组合键时执行的回调，拿到的是触发本次匹配的原始事件 */
 export type ShortCutKeyHandler = (e: KeyboardEvent) => void
 
-/** 与按键匹配无关的通用选项：监听目标、开关和事件处理策略 */
 export type ShortCutKeyBaseOpts = {
   /**
    * 监听目标，默认 window（全局快捷键）
@@ -233,3 +191,5 @@ export type ShortCutKeyBaseOpts = {
    */
   preventDefault?: boolean
 }
+
+export type { KeyCodeEnum, KeyEnum, KeyEventType, ModifierExpectation } from 'utils/keyboard'

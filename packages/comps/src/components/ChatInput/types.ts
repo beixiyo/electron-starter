@@ -1,4 +1,5 @@
 import type { TargetAndTransition, Transition } from 'motion/react'
+import type { SpeakToTxt } from '@jl-org/tool'
 import type { ComponentType, ReactNode, Ref, RefObject } from 'react'
 import type { VoiceRecorderPanelRenderContext } from '../LiveWaveAudio'
 
@@ -46,10 +47,7 @@ export type PromptCategory =
  */
 export interface PromptCategoryConfig {
   key: PromptCategory
-  label: string
   icon: ReactNode
-  color: string
-  description?: string
 }
 
 /**
@@ -157,21 +155,6 @@ export interface ChatInputPromptTemplatesAdapter {
   load?: () => MaybePromise<PromptTemplate[]>
 
   /**
-   * 持久化新增的自定义模板
-   */
-  save?: (template: PromptTemplate) => MaybePromise<void>
-
-  /**
-   * 更新模板
-   */
-  update?: (id: string, updates: Partial<PromptTemplate>) => MaybePromise<void>
-
-  /**
-   * 删除模板
-   */
-  remove?: (id: string) => MaybePromise<void>
-
-  /**
    * 记录模板使用次数
    */
   touch?: (id: string) => MaybePromise<void>
@@ -261,13 +244,6 @@ export interface ChatInputHistoryFeature {
    * 外部存储适配器
    */
   adapter?: ChatInputHistoryAdapter
-
-  /**
-   * 打开历史面板的快捷键
-   *
-   * @default 'Mod+H'
-   */
-  shortcut?: ChatInputShortcutList
 }
 
 export interface ChatInputAutocompleteFeature {
@@ -287,16 +263,22 @@ export interface ChatInputAutocompleteFeature {
 export interface ChatInputFeatures {
   /**
    * 提示词模板功能
+   *
+   * @default false
    */
   promptTemplates?: boolean | ChatInputPromptTemplatesFeature
 
   /**
    * 输入历史功能
+   *
+   * @default false
    */
   history?: boolean | ChatInputHistoryFeature
 
   /**
    * 自动补全功能
+   *
+   * @default false
    */
   autocomplete?: boolean | ChatInputAutocompleteFeature
 }
@@ -363,6 +345,35 @@ export interface TextInsertController {
 }
 
 /**
+ * 外部采集器当前轮次的执行上下文
+ *
+ * 文本写入方法只在当前轮次仍有效时生效；取消、关闭、卸载或开始新一轮后，
+ * `signal` 会变为 aborted，迟到的异步结果不会再覆盖输入框
+ */
+export interface CustomASRCaptureContext extends TextInsertController {
+  /** 当前录音轮次的递增标识。 */
+  readonly sessionId: number
+  /** 当前轮次失效时触发，用于中止网络、转写或其他异步工作。 */
+  readonly signal: AbortSignal
+  /**
+   * 上报 `start` 已完成后发生的异步终止错误
+   *
+   * ChatInput 会忽略过期轮次的错误，并将当前轮次复位到 idle；同步失败仍应直接抛出
+   */
+  reportError: (error: Error) => void
+}
+
+/**
+ * 外部采集器取消当前轮次时的执行上下文
+ *
+ * 取消后的文本控制器仍可用于短暂撤销窗口；`sessionId` 供驱动拒绝错轮清理
+ */
+export interface CustomASRCaptureCancelContext extends TextInsertController {
+  /** 被取消录音轮次的递增标识。 */
+  readonly sessionId: number
+}
+
+/**
  * 自定义 ASR 回调配置
  */
 export interface CustomASRCallbacks {
@@ -383,6 +394,24 @@ export interface CustomASRCallbacks {
   ) => void | Promise<void>
 
   /**
+   * 取消录音回调
+   *
+   * 不传时取消即丢弃音频（默认行为）。传了则本轮已采到的音频会交给宿主处置——
+   * 「取消」在有些产品里并不等于「立刻销毁」，例如需要留一个撤销窗口、
+   * 用同一段音频重新发起转写而不是让用户重录。音频的去留是宿主的策略，
+   * 组件不替它决定
+   *
+   * 只在 `text` 模式、且本轮真的录到了东西时触发；刚开录就取消（还没有音频）不会调用
+   *
+   * @param audioData 本轮已采集到的音频
+   * @param controller 文本插入控制器，与 {@link CustomASRCallbacks.onEndRecord} 同一份
+   */
+  onCancelRecord?: (
+    audioData: VoiceRecordingResult,
+    controller: TextInsertController,
+  ) => void
+
+  /**
    * 识别结果更新回调（实时流式返回）
    * @param text 识别到的文本
    * @param controller 文本插入控制器
@@ -399,29 +428,52 @@ export interface CustomASRCallbacks {
 }
 
 /**
- * ASR 配置选项
+ * 文本模式的外部音频采集与转写驱动
+ *
+ * 传入后由宿主完整接管采集、转写和文本回填，ChatInput 只管理按钮、计时和面板状态
+ * 生命周期方法必须幂等；`destroy` 可能在错误、禁用或卸载时重复调用
  */
+export interface CustomASRCapture {
+  /** 开始一轮采集；失败时应抛错或返回 rejected Promise。 */
+  start: (context: CustomASRCaptureContext) => MaybePromise<void>
+  /** 停止采集、释放实时媒体资源并等待最终转写结果。 */
+  finish: (context: CustomASRCaptureContext) => MaybePromise<void>
+  /**
+   * 取消当前轮次并释放资源
+   *
+   * controller 不受已取消轮次约束，可由宿主保留到短暂撤销窗口中回填重放结果
+   */
+  cancel: (context: CustomASRCaptureCancelContext) => MaybePromise<void>
+  /** 释放仍由驱动持有的资源。 */
+  destroy?: () => MaybePromise<void>
+  /** 返回归一化到 0..1 的当前音量，供语音面板绘制波形。 */
+  getAudioLevel?: () => number
+}
+
+/** text 语音模式的 ASR 配置。 */
 export interface ASRConfig {
   /**
-   * 自定义 ASR 回调
-   * 如果提供，将使用回调方式处理 ASR，内部会自动管理文本插入
-   * 如果不提供，使用默认的 SpeakToTxt
+   * 外部实时采集与转写驱动
+   *
+   * 仅接管 `text` 模式；存在时优先于 `callbacks` 和 `defaultConfig`，
+   * callbacks 只保留 `onError` 错误出口
+   * @default undefined
+   */
+  capture?: CustomASRCapture
+
+  /**
+   * 使用内建 MediaRecorder 采音后执行的宿主回调
+   *
+   * 未提供 `onEndRecord` 时，停止后只结束本轮，不会生成转写文本
+   * @default undefined
    */
   callbacks?: CustomASRCallbacks
 
   /**
-   * 默认 SpeakToTxt 的配置项（仅在未提供 callbacks 时生效）
+   * 默认 SpeakToTxt 的配置项（仅在未提供 capture 和 callbacks 时生效）
+   * @default undefined
    */
-  defaultConfig?: {
-    /** 语言代码，如 'zh-CN', 'en-US' */
-    lang?: string
-    /** 是否连续识别 */
-    continuous?: boolean
-    /** 是否返回中间结果 */
-    interimResults?: boolean
-    /** 其他 SpeakToTxt 支持的配置项 */
-    [key: string]: any
-  }
+  defaultConfig?: Omit<ConstructorParameters<typeof SpeakToTxt>[0], 'onResult' | 'onEnd'>
 }
 
 /**
@@ -487,20 +539,12 @@ export interface ChatInputProps {
   shortcuts?: ChatInputShortcuts
   /**
    * 可选能力配置。提示词、历史、补全默认关闭，适合由业务侧接管存储与搜索
+   *
+   * @default undefined
    */
   features?: ChatInputFeatures
-  /** 是否启用快速提示词功能 */
-  enablePromptTemplates?: boolean
-  /** 是否启用输入历史记录 */
-  enableHistory?: boolean
   /** 是否启用快捷键提示 */
   enableHelper?: boolean
-  /** 是否启用自动补全 */
-  enableAutoComplete?: boolean
-  /** 自定义提示词模板 */
-  customTemplates?: PromptTemplate[]
-  /** 历史记录最大数量 */
-  maxHistoryCount?: number
   /** 是否显示上传区域 */
   enableUploader?: boolean
   /**
@@ -521,7 +565,7 @@ export interface ChatInputProps {
    *   <>
    *     <div className="flex items-center gap-2">
    *       <UploaderButton icon={<Image size={18} />} />
-   *       <IconButton label="截图" onClick={onShot}><Scan size={18} /></IconButton>
+   *       <IconButton icon={<Scan size={18} />} label="截图" onClick={onShot} />
    *     </div>
    *     <div className="flex items-center gap-2"><VoiceControl /><SendButton /></div>
    *   </>
@@ -556,7 +600,7 @@ export interface ChatInputProps {
   minRows?: number
   /**
    * 自动高度时的最大行数，超出后输入框内部出现滚动条，仅在 `autoResize` 为 true 时生效
-   * @default 6
+   * @default 8
    */
   maxRows?: number
   /** 自定义样式类名 */
@@ -565,7 +609,7 @@ export interface ChatInputProps {
   /**
    * 根容器 Motion 配置
    *
-   * 传入对象时会与默认值浅合并，可只覆盖需要调整的字段。
+   * 传入对象时会与默认值浅合并，可只覆盖需要调整的字段
    * @default undefined
    */
   motionConfig?: ChatInputMotionConfig
@@ -613,7 +657,7 @@ export interface ChatInputProps {
   /**
    * 文本域自身的类名，叠在内置样式之后
    *
-   * 内置写死了 `px-4 text-base`，嵌进表单或紧凑面板时字号与内边距都要改，
+   * 内置默认为 `px-4 text-sm`
    * 而 `className` 只作用于输入区容器、够不到文本域
    */
   inputClassName?: string
@@ -676,11 +720,19 @@ export interface ChatInputProps {
   onVoiceStatusChange?: (status: VoiceControlStatus) => void
 }
 
+/** 内置底部动作的统一渲染属性 */
+export interface BottomBarActionProps {
+  /** 追加或覆盖动作样式 */
+  className?: string
+  /** 替换默认图标 */
+  icon?: ReactNode
+}
+
 /**
  * `ctx.IconButton` 的属性：统一风格的图标按钮外壳
  * 用于在 `renderActions` 中接入自定义动作（如截图），免去手抄样式类
  */
-export interface BottomBarIconButtonProps {
+export interface BottomBarIconButtonProps extends Omit<BottomBarActionProps, 'icon'> {
   /** 悬浮提示文案，传了才包裹 Tooltip */
   label?: string
   /** 是否处于激活态（高亮） */
@@ -689,10 +741,8 @@ export interface BottomBarIconButtonProps {
   disabled?: boolean
   /** 点击回调 */
   onClick?: () => void
-  /** 追加样式类 */
-  className?: string
   /** 图标内容 */
-  children: ReactNode
+  icon: ReactNode
 }
 
 export type ChatInputAreaProps = {
@@ -721,7 +771,7 @@ export type VoiceControlStatus = 'idle' | 'recording' | 'processing' | 'review'
 /**
  * 语音录制的命令式句柄，经 {@link ChatInputProps.voiceControllerRef} 取得
  *
- * 给「录制由外部事件驱动」的场景用：全局快捷键、主进程指令、语音会话管理器等。
+ * 给「录制由外部事件驱动」的场景用：全局快捷键、主进程指令、语音会话管理器等
  * 三个动作都走组件内部同一套流程，不会绕开面板状态或 ASR 回调
  */
 export type ChatInputVoiceController = {
@@ -732,12 +782,16 @@ export type ChatInputVoiceController = {
   /** 结束采集并进入转写；非采集态时无操作 */
   stop: () => Promise<void>
   /** 取消本轮并关闭面板，音频不转写 */
-  cancel: () => void
+  cancel: () => Promise<void>
 }
 
-export type VoiceControlButtonProps = {
+export type VoiceControlButtonProps = BottomBarActionProps & {
   status: VoiceControlStatus
   disabled?: boolean
+  /** 录音时长文案，例如 `00:12` */
+  durationLabel?: string
+  /** 语音流程错误；默认按钮会截断显示，并在悬浮提示中展示全文 */
+  errorMessage?: string
   onClick: () => void
   voiceMode: VoiceMode
   onVoiceModeChange: (mode: VoiceMode) => void
@@ -750,21 +804,11 @@ export type VoiceControlButtonProps = {
 }
 
 export type VoiceControlRenderContext = {
-  /** 当前语音按钮状态 */
-  status: VoiceControlStatus
-  /** 是否禁用 */
-  disabled: boolean
   /** 语音面板是否正在显示 */
   panelVisible: boolean
-  /** 点击语音按钮的内置行为 */
-  onClick: () => void
-  /** 当前语音模式 */
-  voiceMode: VoiceMode
-  /** 切换语音模式 */
-  onVoiceModeChange: (mode: VoiceMode) => void
-  /** 可用的语音模式选项 */
-  availableModes?: VoiceMode[]
-  /** 默认语音按钮，可在局部包裹或直接复用 */
+  /** 已包含当前状态、行为和底栏覆盖项的完整属性 */
+  props: VoiceControlButtonProps
+  /** 默认语音按钮，可直接展开 props 后局部覆盖 */
   DefaultVoiceControl: ComponentType<VoiceControlButtonProps>
 }
 
@@ -793,8 +837,8 @@ export interface AutoCompletePanelProps {
 export interface HistoryPanelProps {
   /** 是否显示 */
   visible: boolean
-  /** 搜索关键词 */
-  searchQuery: string
+  /** 是否正在加载历史记录 */
+  loading?: boolean
   /** 高亮的索引 */
   highlightedIndex: number
   /** 历史记录列表 */
@@ -813,8 +857,8 @@ export interface HistoryPanelProps {
 export interface PromptPanelProps {
   /** 是否显示 */
   visible: boolean
-  /** 搜索关键词 */
-  searchQuery: string
+  /** 是否正在加载提示词模板 */
+  loading?: boolean
   /** 选中的分类 */
   selectedCategory?: PromptCategory
   /** 高亮的索引 */
@@ -828,24 +872,24 @@ export interface PromptPanelProps {
 
   /** 事件回调 */
   onTemplateSelect: (template: PromptTemplate) => void
-  onCategorySelect: (category: PromptCategory) => void
+  onCategorySelect: (category?: PromptCategory) => void
   onClose: () => void
   onHighlightChange: (index: number) => void
 }
 
 export type BottomBarProps = {
-  enablePromptTemplates?: boolean
-  enableHistory?: boolean
-  enableUploader?: boolean
-  enableHelper?: boolean
-  loading?: boolean
-  disabled?: boolean
+  enablePromptTemplates: boolean
+  enableHistory: boolean
+  enableUploader: boolean
+  enableHelper: boolean
+  loading: boolean
+  disabled: boolean
   actualValue: string
   /** 允许文本为空时仍可发送（消费方有外部可发送内容，如图片附件） */
-  allowEmptySubmit?: boolean
+  allowEmptySubmit: boolean
   shortcuts: ResolvedChatInputShortcuts
-  showPromptPanel?: boolean
-  showHistoryPanel?: boolean
+  showPromptPanel: boolean
+  showHistoryPanel: boolean
   textareaRef: RefObject<HTMLTextAreaElement | null>
   chatInputAreaRef: RefObject<HTMLDivElement | null>
   onFilesChange: (files: { base64: string }[]) => void
@@ -855,51 +899,31 @@ export type BottomBarProps = {
   onShowHistoryPanelToggle: () => void
   /** 触发文件选择（上传由上层单实例 Uploader 接管，此处仅触发） */
   onUploaderClick: () => void
-  voiceControl?: ReactNode
+  voiceControl?: (props: BottomBarActionProps) => ReactNode
   /** 自定义底部操作栏编排；不传则用默认布局 */
   renderActions?: (ctx: BottomBarRenderContext) => ReactNode
-}
-
-/** 底部栏零件组件的公共属性 */
-export interface BottomBarPartProps {
-  /** 追加 / 覆盖样式类 */
-  className?: string
-}
-
-/** 发送按钮属性 */
-export interface BottomBarSendButtonProps extends BottomBarPartProps {
-  /** 自定义图标，默认上箭头 */
-  icon?: ReactNode
-}
-
-/** 上传按钮属性 */
-export interface BottomBarUploaderButtonProps extends BottomBarPartProps {
-  /** 自定义图标，默认回形针 */
-  icon?: ReactNode
-  /** 接受的文件类型，默认 image/ */
-  accept?: string
 }
 
 /**
  * `renderActions` 的渲染上下文
  *
  * 组件负责「零件」（已接好行为与样式），消费方负责「编排」（顺序与分组）
- * 所有零件都是**引用稳定的组件**，统一用 `<X />` 摆放，可传 `className` 等属性覆盖样式；
+ * 所有零件都是**引用稳定的组件**，统一通过 `icon` 替换图标、通过 `className` 覆盖样式；
  * 需要更底层控制时再用 `refs` / `state` / `actions`
  */
 export interface BottomBarRenderContext {
   /** 语音控件（未启用语音录制时渲染 null） */
-  VoiceControl: ComponentType<BottomBarPartProps>
+  VoiceControl: ComponentType<BottomBarActionProps>
   /** 发送按钮 */
-  SendButton: ComponentType<BottomBarSendButtonProps>
-  /** 上传按钮，已接入内部粘贴 / 拖拽，可自定义图标与 accept */
-  UploaderButton: ComponentType<BottomBarUploaderButtonProps>
+  SendButton: ComponentType<BottomBarActionProps>
+  /** 上传按钮，已接入内部粘贴 / 拖拽 */
+  UploaderButton: ComponentType<BottomBarActionProps>
   /** 提示词模板按钮 */
-  PromptButton: ComponentType<BottomBarPartProps>
+  PromptButton: ComponentType<BottomBarActionProps>
   /** 输入历史按钮 */
-  HistoryButton: ComponentType<BottomBarPartProps>
+  HistoryButton: ComponentType<BottomBarActionProps>
   /** 快捷键帮助按钮 */
-  HelperButton: ComponentType<BottomBarPartProps>
+  HelperButton: ComponentType<BottomBarActionProps>
   /** 统一风格的图标按钮外壳，便于接入自定义动作（如截图） */
   IconButton: ComponentType<BottomBarIconButtonProps>
   /** 组件默认的底部栏内容（按 enable* 开关渲染），便于在其基础上微调 */
@@ -962,20 +986,20 @@ export interface ChatInputMotionConfig {
   transition?: Transition
 }
 
-export type BottomBarLatestState = {
+export type BottomBarContextValue = {
   t: (key: string, options?: Record<string, unknown>) => string
-  enablePromptTemplates?: boolean
-  enableHistory?: boolean
-  enableUploader?: boolean
-  enableHelper?: boolean
-  loading?: boolean
-  disabled?: boolean
+  enablePromptTemplates: boolean
+  enableHistory: boolean
+  enableUploader: boolean
+  enableHelper: boolean
+  loading: boolean
+  disabled: boolean
   actualValue: string
-  allowEmptySubmit?: boolean
+  allowEmptySubmit: boolean
   shortcuts: ResolvedChatInputShortcuts
-  showPromptPanel?: boolean
-  showHistoryPanel?: boolean
-  voiceControl?: ReactNode
+  showPromptPanel: boolean
+  showHistoryPanel: boolean
+  voiceControl?: (props: BottomBarActionProps) => ReactNode
   textareaRef: RefObject<HTMLTextAreaElement | null>
   chatInputAreaRef: RefObject<HTMLDivElement | null>
   onFilesChange: (files: { base64: string }[]) => void
@@ -986,20 +1010,13 @@ export type BottomBarLatestState = {
   onUploaderClick: () => void
 }
 
-export type SearchIndexItem = {
-  id: string
-  type: 'template' | 'history'
-  searchText: string
-  source: PromptTemplate | InputHistory
-}
-
 export type InteractionHandlerOptions = {
   /** 外部属性 */
   loading: ChatInputProps['loading']
   disabled: ChatInputProps['disabled']
   allowEmptySubmit: ChatInputProps['allowEmptySubmit']
-  enableHistory: ChatInputProps['enableHistory']
-  enableAutoComplete: ChatInputProps['enableAutoComplete']
+  enableHistory: boolean
+  enableAutoComplete: boolean
   onSubmit: ChatInputProps['onSubmit']
   onTemplateSelect: ChatInputProps['onTemplateSelect']
   onHistorySelect: ChatInputProps['onHistorySelect']
@@ -1014,9 +1031,6 @@ export type InteractionHandlerOptions = {
   setShowAutoComplete: (show: boolean) => void
   closeAllPanels: () => void
 
-  /** 状态 */
-  setSearchQuery: (query: string) => void
-
   /** 引用 */
   textareaRef: RefObject<HTMLTextAreaElement | null>
 
@@ -1026,7 +1040,6 @@ export type InteractionHandlerOptions = {
   }
   inputHistoryHook: {
     addHistory: (content: string, templateId?: string) => void
-    resetHistoryNavigation: () => void
   }
   autoCompleteHook: {
     generateSuggestions: (query: string) => void | Promise<void>
@@ -1100,6 +1113,10 @@ export type UseVoiceRecorderOptions = {
    */
   onVoiceModeChange?: (mode: VoiceMode) => void
   /**
+   * 语音状态迁移回调；与内部状态更新在同一生命周期事件中同步触发
+   */
+  onVoiceStatusChange?: (status: VoiceControlStatus) => void
+  /**
    * ASR 配置选项
    * - 如果提供 callbacks，使用回调模式
    * - 如果不提供，使用默认的 SpeakToTxt（使用 defaultConfig）
@@ -1123,15 +1140,8 @@ export type UseShortcutActionsOptions = {
   shortcuts: ResolvedChatInputShortcuts
   promptEnabled: boolean
   historyEnabled: boolean
+  disabled: boolean
+  target: HTMLElement | null
   openPrompt: () => void
   openHistory: () => void
-}
-
-export type ResolveChatInputFeaturesOptions = {
-  features?: ChatInputFeatures
-  enablePromptTemplates?: boolean
-  enableHistory?: boolean
-  enableAutoComplete?: boolean
-  customTemplates?: PromptTemplate[]
-  maxHistoryCount?: number
 }

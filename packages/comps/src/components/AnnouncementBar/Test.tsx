@@ -11,7 +11,7 @@ const verticalItems = [
 
 const horizontalItems = [
   <span key="1">限时活动 · 全场包邮</span>,
-  <span key="2">会员日 · 积分双倍</span>,
+  <span key="2">限时活动 · 积分双倍</span>,
   <span key="3">新品上架 · 点击查看</span>,
 ]
 

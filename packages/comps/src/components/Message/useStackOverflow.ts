@@ -1,10 +1,10 @@
-import type { RefObject } from 'react'
-import type { MessageItemData } from './types'
 import { useResizeObserver } from 'hooks'
+import type { RefObject } from 'react'
 import { useLayoutEffect } from 'react'
 import { DATA_ATTR } from '../../constants/dataAttributes'
 import { STACK_BOTTOM_MARGIN, STACK_GAP, STACK_TOP_OFFSET } from './constants'
 import { messageStore } from './messageStore'
+import type { MessageItemData } from './types'
 
 /**
  * 监听堆叠高度，超出窗口可视高度时自动关闭最顶部（最早）的一条消息

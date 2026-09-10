@@ -1,6 +1,5 @@
 'use client'
 
-import type { PopoverProps, PopoverRef } from './types'
 import { useTheme } from 'hooks'
 import { X } from 'lucide-react'
 import { forwardRef, memo, useRef } from 'react'
@@ -9,6 +8,7 @@ import { KeyboardLayerHostContext } from '../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../Animate'
 import { FloatingArrow, useFloatingLayer } from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
+import type { PopoverProps, PopoverRef } from './types'
 import { usePopoverInteractions } from './usePopoverInteractions'
 import { useScrollPortal } from './useScrollPortal'
 import { getVariantByPlacement } from './variants'
@@ -120,9 +120,10 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
         { children }
       </div>
 
-      <SafePortal target={ followScroll
-        ? scrollPortalTarget
-        : undefined }
+      <SafePortal
+        target={ followScroll
+          ? scrollPortalTarget
+          : undefined }
       >
         <AnimateShow
           show={ isOpen }
@@ -141,17 +142,23 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
           exitSetMode={ exitSetMode }
           { ...floatingProps }
         >
-          { showCloseBtn && <X
-            className={ `absolute top-1 right-2 cursor-pointer text-red-400 font-bold z-popover
-          hover:text-red-600 duration-300 hover:text-lg` }
-            onClick={ () => {
-              setIsOpen(false)
-            } }
-          /> }
+          { showCloseBtn && (
+            <button
+              type="button"
+              className={ `absolute top-1 right-2 z-popover cursor-pointer text-red-400 font-bold
+          duration-300 hover:text-lg hover:text-red-600` }
+              aria-label="Close popover"
+              onClick={ () => {
+                setIsOpen(false)
+              } }
+            >
+              <X aria-hidden="true" />
+            </button>
+          ) }
 
           { arrowProps && <FloatingArrow { ...arrowProps } /> }
 
-          {/* 气泡里的 Select 等嵌套浮层据此把键盘优先级抬到气泡之上，Esc 先关它们再关气泡 */ }
+          { /* 气泡里的 Select 等嵌套浮层据此把键盘优先级抬到气泡之上，Esc 先关它们再关气泡 */ }
           <KeyboardLayerHostContext.Provider value={ layerPriority }>
             { content }
           </KeyboardLayerHostContext.Provider>

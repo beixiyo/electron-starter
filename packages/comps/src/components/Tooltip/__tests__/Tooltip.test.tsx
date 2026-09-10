@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { Tooltip } from '..'
 import { DATA_ATTR } from '../../../constants/dataAttributes'
 import { Modal } from '../../Modal'
+import { Tooltip } from '..'
 
 function pressEscape(): void {
   act(() => {

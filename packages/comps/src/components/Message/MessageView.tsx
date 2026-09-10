@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import type { MessageVariant } from './types'
-import type { CloseBtnProps } from '../CloseBtn'
 import { memo } from 'react'
 import { cn } from 'utils'
+import type { CloseBtnProps } from '../CloseBtn'
 import { CloseBtn } from '../CloseBtn'
 import { variantStyles } from './constants'
+import type { MessageVariant } from './types'
 
 /**
  * Message 的纯展示组件（图标 + 内容 + 关闭按钮）
@@ -20,6 +20,7 @@ export const MessageView = memo<MessageViewProps>((props) => {
     closeBtnProps,
     onClose,
     className,
+    contentClassName,
   } = props
 
   const styles = variantStyles[variant]
@@ -29,30 +30,39 @@ export const MessageView = memo<MessageViewProps>((props) => {
   return (
     <div
       className={ cn(
-        'flex items-start gap-3 px-4 py-3',
+        'flex items-start gap-3 px-5 py-3.5',
         'rounded-2xl shadow-toast',
         styles.bg,
         className,
       ) }
     >
       { showIcon && Icon && (
-        <div className={ cn(
-          'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full',
-          styles.iconBg,
-          variant === 'loading' && 'animate-spin',
-        ) }>
-          <Icon className={ cn(
-            'size-full',
-            styles.accent,
-            variant === 'loading' && 'size-4',
-          ) } />
+        <div
+          className={ cn(
+            'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full',
+            styles.iconBg,
+            variant === 'loading' && 'animate-spin',
+          ) }
+        >
+          <Icon
+            className={ cn(
+              'size-full',
+              styles.accent,
+              variant === 'loading' && 'size-4',
+            ) }
+          />
         </div>
       ) }
 
-      <div className={ cn(
-        'max-w-[min(72vw,360px)] wrap-break-word text-center text-sm',
-        styles.accent,
-      ) }>{ content }</div>
+      <div
+        className={ cn(
+          'max-w-[min(72vw,360px)] wrap-break-word text-center text-sm font-semibold leading-5.5',
+          styles.accent,
+          contentClassName,
+        ) }
+      >
+        { content }
+      </div>
 
       { showClose && (
         <CloseBtn
@@ -85,5 +95,13 @@ export interface MessageViewProps {
   showIcon?: boolean
   /** 点击关闭按钮的回调 */
   onClose?: () => void
+  /** 根节点（含底色、圆角、阴影与内边距） */
   className?: string
+  /**
+   * 内容区
+   *
+   * 内容默认居中且限宽（`max-w-[min(72vw,360px)]`），
+   * 承载「文案 + 操作按钮」这类横向排布时通常要在这里改掉对齐或宽度
+   */
+  contentClassName?: string
 }

@@ -231,7 +231,7 @@ function UncontrolledModeTest() {
           icon={ (
             <div className="w-2 h-2 rounded-full bg-text2" />
           ) }
-          label="选择 Flowtag"
+          label="选择标签"
         >
           <div className="flex items-center justify-around pl-4">
             <ColorDot color="#ff6b9d" />

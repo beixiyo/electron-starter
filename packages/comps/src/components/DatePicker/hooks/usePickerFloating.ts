@@ -1,7 +1,8 @@
 import type { FloatingPlacement } from 'hooks'
 import type { RefObject } from 'react'
-import { useFloatingPosition } from 'hooks'
+import type { FloatingArrowConfig, FloatingArrowProps } from '../../FloatingArrow'
 import { useEffect, useRef, useState } from 'react'
+import { useFloatingLayer } from '../../FloatingArrow'
 
 export interface UsePickerFloatingOptions {
   /** 是否启用 */
@@ -12,15 +13,23 @@ export interface UsePickerFloatingOptions {
   dropdownRef: RefObject<HTMLElement | null>
   /** 定位方式 */
   placement?: FloatingPlacement
-  /** 偏移量 */
+  /** 触发器到面板可见边缘的间距；开启箭头时以箭头尖端为准 */
   offset?: number
+  /** 箭头配置 */
+  arrow?: FloatingArrowConfig
+  /** 箭头是否绘制边框，需与面板边框保持一致 */
+  bordered?: boolean
 }
 
 export interface UsePickerFloatingReturn {
   /** 样式对象 */
   style: React.CSSProperties
+  /** 经过视口碰撞检测后的最终位置 */
+  placement: FloatingPlacement
   /** 是否应该显示动画 */
   shouldAnimate: boolean
+  /** 可直接展开给 FloatingArrow 的属性；未开启箭头时为 null */
+  arrowProps: FloatingArrowProps | null
 }
 
 /**
@@ -32,18 +41,24 @@ export function usePickerFloating({
   triggerRef,
   dropdownRef,
   placement = 'bottom-start',
-  offset = 4,
+  offset = 8,
+  arrow,
+  bordered = false,
 }: UsePickerFloatingOptions): UsePickerFloatingReturn {
   /** 是否应该显示动画，位置计算完成后才为 true */
   const [shouldAnimate, setShouldAnimate] = useState(false)
 
   const {
     style,
+    placement: actualPlacement,
     update,
-  } = useFloatingPosition(triggerRef, dropdownRef, {
+    arrowProps,
+  } = useFloatingLayer(triggerRef, dropdownRef, {
     enabled,
     placement,
     offset,
+    arrow,
+    bordered,
     boundaryPadding: 8,
     flip: true,
     shift: true,
@@ -80,6 +95,8 @@ export function usePickerFloating({
     style: enabled
       ? style
       : lastPositionedStyleRef.current,
+    placement: actualPlacement,
     shouldAnimate,
+    arrowProps,
   }
 }

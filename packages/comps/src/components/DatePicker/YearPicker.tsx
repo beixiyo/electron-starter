@@ -1,6 +1,5 @@
 'use client'
 
-import type { YearPickerProps, YearPickerRef } from './types'
 import { useLatestCallback } from 'hooks'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { forwardRef, memo, useCallback } from 'react'
@@ -11,6 +10,7 @@ import { PickerBase } from './components/PickerBase'
 import { PickerInput } from './components/PickerInput'
 import { usePickerState } from './hooks/usePickerState'
 import { useSinglePickerValue } from './hooks/useSinglePickerValue'
+import type { YearPickerProps, YearPickerRef } from './types'
 import { addYear, formatDate, getYear, isYearRangeAvailable, subtractYear } from './utils'
 import { YearGrid } from './YearGrid'
 
@@ -25,7 +25,8 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
   trigger,
   onTriggerClick,
   placement = 'bottom-start',
-  offset = 4,
+  offset = 8,
+  arrow,
   format: dateFormat = 'yyyy',
   placeholder: propsPlaceholder,
   disabled = false,
@@ -87,7 +88,7 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
     externalValue: actualValue,
     defaultValue,
     isOpen,
-    onChange: nextValue => handleChangeVal(nextValue, undefined as any),
+    onChange: (nextValue) => handleChangeVal(nextValue, undefined as any),
     onConfirm,
   })
 
@@ -118,8 +119,7 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
     const firstYear = subtractYear(newYear, yearRange)
     const lastYear = addYear(newYear, yearRange)
 
-    if (!isYearRangeAvailable(firstYear, lastYear, minDate, maxDate))
-      return
+    if (!isYearRangeAvailable(firstYear, lastYear, minDate, maxDate)) return
 
     setCurrentYear(newYear)
   }, [currentYear, yearRange, minDate, maxDate, setCurrentYear])
@@ -144,7 +144,7 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
 
   const dropdownContent = (
     <div className="min-w-72">
-      {/* 年份范围切换头部 */ }
+      { /* 年份范围切换头部 */ }
       <div className="mb-4 flex items-center justify-between">
         <Button
           variant="ghost"
@@ -157,9 +157,7 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
         />
 
         <div className="text-sm font-semibold text-text">
-          { getYear(subtractYear(currentYear, yearRange)) }
-          { ' ' }
-          -
+          { getYear(subtractYear(currentYear, yearRange)) } -
           { getYear(addYear(currentYear, yearRange)) }
         </div>
 
@@ -174,7 +172,7 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
         />
       </div>
 
-      {/* 年份网格 */ }
+      { /* 年份网格 */ }
       <YearGrid
         currentYear={ currentYear }
         selectedYear={ internalValue }
@@ -196,29 +194,31 @@ const InnerYearPicker = forwardRef<YearPickerRef, YearPickerProps>(({
   const triggerContent = trigger
     ? <div onClick={ handleTriggerClick }>{ trigger }</div>
     : (
-        <PickerInput
-          displayValue={ displayValue }
-          placeholder={ placeholder }
-          disabled={ disabled }
-          showClear={ showClear }
-          error={ actualError }
-          canShowClear={ showClear && !!displayValue && !disabled }
-          onClear={ handleClear }
-          onClick={ handleTriggerClick }
-          inputClassName={ inputClassName }
-          icon={ icon }
-          clearIcon={ clearIcon }
-        />
-      )
+      <PickerInput
+        displayValue={ displayValue }
+        placeholder={ placeholder }
+        disabled={ disabled }
+        showClear={ showClear }
+        error={ actualError }
+        canShowClear={ showClear && !!displayValue && !disabled }
+        onClear={ handleClear }
+        onClick={ handleTriggerClick }
+        inputClassName={ inputClassName }
+        icon={ icon }
+        clearIcon={ clearIcon }
+      />
+    )
 
   return (
     <PickerBase
       isOpen={ isOpen }
+      disabled={ disabled }
       setOpen={ setOpen }
       trigger={ triggerContent }
       dropdown={ dropdownContent }
       placement={ placement }
       offset={ offset }
+      arrow={ arrow }
       onClickOutside={ onClickOutside }
       onBlur={ handleBlur }
       className={ className }

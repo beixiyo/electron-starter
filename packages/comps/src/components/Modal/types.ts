@@ -60,11 +60,21 @@ export interface ModalProps {
   /** Modal 退出动画全部完成后触发 */
   onExitComplete?: () => void
   /**
-   * 点击确认按钮的回调
+   * 点击确认按钮（或 Enter 确认）的回调，声明式与命令式语义一致
    *
-   * 命令式 Modal 中返回 `false` 时会阻止自动关闭，适合在当前层上继续叠加新 Modal。
+   * - 返回 Promise 时自动置 `okLoading`，期间禁止重复提交
+   * - 落定后自动调 `onClose`；返回（或 resolve）`false`、或 reject 则保持打开，
+   *   适合校验失败、请求失败或要在当前层上继续叠加新 Modal
+   * - 调用时不传参，不要把它当 `onClick` 用
+   *
+   * 不想自动关闭时用 {@link ModalProps.closeOnOk}
    */
   onOk?: () => void | false | Promise<void | false>
+  /**
+   * 确认落定后是否自动调 `onClose`
+   * @default true
+   */
+  closeOnOk?: boolean
 
   titleText?: string
   /**
@@ -110,6 +120,11 @@ export interface ModalProps {
    */
   innerCloseBtn?: boolean | ModalCloseBtnConfig
 
+  /** 对话框的可访问名称，映射到容器的 aria-label */
+  ariaLabel?: string
+  /** 关联标题元素 id，映射到容器的 aria-labelledby */
+  ariaLabelledby?: string
+
   /**
    * 是否显示边框
    * @default light: false, dark: true
@@ -130,6 +145,14 @@ export interface ModalProps {
    */
   escToClose?: boolean
   /**
+   * 是否允许在弹窗内容中按 Enter 触发 `onOk`
+   *
+   * textarea、contenteditable、按钮等拥有自身 Enter 语义的元素不会触发确认；
+   * `okLoading` 或确认按钮 disabled 时同样不会触发
+   * @default true
+   */
+  enterToConfirm?: boolean
+  /**
    * @default true
    */
   center?: boolean
@@ -143,8 +166,11 @@ export interface ModalCloseBtnConfig extends Partial<Omit<CloseBtnProps, 'mode' 
   variant?: CloseBtnProps['variant']
 }
 
-export type ModelType<ModalInstanceType> = ModalInstanceType & {
-  [key in ModalVariant]: (props: Partial<ModalProps>) => ComponentController
-} & {
-  show: (Component: any, props?: Partial<ModalProps>) => ComponentController
-}
+export type ModelType<ModalInstanceType> =
+  & ModalInstanceType
+  & {
+    [key in ModalVariant]: (props: Partial<ModalProps>) => ComponentController
+  }
+  & {
+    show: (Component: any, props?: Partial<ModalProps>) => ComponentController
+  }

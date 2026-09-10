@@ -1,7 +1,8 @@
 import type { CSSProperties, RefObject } from 'react'
 import type { FloatingArrowPlacement } from '.'
 import type { FloatingArrowConfig, FloatingArrowOptions } from './config'
-import { DEFAULT_FLOATING_ARROW_SIZE, resolveFloatingArrowOptions } from './config'
+import { resolveFloatingArrowOptions } from './config'
+import { DEFAULT_FLOATING_ARROW_SIZE } from './geometry'
 import { useFloatingArrow } from './useFloatingArrow'
 
 const DEFAULT_ARROW_OFFSET = 24

@@ -15,7 +15,8 @@ const listeners = new Set<Listener>()
 const KEY_EVENT_TYPES = ['keydown', 'keyup'] as const satisfies readonly KeyEventType[]
 
 function emit() {
-  for (const listener of listeners) listener()
+  for (const listener of listeners)
+    listener()
 }
 
 function getTopLayer(eventType: KeyEventType) {
@@ -23,7 +24,8 @@ function getTopLayer(eventType: KeyEventType) {
 
   for (const layer of layers) {
     const options = layer.getOptions()
-    if (!options.active || !options.eventTypes.includes(eventType)) continue
+    if (!options.active || !options.eventTypes.includes(eventType))
+      continue
     if (
       !topLayer
       || options.priority > topLayer.getOptions().priority
@@ -38,10 +40,12 @@ function getTopLayer(eventType: KeyEventType) {
 
 function handleEvent(event: KeyboardEvent) {
   const layer = getTopLayer(event.type as KeyEventType)
-  if (!layer) return
+  if (!layer)
+    return
 
   const options = layer.getOptions()
-  if (!options.matches(event)) return
+  if (!options.matches(event))
+    return
 
   if (options.consume) {
     event.preventDefault()
@@ -57,11 +61,13 @@ function handleEvent(event: KeyboardEvent) {
 }
 
 function syncListener() {
-  if (typeof document === 'undefined') return
+  if (typeof document === 'undefined')
+    return
 
   for (const eventType of KEY_EVENT_TYPES) {
     const shouldListen = !!getTopLayer(eventType)
-    if (shouldListen === listeningTypes.has(eventType)) continue
+    if (shouldListen === listeningTypes.has(eventType))
+      continue
 
     if (shouldListen) {
       listeningTypes.add(eventType)
@@ -87,12 +93,13 @@ export const keyboardLayerStore = {
    */
   isTopLayer(id: symbol, eventTypes: readonly KeyEventType[]) {
     return eventTypes.length > 0
-      && eventTypes.every((eventType) => getTopLayer(eventType)?.id === id)
+      && eventTypes.every(eventType => getTopLayer(eventType)?.id === id)
   },
 
   register(entry: KeyboardLayerEntry) {
-    if (entry.getOptions().active) entry.order = ++order
-    layers = layers.some((layer) => layer.id === entry.id)
+    if (entry.getOptions().active)
+      entry.order = ++order
+    layers = layers.some(layer => layer.id === entry.id)
       ? layers
       : [...layers, entry]
     syncListener()
@@ -106,8 +113,9 @@ export const keyboardLayerStore = {
 
   /** 仅在 inactive → active 时提升同优先级层的顺序 */
   activate(id: symbol) {
-    const layer = layers.find((item) => item.id === id)
-    if (!layer || !layer.getOptions().active) return
+    const layer = layers.find(item => item.id === id)
+    if (!layer || !layer.getOptions().active)
+      return
 
     layer.order = ++order
     syncListener()
@@ -115,9 +123,10 @@ export const keyboardLayerStore = {
   },
 
   unregister(id: symbol) {
-    if (!layers.some((layer) => layer.id === id)) return
+    if (!layers.some(layer => layer.id === id))
+      return
 
-    layers = layers.filter((layer) => layer.id !== id)
+    layers = layers.filter(layer => layer.id !== id)
     syncListener()
     emit()
   },

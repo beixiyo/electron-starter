@@ -6,6 +6,24 @@ import { DateSpanPicker } from '../DateSpanPicker'
 import { ControlledDateSpanPicker, expectDate, renderWithI18n } from './test-utils'
 
 describe('dateSpanPicker', () => {
+  it('禁用触发器同步 aria-disabled 与 data-vv-disabled', () => {
+    renderWithI18n(<DateSpanPicker disabled />)
+
+    const trigger = screen.getByRole('button', { name: '选择日期' })
+    expect(trigger.getAttribute('aria-disabled')).toBe('true')
+    expect(trigger.getAttribute(DATA_ATTR.disabled)).toBe('true')
+  })
+
+  it('默认触发器可 Tab 聚焦并用 Space 打开', async () => {
+    renderWithI18n(<ControlledDateSpanPicker onChange={ vi.fn() } />)
+
+    const trigger = screen.getByRole('button', { name: '选择日期' })
+    expect(trigger.getAttribute('tabindex')).toBe('0')
+    fireEvent.keyDown(trigger, { key: ' ' })
+
+    expect(await screen.findByRole('button', { name: '确认' })).toBeTruthy()
+  })
+
   it('按空、单日、区间、新单日和清空的顺序转换选择', async () => {
     const onChange = vi.fn()
     const currentMonth = startOfMonth(new Date())
@@ -19,7 +37,9 @@ describe('dateSpanPicker', () => {
     fireEvent.click(await screen.findByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }))
     expectDate(onChange.mock.calls[0][0].start, firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate())
     expect(onChange.mock.calls[0][0].end).toBeNull()
-    expect(screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }).getAttribute('aria-selected')).toBe('true')
+    const selectedFirstDate = screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') })
+    expect(selectedFirstDate.getAttribute('aria-selected')).toBe('true')
+    expect(selectedFirstDate.getAttribute(DATA_ATTR.selected)).toBe('true')
     expect(screen.queryByText('开始')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: format(earlierDate, 'yyyy-MM-dd') }))
@@ -65,7 +85,7 @@ describe('dateSpanPicker', () => {
 
     expect(onConfirm).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '完成' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expectDate(onConfirm.mock.calls[0][0].start, selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())
@@ -73,7 +93,7 @@ describe('dateSpanPicker', () => {
     expect(onConfirm.mock.calls[0][1].reason).toBe('confirm')
   })
 
-  it('按 Enter 时走 Confirm 事务', async () => {
+  it('组件外 Enter 不触发确认，仅确认按钮提交事务', async () => {
     const onConfirm = vi.fn()
     const selectedDate = addDays(startOfMonth(new Date()), 9)
     renderWithI18n(<ControlledDateSpanPicker onChange={ vi.fn() } onConfirm={ onConfirm } />)
@@ -81,6 +101,9 @@ describe('dateSpanPicker', () => {
     fireEvent.click(screen.getByText('选择日期'))
     fireEvent.click(await screen.findByRole('button', { name: format(selectedDate, 'yyyy-MM-dd') }))
     fireEvent.keyDown(document, { key: 'Enter' })
+
+    expect(onConfirm).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '确认' }))
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expectDate(onConfirm.mock.calls[0][0].start, selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())

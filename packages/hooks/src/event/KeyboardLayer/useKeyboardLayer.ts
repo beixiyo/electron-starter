@@ -6,6 +6,12 @@ import { useLatestRef } from '../../ref'
 import { keyboardLayerStore } from './keyboardLayerStore'
 import type { KeyboardLayerController, UseKeyboardLayerOptions } from './types'
 
+const DEFAULT_EVENT_TYPES: readonly KeyEventType[] = ['keydown']
+
+const useIsomorphicLayoutEffect = typeof window === 'undefined'
+  ? useEffect
+  : useLayoutEffect
+
 /**
  * 将交互区域注册到全局键盘响应栈
  *
@@ -52,7 +58,6 @@ export function useKeyboardLayer(options: UseKeyboardLayerOptions): KeyboardLaye
     onKeyUp?.(event)
   })
 
-  /** 决定这一层进哪几份事件栈：显式 eventTypes 优先，否则由传了哪些回调推导 */
   const resolvedEventTypes = useResolvedEventTypes(eventTypes, !!onKeyDown, !!onKeyUp)
 
   const optionsRef = useLatestRef({
@@ -125,9 +130,3 @@ function useResolvedEventTypes(
       : DEFAULT_EVENT_TYPES
   }, [explicit, hasKeyDown, hasKeyUp])
 }
-
-const DEFAULT_EVENT_TYPES: readonly KeyEventType[] = ['keydown']
-
-const useIsomorphicLayoutEffect = typeof window === 'undefined'
-  ? useEffect
-  : useLayoutEffect

@@ -81,10 +81,8 @@ export const AudioRecordingStage = memo<AudioRecordingStageProps>((props) => {
       <BottomGlow
         level={ level }
         active={ active }
-        label={ null }
         minLightWidth={ 0.32 }
         maxLightWidth={ 0.9 }
-        glowHeight={ 0.18 }
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-24 aspect-auto rounded-none bg-background2"
       />

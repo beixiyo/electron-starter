@@ -1,7 +1,6 @@
 import type { CSSProperties } from 'react'
+import { resolveFloatingArrowGeometry } from './geometry'
 
-/** 箭头默认宽度，单位 px；高度固定为宽度的一半 */
-export const DEFAULT_FLOATING_ARROW_SIZE = 12
 /** 箭头默认压入浮层的距离，单位 px，用于消除亚像素接缝 */
 export const DEFAULT_FLOATING_ARROW_SEAM_OVERLAP = 1
 
@@ -22,7 +21,7 @@ export function resolveFloatingArrowOptions(
 /**
  * 箭头尖端超出浮层边缘的可见距离，单位 px
  *
- * 箭头高度为宽度一半，再扣除压入浮层的接缝重叠；关闭箭头时为 0
+ * 取磨圆后的实际高度，再扣除压入浮层的接缝重叠；关闭箭头时为 0
  */
 export function getFloatingArrowProtrusion(
   arrow?: FloatingArrowConfig | null,
@@ -32,8 +31,8 @@ export function getFloatingArrowProtrusion(
   if (!options)
     return 0
 
-  const size = options.size ?? DEFAULT_FLOATING_ARROW_SIZE
-  return Math.max(size / 2 - seamOverlap, 0)
+  const { height } = resolveFloatingArrowGeometry(options)
+  return Math.max(height - seamOverlap, 0)
 }
 
 /**
@@ -57,9 +56,19 @@ export function resolveFloatingOffset(options: ResolveFloatingOffsetOptions): nu
 export interface FloatingArrowOptions {
   /**
    * 箭头宽度，单位 px
-   * @default 12
+   * @default 22
    */
   size?: number
+  /**
+   * 尖端圆角半径，单位 px
+   * @default size * 0.193
+   */
+  tipRadius?: number
+  /**
+   * 根部与浮层边缘衔接处的圆角半径，单位 px
+   * @default size * 0.238
+   */
+  baseRadius?: number
   /** 箭头中心到浮层交叉轴起始边的距离，单位 px；不传时自动对齐 reference */
   offset?: number
   /**

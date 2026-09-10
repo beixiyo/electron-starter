@@ -1,13 +1,14 @@
-import type { CascaderOptionProps } from './types'
 import { Check, ChevronRight } from 'lucide-react'
 import { memo } from 'react'
 import { cn } from 'utils'
 import { DATA_ATTR } from '../../constants/dataAttributes'
+import type { CascaderOptionProps } from './types'
 
 export const CascaderOption = memo(({
   option,
   selected,
   highlighted,
+  id,
   onClick,
   onMouseEnter,
   className,
@@ -18,23 +19,27 @@ export const CascaderOption = memo(({
   optionClickIgnoreSelector,
 }: CascaderOptionProps) => {
   const handleClick = (e: React.MouseEvent) => {
-    if (option.disabled)
-      return
-    if (optionClickIgnoreSelector && (e.target as HTMLElement).closest(optionClickIgnoreSelector))
-      return
+    if (option.disabled) return
+    if (optionClickIgnoreSelector && (e.target as HTMLElement).closest(optionClickIgnoreSelector)) return
     onClick(option.value)
   }
 
   return (
     <div
+      id={ id }
       { ...{ [DATA_ATTR.cascader.selected]: selected && !option.children } }
       { ...{ [DATA_ATTR.cascader.option]: true } }
+      { ...{
+        [DATA_ATTR.selected]: Boolean(selected && !option.children),
+        [DATA_ATTR.highlighted]: highlighted,
+        [DATA_ATTR.disabled]: Boolean(option.disabled),
+      } }
       role="option"
-      aria-selected={ selected && !option.children }
+      aria-selected={ Boolean(selected && !option.children) }
       aria-disabled={ option.disabled || undefined }
       className={ cn(
-        'flex items-center justify-between gap-2 px-4 py-2 cursor-pointer transition-all duration-200 ease-in-out',
-        'text-text bg-background rounded-xl mx-1 my-0.5',
+        'mx-1 my-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-background px-3 py-1.5 text-text',
+        'transition-all duration-[400ms] ease-out',
         option.disabled
           ? 'opacity-50 cursor-not-allowed'
           : 'hover:bg-background3',
@@ -52,16 +57,10 @@ export const CascaderOption = memo(({
         <div className={ cn('truncate text-sm', labelClassName) }>{ option.label }</div>
       </div>
 
-      { option.extra && (
-        <div className="shrink-0 text-xs text-text3">{ option.extra }</div>
-      ) }
+      { option.extra && <div className="shrink-0 text-xs text-text3">{ option.extra }</div> }
 
-      { selected && !option.children && (
-        <Check className={ cn('h-4 w-4 shrink-0 text-text', checkIconClassName) } />
-      ) }
-      { option.children && (
-        <ChevronRight className={ cn('h-4 w-4 shrink-0 text-text2', chevronIconClassName) } />
-      ) }
+      { selected && !option.children && <Check className={ cn('h-4 w-4 shrink-0 text-text', checkIconClassName) } /> }
+      { option.children && <ChevronRight className={ cn('h-4 w-4 shrink-0 text-text2', chevronIconClassName) } /> }
     </div>
   )
 })
