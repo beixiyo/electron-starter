@@ -5,7 +5,9 @@ import { useTheme } from 'hooks'
 import { AnimatePresence, motion } from 'motion/react'
 import { forwardRef, memo, useEffect, useImperativeHandle, useState } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { Z } from '../../constants/z-index'
+import { KeyboardLayerHostContext } from '../../hooks/useKeyboardLayerHost'
 import { CloseBtn } from '../CloseBtn'
 import { Mask } from '../Mask'
 import { SafePortal } from '../SafePortal'
@@ -124,7 +126,7 @@ const InnerModal = forwardRef<ModalRef, ModalProps>((
   const ModalContent = (
     <AnimatePresence onExitComplete={ onExitComplete }>
       { open && <Mask
-        data-modal-top={ isTop }
+        { ...{ [DATA_ATTR.modal.top]: isTop } }
         style={ {
           zIndex,
           ...(!isTop
@@ -246,7 +248,17 @@ const InnerModal = forwardRef<ModalRef, ModalProps>((
     </AnimatePresence>
   )
 
-  return <SafePortal>{ ModalContent }</SafePortal>
+  /**
+   * 把自己的键盘优先级交给上下文：弹窗里不走 Portal 的下拉 / 面板据此抬到弹窗之上，
+   * 否则它们开着时按 Esc 关掉的是整个弹窗（见 `useNestedLayerPriority`）
+   */
+  return (
+    <SafePortal>
+      <KeyboardLayerHostContext.Provider value={ zIndex }>
+        { ModalContent }
+      </KeyboardLayerHostContext.Provider>
+    </SafePortal>
+  )
 })
 
 export const Modal = memo<ModalProps>(InnerModal) as unknown as ModelType<typeof InnerModal>

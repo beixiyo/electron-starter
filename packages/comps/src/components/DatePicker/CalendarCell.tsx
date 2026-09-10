@@ -2,6 +2,7 @@
 
 import { memo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import type { CalendarCellProps } from './types'
 import { formatDate, isBeforeToday } from './utils'
 
@@ -72,7 +73,7 @@ export const CalendarCell = memo<CalendarCellProps>(({
       aria-label={ formatDate(date, 'yyyy-MM-dd') }
       aria-selected={ isConfirmed || isTemp }
       aria-disabled={ isDisabled }
-      data-range-position={ rangePosition }
+      { ...{ [DATA_ATTR.datePicker.rangePosition]: rangePosition } }
       className={ cn(
         'relative flex h-10 w-full items-end justify-center p-0',
         'cursor-pointer',

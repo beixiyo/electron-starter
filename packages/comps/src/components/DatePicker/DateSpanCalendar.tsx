@@ -6,10 +6,10 @@ import { useLatestCallback } from 'hooks'
 import { Clock } from 'lucide-react'
 import { memo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { useT } from '../../i18n'
 import { Button } from '../Button'
 import { CalendarHeader } from './CalendarHeader'
-import { DATA_DATE_PICKER_IGNORE } from './constants'
 import { DateSpanCalendarGrid } from './DateSpanCalendarGrid'
 
 /** DateSpanPicker 的日期专用日历与 Confirm 页脚 */
@@ -71,7 +71,7 @@ export const DateSpanCalendar = memo<DateSpanCalendarProps>(({
         />
         <div
           className="flex items-center justify-between"
-          { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
+          { ...({ [DATA_ATTR.datePicker.ignore]: 'true' } as any) }
         >
           { onAddTime && <Button
             variant="secondary"

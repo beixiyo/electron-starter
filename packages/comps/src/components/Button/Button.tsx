@@ -5,13 +5,13 @@ import type { ButtonProps } from './types'
 import { useComposedRef } from 'hooks'
 import { Children, forwardRef, isValidElement, memo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { getRoundedRadius } from '../../utils/roundedUtils'
 import { AuroraGlow } from '../AuroraGlow'
 import { LoadingIcon } from '../Loading/LoadingIcon'
 import { Slot } from '../Slot'
 import { Tooltip } from '../Tooltip'
 import { useButtonGroup } from './ButtonGroupContext'
-import { BUTTON_ATTR } from './constants'
 import { getDefaultStyles, getIconButtonStyles, getNeumorphicStyles } from './styles'
 
 /** 判断 tooltip 是否为 TooltipProps 对象（而非 ReactNode） */
@@ -217,7 +217,7 @@ const InnerButton = forwardRef<HTMLButtonElement, ButtonProps>((props, ref) => {
     onClick: handleClick,
     /** 在 ButtonGroup 中添加 data 属性以便定位 */
     ...(isInButtonGroup && name
-      ? { [BUTTON_ATTR.name]: name }
+      ? { [DATA_ATTR.button.name]: name }
       : {}),
     ...rest,
   }

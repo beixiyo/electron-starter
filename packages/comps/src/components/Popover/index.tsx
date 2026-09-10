@@ -1,12 +1,13 @@
 'use client'
 
 import type { PopoverProps, PopoverRef } from './types'
-import { useFloatingPosition, useTheme } from 'hooks'
+import { useTheme } from 'hooks'
 import { X } from 'lucide-react'
 import { forwardRef, memo, useRef } from 'react'
 import { cn } from 'utils'
+import { KeyboardLayerHostContext } from '../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../Animate'
-import { FloatingArrow, useFloatingArrowState } from '../FloatingArrow'
+import { FloatingArrow, useFloatingLayer } from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
 import { usePopoverInteractions } from './usePopoverInteractions'
 import { useScrollPortal } from './useScrollPortal'
@@ -57,11 +58,9 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
   const {
     isOpen,
     setIsOpen,
-    handleClick,
-    handleMouseEnter,
-    handleMouseLeave,
-    handleContentMouseEnter,
-    handleContentMouseLeave,
+    triggerProps,
+    floatingProps,
+    layerPriority,
   } = usePopoverInteractions({
     popoverRef: ref,
     triggerRef,
@@ -88,12 +87,15 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
   const {
     style: floatingStyle,
     placement: actualPosition,
-  } = useFloatingPosition(triggerRef, contentRef, {
+    arrowProps,
+  } = useFloatingLayer(triggerRef, contentRef, {
     enabled: isOpen,
     placement: align === 'center'
       ? position
       : `${position}-${align}`,
     offset: offsetProp,
+    arrow,
+    bordered,
     boundaryPadding: 8,
     flip: true,
     shift: true,
@@ -106,31 +108,14 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
       : undefined,
   })
 
-  const {
-    options: arrowOptions,
-    centerOffset: arrowCenterOffset,
-    fill: arrowFill,
-    style: arrowStyle,
-  } = useFloatingArrowState({
-    arrow,
-    enabled: isOpen,
-    placement: actualPosition,
-    floatingStyle,
-    referenceRef: triggerRef,
-    floatingRef: contentRef,
-    virtualReferenceRect,
-  })
-
   const variants = getVariantByPlacement(actualPosition)
   return (
     <>
       <div
         style={ style }
         ref={ triggerRef }
-        onClick={ handleClick }
-        onMouseEnter={ handleMouseEnter }
-        onMouseLeave={ handleMouseLeave }
         className={ className }
+        { ...triggerProps }
       >
         { children }
       </div>
@@ -146,7 +131,7 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
             'z-popover rounded-2xl bg-background drop-shadow-card',
             bordered && 'border border-border',
             contentClassName,
-            arrowOptions && 'overflow-visible',
+            arrowProps && 'overflow-visible',
           ) }
           style={ {
             ...floatingStyle,
@@ -154,8 +139,7 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
           } }
           variants={ variants }
           exitSetMode={ exitSetMode }
-          onMouseEnter={ handleContentMouseEnter }
-          onMouseLeave={ handleContentMouseLeave }
+          { ...floatingProps }
         >
           { showCloseBtn && <X
             className={ `absolute top-1 right-2 cursor-pointer text-red-400 font-bold z-popover
@@ -165,19 +149,12 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
             } }
           /> }
 
-          { arrowOptions && (
-            <FloatingArrow
-              placement={ actualPosition }
-              centerOffset={ arrowCenterOffset }
-              size={ arrowOptions.size }
-              bordered={ bordered }
-              fill={ arrowFill }
-              className={ arrowOptions.className }
-              style={ arrowStyle }
-            />
-          ) }
+          { arrowProps && <FloatingArrow { ...arrowProps } /> }
 
-          { content }
+          {/* 气泡里的 Select 等嵌套浮层据此把键盘优先级抬到气泡之上，Esc 先关它们再关气泡 */ }
+          <KeyboardLayerHostContext.Provider value={ layerPriority }>
+            { content }
+          </KeyboardLayerHostContext.Provider>
         </AnimateShow>
       </SafePortal>
     </>

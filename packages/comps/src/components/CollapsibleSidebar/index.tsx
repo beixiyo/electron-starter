@@ -6,6 +6,7 @@ import { ChevronsLeft, Menu } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useMemo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { Z } from '../../constants/z-index'
 
 export const CollapsibleSidebar = memo<CollapsibleSidebarProps>((props) => {
@@ -131,7 +132,7 @@ export const CollapsibleSidebar = memo<CollapsibleSidebarProps>((props) => {
           : expandedWidth } }
         initial={ false }
         transition={ animationConfig }
-        data-collapsed={ isCollapsed }
+        { ...{ [DATA_ATTR.collapsibleSidebar.collapsed]: isCollapsed } }
       >
         {/* Header */}
         { showHeader && (

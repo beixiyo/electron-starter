@@ -5,9 +5,9 @@ import { setHours, setMinutes } from 'date-fns'
 import { Clock } from 'lucide-react'
 import { memo, useMemo, useRef } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../../constants/dataAttributes'
 import { useT } from '../../../i18n'
 import { Popover } from '../../Popover'
-import { DATA_DATE_PICKER_IGNORE } from '../constants'
 
 /** 一次选择完整时分的快捷时刻浮层 */
 export const QuickTimePopover = memo<QuickTimePopoverProps>(({
@@ -62,7 +62,7 @@ export const QuickTimePopover = memo<QuickTimePopoverProps>(({
       content={ (
         <div
           className="grid max-h-56 grid-cols-4 gap-1 overflow-y-auto scrollbar-none"
-          { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
+          { ...({ [DATA_ATTR.datePicker.ignore]: 'true' } as any) }
         >
           { options.map((totalMinutes) => {
             const hours = Math.floor(totalMinutes / 60)

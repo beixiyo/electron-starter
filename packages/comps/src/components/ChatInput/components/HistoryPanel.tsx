@@ -6,7 +6,9 @@ import { BookOpen, Clock, History, RotateCcw, Search, Trash2, X, Zap } from 'luc
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 import { Z } from '../../../constants/z-index'
+import { useNestedLayerPriority } from '../../../hooks/useKeyboardLayerHost'
 import { useT } from '../../../i18n'
 
 export const HistoryPanel = memo<HistoryPanelProps>((
@@ -99,10 +101,13 @@ export const HistoryPanel = memo<HistoryPanelProps>((
 
   /** 添加快捷键支持 */
   // #region
+  /** 面板不走 Portal，ChatInput 嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
+  const panelLayerPriority = useNestedLayerPriority(Z.dropdown)
+
   useKeyboardLayer({
     active: visible,
     keys: ['Escape'],
-    priority: Z.dropdown,
+    priority: panelLayerPriority,
     allowRepeat: false,
     onKeyDown: onClose,
   })
@@ -212,7 +217,7 @@ export const HistoryPanel = memo<HistoryPanelProps>((
     <AnimatePresence>
       <motion.div
         ref={ panelRef }
-        data-panel="history"
+        { ...{ [INTERNAL_DATA_ATTR.chatInput.panel]: 'history' } }
         tabIndex={ 0 }
         className={ cn(
           'fixed top-20 left-1/2 w-[600px] max-w-[90vw] z-dropdown',

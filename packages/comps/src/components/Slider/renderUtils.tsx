@@ -1,5 +1,6 @@
 import type { SliderStyleConfig } from './types'
 import { cn } from 'utils'
+import { COMPONENT_DATA_ATTR } from '../../constants/dataAttributes'
 
 /**
  * 渲染刻度标记
@@ -107,6 +108,7 @@ export function renderHandle(val: number, index: number, vertical: boolean, keyb
         ? 0
         : -1 }
       role="slider"
+      { ...{ [COMPONENT_DATA_ATTR.slider.handle]: index } }
       aria-label={ ariaLabel }
       aria-valuemin={ min }
       aria-valuemax={ max }

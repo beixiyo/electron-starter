@@ -6,11 +6,11 @@ import { motion } from 'motion/react'
 import type { ReactNode } from 'react'
 import { memo, useMemo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { useT } from '../../i18n'
 import { Button } from '../Button'
 import { Switch } from '../Switch'
 import { CalendarHeader } from './CalendarHeader'
-import { DATA_DATE_PICKER_IGNORE } from './constants'
 import { DateSpanCalendarGrid } from './DateSpanCalendarGrid'
 import { TimePicker } from './TimePicker'
 import type { DatePrecision, DateTimeSpanPickerValue, SharedUIProps } from './types'
@@ -120,7 +120,7 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
 
         <div
           className="flex items-center justify-between"
-          { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
+          { ...({ [DATA_ATTR.datePicker.ignore]: 'true' } as any) }
         >
           <span className="text-sm leading-5.5 text-text3">
             { t('datePicker.addTime') || 'Add Time' }
@@ -145,7 +145,7 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
         { value.hasTime && value.start && (
           <div
             className="flex min-w-0 items-end gap-2"
-            { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
+            { ...({ [DATA_ATTR.datePicker.ignore]: 'true' } as any) }
           >
             <TimeField
               label={ t('datePicker.rangeStart') || 'Start' }
@@ -226,7 +226,7 @@ export const DateTimeSpanCalendar = memo<DateTimeSpanCalendarProps>(({
           disabled={ hasInvalidEndTime }
           loading={ confirmLoading }
           className="h-10 w-full rounded-xl"
-          { ...({ [DATA_DATE_PICKER_IGNORE]: 'true' } as any) }
+          { ...({ [DATA_ATTR.datePicker.ignore]: 'true' } as any) }
         >
           { t('datePicker.confirm') || '确认' }
         </Button>

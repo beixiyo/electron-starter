@@ -4,10 +4,7 @@ import type { FloatingArrowConfig } from '../FloatingArrow'
 import { motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
-import {
-  FloatingArrow,
-  useFloatingArrowState,
-} from '../FloatingArrow'
+import { FloatingArrow } from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
 import { useTooltip } from './useTooltip'
 
@@ -27,41 +24,27 @@ export const Tooltip = memo<TooltipProps>((props) => {
     delay = 0,
     autoHideOnResize = false,
     interactive = false,
+    escToClose = true,
     ...rest
   } = props
 
   const {
     shouldShow,
     style,
+    arrowProps,
     triggerRef,
     tooltipRef,
-    placement: resolvedPlacement,
-    handleMouseEnter,
-    handleMouseLeave,
-    handleFocus,
-    handleBlur,
-    handleClick,
+    triggerProps,
   } = useTooltip({
     placement,
     visible,
     trigger,
     disabled,
     offset,
+    arrow,
     delay,
     autoHideOnResize,
-  })
-  const {
-    options: arrowOptions,
-    centerOffset: arrowCenterOffset,
-    fill: arrowFill,
-    style: arrowStyle,
-  } = useFloatingArrowState({
-    arrow,
-    enabled: shouldShow,
-    placement: resolvedPlacement,
-    floatingStyle: style,
-    referenceRef: triggerRef,
-    floatingRef: tooltipRef,
+    escToClose,
   })
 
   /** 格式化内容 */
@@ -89,7 +72,13 @@ export const Tooltip = memo<TooltipProps>((props) => {
               ? 'pointer-events-auto'
               : 'pointer-events-none',
             /** 深色模式黑底、浅色模式白底，自动跟随主题 */
-            'bg-background text-text drop-shadow-card',
+            'bg-background text-text',
+            /**
+             * Tooltip 内容盒仅 24px 高，drop-shadow-card 的 48px 模糊会把阴影摊到几乎不可见，
+             * 这里改用贴合小浮层尺度的紧凑投影；用 filter 而非 box-shadow，
+             * 才能让子级的 FloatingArrow 一起获得连续阴影
+             */
+            'drop-shadow-[0_2px_6px_rgb(0_0_0/0.18)]',
             contentClassName,
           ) }
           style={ style }
@@ -97,16 +86,7 @@ export const Tooltip = memo<TooltipProps>((props) => {
           { formattedContent }
 
           {/* 与其他浮层共用同一套尖角绘制和接缝处理 */ }
-          { arrowOptions && resolvedPlacement && (
-            <FloatingArrow
-              placement={ resolvedPlacement }
-              centerOffset={ arrowCenterOffset }
-              size={ arrowOptions.size }
-              fill={ arrowFill }
-              className={ arrowOptions.className }
-              style={ arrowStyle }
-            />
-          ) }
+          { arrowProps && <FloatingArrow { ...arrowProps } /> }
         </motion.div>
       )
     : null
@@ -117,11 +97,7 @@ export const Tooltip = memo<TooltipProps>((props) => {
       <div
         ref={ triggerRef }
         className={ cn('inline-block', className) }
-        onMouseEnter={ handleMouseEnter }
-        onMouseLeave={ handleMouseLeave }
-        onFocus={ handleFocus }
-        onBlur={ handleBlur }
-        onClick={ handleClick }
+        { ...triggerProps }
         { ...rest }
       >
         { children }
@@ -170,7 +146,9 @@ export type TooltipProps = {
    */
   disabled?: boolean
   /**
-   * 偏移距离
+   * 目标元素到浮层可见边缘的间距，单位 px
+   *
+   * 开启箭头时以箭头尖端为准，关闭箭头时以面板边缘为准，两种状态视觉间距一致
    * @default 8
    */
   offset?: number
@@ -207,4 +185,13 @@ export type TooltipProps = {
    * @default false
    */
   interactive?: boolean
+  /**
+   * 按 Esc 是否关掉浮层
+   *
+   * 进的是与 Modal / Popover 同一个键盘层栈，优先级取 `z-tooltip`：Tooltip 在视觉上压过一切，
+   * 开着时第一下 Esc 只关它，第二下才轮到底下的弹窗。只对非受控生效：`visible` 受控时
+   * 可见性归调用方，组件没有回传口，占着栈顶只会把底下的 Esc 永远吃掉
+   * @default true
+   */
+  escToClose?: boolean
 } & Omit<React.HTMLAttributes<HTMLDivElement>, 'content'>

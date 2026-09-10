@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { forwardRef, memo, useRef } from 'react'
 import { cn } from 'utils'
 import { Z } from '../../constants/z-index'
+import { KeyboardLayerHostContext } from '../../hooks/useKeyboardLayerHost'
 import { CloseBtn } from '../CloseBtn'
 import { Mask } from '../Mask'
 import { getDrawerClasses } from './tool'
@@ -84,7 +85,10 @@ export const DrawerFramer = memo(forwardRef<HTMLDivElement, DrawerProps>(
       { closeButton && (
         <CloseBtn onClick={ onClose } className="z-modal"></CloseBtn>
       ) }
-      { children }
+      {/* 抽屉里不走 Portal 的下拉 / 面板据此把键盘优先级抬到抽屉之上 */ }
+      <KeyboardLayerHostContext.Provider value={ Z.overlay + 1 }>
+        { children }
+      </KeyboardLayerHostContext.Provider>
     </motion.div>
 
     return (

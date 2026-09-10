@@ -4,6 +4,7 @@ import type { Row } from '@tanstack/react-table'
 import type { TableInstance, TableProps, TextAlign } from '../types'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 import { LoadingIcon } from '../../Loading/LoadingIcon'
 import { getFlexAlignClassName } from '../utils/alignUtils'
 import { calculateRowNumber } from '../utils/rowNumberUtils'
@@ -123,6 +124,7 @@ export function VirtualizedBody<TData extends object>({
           <tr
             key={ row.id }
             data-index={ virtualRow.index }
+            { ...{ [INTERNAL_DATA_ATTR.virtual.itemIndex]: virtualRow.index } }
             ref={ node => rowVirtualizer.measureElement(node) }
             className={ cn(
               'flex bg-backgroundPrimary border-b border-border hover:bg-background2 transition-all duration-300',

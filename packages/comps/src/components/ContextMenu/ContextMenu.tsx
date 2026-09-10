@@ -2,9 +2,11 @@
 
 import type { Variants } from 'motion/react'
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
-import { useClickOutside, useFloatingPosition, useLatestCallback } from 'hooks'
+import { useClickOutside, useFloatingPosition, useKeyboardLayer, useLatestCallback } from 'hooks'
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { Z } from '../../constants/z-index'
+import { useNestedLayerPriority } from '../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../Animate'
 
 /** 菜单动画变体（不依赖 props/state，提到模块顶层避免每次渲染重建） */
@@ -138,6 +140,21 @@ const InnerContextMenu = forwardRef<ContextMenuRef, ContextMenuProps>(({
       handleClose()
     }
   }, [closeOnClick, closeOnClickIgnoreSelector])
+
+  /** 菜单不走 Portal，嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
+  const layerPriority = useNestedLayerPriority(
+    typeof style?.zIndex === 'number'
+      ? style.zIndex
+      : Z.dropdown,
+  )
+
+  useKeyboardLayer({
+    active: isOpen,
+    keys: ['Escape'],
+    priority: layerPriority,
+    allowRepeat: false,
+    onKeyDown: handleClose,
+  })
 
   /**
    * 监听全局右键事件（仅在非受控模式下）

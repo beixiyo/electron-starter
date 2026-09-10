@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 
 const GLOW_POSITION_X_PERCENT: Record<BottomGlowPosition, number> = {
   'bottom-left': 32,
@@ -73,7 +74,7 @@ export const BottomGlow = memo<BottomGlowProps>((props) => {
 
   return (
     <div
-      data-vv-bottom-glow-position={ position }
+      { ...{ [DATA_ATTR.bottomGlow.position]: position } }
       className={ cn(
         'BottomGlow @container relative isolate flex aspect-[3.28/1] w-full items-center justify-center overflow-hidden rounded-full bg-white',
         className,

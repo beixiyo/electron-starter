@@ -3,6 +3,7 @@ import type { TabItemType } from './types'
 import { motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 
 function InnerTabHeader<T extends string>(
   {
@@ -32,7 +33,7 @@ function InnerTabHeader<T extends string>(
     ) }
     style={ style }
     { ...rest }
-    data-id={ dataId ?? '' }
+    { ...{ [DATA_ATTR.tabs.id]: dataId ?? '' } }
   >
     <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
       { item.icon }

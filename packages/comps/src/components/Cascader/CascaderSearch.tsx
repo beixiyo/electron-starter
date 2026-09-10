@@ -3,9 +3,9 @@
 import { Search } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { Input } from '../Input'
 import { CascaderOption } from './CascaderOption'
-import { DATA_CASCADER_OPTION } from './constants'
 import type { CascaderOption as CascaderOptionType, CascaderOptionClassNames } from './types'
 
 export interface CascaderSearchProps extends CascaderOptionClassNames {
@@ -104,7 +104,7 @@ function InnerCascaderSearch(props: CascaderSearchProps) {
     if (highlightedIndex === -1 || !scrollContainerRef.current) return
 
     const timer = setTimeout(() => {
-      const items = scrollContainerRef.current?.querySelectorAll(`[${DATA_CASCADER_OPTION}="true"]`)
+      const items = scrollContainerRef.current?.querySelectorAll(`[${DATA_ATTR.cascader.option}="true"]`)
       const activeItem = items?.[highlightedIndex] as HTMLElement
       if (activeItem) {
         activeItem.scrollIntoView({

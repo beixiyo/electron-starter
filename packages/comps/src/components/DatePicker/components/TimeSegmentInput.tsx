@@ -5,6 +5,7 @@ import { useLatestCallback } from 'hooks'
 import type { CSSProperties } from 'react'
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../../constants/dataAttributes'
 import { useT } from '../../../i18n'
 import type { DatePrecision } from '../types'
 import { TimeUnitPopover } from './TimeUnitPopover'
@@ -258,7 +259,7 @@ export const TimeSegmentInput = memo<TimeSegmentInputProps>(({
                   } }
                   aria-label={ segmentLabels[segment] }
                   aria-invalid={ invalidSegment === segment }
-                  data-time-segment={ segment }
+                  { ...{ [DATA_ATTR.datePicker.timeSegment]: segment } }
                   disabled={ disabled }
                   inputMode="numeric"
                   maxLength={ 2 }

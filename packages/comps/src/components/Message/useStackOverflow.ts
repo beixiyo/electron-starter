@@ -2,7 +2,8 @@ import type { RefObject } from 'react'
 import type { MessageItemData } from './types'
 import { useResizeObserver } from 'hooks'
 import { useLayoutEffect } from 'react'
-import { DATA_MSG_ID, STACK_BOTTOM_MARGIN, STACK_GAP, STACK_TOP_OFFSET } from './constants'
+import { DATA_ATTR } from '../../constants/dataAttributes'
+import { STACK_BOTTOM_MARGIN, STACK_GAP, STACK_TOP_OFFSET } from './constants'
 import { messageStore } from './messageStore'
 
 /**
@@ -35,7 +36,7 @@ export function useStackOverflow(
 
     let total = STACK_TOP_OFFSET + STACK_BOTTOM_MARGIN
     live.forEach((item, index) => {
-      const node = el.querySelector(`[${DATA_MSG_ID}="${item.id}"]`) as HTMLElement | null
+      const node = el.querySelector(`[${DATA_ATTR.message.id}="${item.id}"]`) as HTMLElement | null
       total += node?.offsetHeight ?? 0
       if (index > 0) {
         total += STACK_GAP

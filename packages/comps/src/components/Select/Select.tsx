@@ -2,10 +2,12 @@
 
 import type React from 'react'
 import type { SelectProps } from './types'
-import { useTheme } from 'hooks'
+import { useKeyboardLayer, useTheme } from 'hooks'
 import { ChevronDown, Inbox, Loader2, Search } from 'lucide-react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { Z } from '../../constants/z-index'
+import { useNestedLayerPriority } from '../../hooks/useKeyboardLayerHost'
 import { findLabel, findOption } from '../../utils/optionTree'
 import { CloseBtn } from '../CloseBtn'
 import { useFormField } from '../Form/useFormField'
@@ -87,6 +89,32 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
   const { isOpen, setIsOpen } = useSelectOpen(containerRef, {
     onClickOutside,
     handleBlur,
+  })
+
+  /** 下拉不走 Portal，嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
+  const layerPriority = useNestedLayerPriority(Z.dropdown)
+
+  useKeyboardLayer({
+    active: isOpen && !disabled && !loading,
+    keys: ['Escape'],
+    priority: layerPriority,
+    allowRepeat: false,
+    /**
+     * 让路给 Select 自己内部的输入框与按钮：编辑态 input 的 Escape 回退文本、
+     * 搜索框的 Escape 自行关闭下拉，都由它们各自的 onKeyDown 处理
+     *
+     * 只对容器内的元素让路。`when` 返回 false 时整个键盘层栈会跳过这次事件
+     * （不会落到下一层），若把范围放宽到任意 INPUT / BUTTON，焦点移到宿主弹窗的
+     * 按钮上再按 Esc 就成了死键：这层不认，弹窗那层也收不到
+     */
+    when: (event) => {
+      const target = event.target as HTMLElement | null
+      if (!target || !containerRef.current?.contains(target))
+        return true
+
+      return target.tagName !== 'INPUT' && target.tagName !== 'BUTTON'
+    },
+    onKeyDown: () => setIsOpen(false),
   })
 
   const {
@@ -317,7 +345,12 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
               value={ searchQuery }
               onChange={ (query) => { setSearchQuery(query); onSearch?.(query) } }
               onClick={ e => e.stopPropagation() }
-              onKeyDown={ e => e.stopPropagation() }
+              onKeyDown={ (e) => {
+                /** 键盘层已为容器内的 input 让路，Escape 必须在这里自行关闭，否则成为死键 */
+                if (e.key === 'Escape')
+                  setIsOpen(false)
+                e.stopPropagation()
+              } }
             />
           </div>
         ) }

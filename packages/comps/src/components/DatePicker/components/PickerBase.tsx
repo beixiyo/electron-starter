@@ -5,6 +5,7 @@ import { useKeyboardLayer, useTheme } from 'hooks'
 import { memo, useRef } from 'react'
 import { cn } from 'utils'
 import { Z } from '../../../constants/z-index'
+import { useNestedLayerPriority } from '../../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../../Animate'
 import { SafePortal } from '../../SafePortal'
 import { CONTAINER_CLASSNAME } from '../constants'
@@ -74,12 +75,15 @@ export const PickerBase = memo<PickerBaseProps>(({
     },
   })
 
+  /** 嵌在弹窗 / 气泡里时至少压过宿主，否则 Esc 关掉的是宿主而不是这个面板 */
+  const layerPriority = useNestedLayerPriority(dropdownZIndex ?? Z.dropdown)
+
   useKeyboardLayer({
     active: isOpen,
     keys: onConfirm
       ? ['Escape', 'Enter']
       : ['Escape'],
-    priority: dropdownZIndex ?? Z.dropdown,
+    priority: layerPriority,
     allowRepeat: false,
     onKeyDown: (event) => {
       if (event.key === 'Enter') {

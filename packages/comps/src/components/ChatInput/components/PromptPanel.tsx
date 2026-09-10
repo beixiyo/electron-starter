@@ -6,7 +6,9 @@ import { Clock, Hash, Search, Sparkles, Star, X, Zap } from 'lucide-react'
 import { motion } from 'motion/react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 import { Z } from '../../../constants/z-index'
+import { useNestedLayerPriority } from '../../../hooks/useKeyboardLayerHost'
 import { useT } from '../../../i18n'
 import { getModifierKey } from '../constants'
 
@@ -191,10 +193,13 @@ export const PromptPanel = memo<PromptPanelProps>((
     onKeyDown: () => handleShortcutSelect(9),
   })
 
+  /** 面板不走 Portal，ChatInput 嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
+  const panelLayerPriority = useNestedLayerPriority(Z.dropdown)
+
   useKeyboardLayer({
     active: visible,
     keys: ['Escape'],
-    priority: Z.dropdown,
+    priority: panelLayerPriority,
     allowRepeat: false,
     onKeyDown: onClose,
   })
@@ -278,7 +283,7 @@ export const PromptPanel = memo<PromptPanelProps>((
   return (
     <motion.div
       ref={ panelRef }
-      data-panel="prompt"
+      { ...{ [INTERNAL_DATA_ATTR.chatInput.panel]: 'prompt' } }
       tabIndex={ 0 }
       className={ cn(
         'fixed top-20 left-1/2 w-[600px] max-w-[90vw] z-dropdown',

@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { addDays, format, startOfMonth } from 'date-fns'
 import { describe, expect, it, vi } from 'vitest'
+import { DATA_ATTR } from '../../../constants/dataAttributes'
 import { DateSpanPicker } from '../DateSpanPicker'
 import { ControlledDateSpanPicker, expectDate, renderWithI18n } from './test-utils'
 
@@ -24,8 +25,8 @@ describe('dateSpanPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: format(earlierDate, 'yyyy-MM-dd') }))
     expectDate(onChange.mock.calls[1][0].start, earlierDate.getFullYear(), earlierDate.getMonth(), earlierDate.getDate())
     expectDate(onChange.mock.calls[1][0].end, firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate())
-    expect(screen.getByRole('button', { name: format(earlierDate, 'yyyy-MM-dd') }).dataset.rangePosition).toBe('start')
-    expect(screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }).dataset.rangePosition).toBe('end')
+    expect(screen.getByRole('button', { name: format(earlierDate, 'yyyy-MM-dd') }).getAttribute(DATA_ATTR.datePicker.rangePosition)).toBe('start')
+    expect(screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }).getAttribute(DATA_ATTR.datePicker.rangePosition)).toBe('end')
 
     fireEvent.click(screen.getByRole('button', { name: format(replacementDate, 'yyyy-MM-dd') }))
     expectDate(onChange.mock.calls[2][0].start, replacementDate.getFullYear(), replacementDate.getMonth(), replacementDate.getDate())
@@ -46,12 +47,12 @@ describe('dateSpanPicker', () => {
     fireEvent.click(await screen.findByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }))
     fireEvent.mouseEnter(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }))
 
-    expect(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }).dataset.rangePosition).toBeUndefined()
+    expect(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }).getAttribute(DATA_ATTR.datePicker.rangePosition)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }))
 
-    expect(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }).dataset.rangePosition).toBe('start')
-    expect(screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }).dataset.rangePosition).toBe('end')
+    expect(screen.getByRole('button', { name: format(secondDate, 'yyyy-MM-dd') }).getAttribute(DATA_ATTR.datePicker.rangePosition)).toBe('start')
+    expect(screen.getByRole('button', { name: format(firstDate, 'yyyy-MM-dd') }).getAttribute(DATA_ATTR.datePicker.rangePosition)).toBe('end')
   })
 
   it('只在 Confirm 时通知确认值', async () => {

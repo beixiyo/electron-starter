@@ -2,7 +2,7 @@ import type { CascaderOptionProps } from './types'
 import { Check, ChevronRight } from 'lucide-react'
 import { memo } from 'react'
 import { cn } from 'utils'
-import { DATA_CASCADER_OPTION, DATA_CASCADER_SELECTED } from './constants'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 
 export const CascaderOption = memo(({
   option,
@@ -27,8 +27,8 @@ export const CascaderOption = memo(({
 
   return (
     <div
-      { ...{ [DATA_CASCADER_SELECTED]: selected && !option.children } }
-      { ...{ [DATA_CASCADER_OPTION]: true } }
+      { ...{ [DATA_ATTR.cascader.selected]: selected && !option.children } }
+      { ...{ [DATA_ATTR.cascader.option]: true } }
       role="option"
       aria-selected={ selected && !option.children }
       aria-disabled={ option.disabled || undefined }

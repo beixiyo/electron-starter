@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { useClickOutside, useLatestCallback } from 'hooks'
 import { useMemo, useRef, useState } from 'react'
+import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 
 /**
  * 用于管理面板（提示、历史、自动完成）可见性的 Hook
@@ -22,9 +23,9 @@ export function usePanelManager(containerRef: RefObject<HTMLDivElement | null>) 
     enabled: showPromptPanel || showHistoryPanel || showAutoComplete,
     trigger: 'mousedown' as const,
     additionalSelectors: [
-      '[data-panel="prompt"]',
-      '[data-panel="history"]',
-      '[data-panel="autocomplete"]',
+      `[${INTERNAL_DATA_ATTR.chatInput.panel}="prompt"]`,
+      `[${INTERNAL_DATA_ATTR.chatInput.panel}="history"]`,
+      `[${INTERNAL_DATA_ATTR.chatInput.panel}="autocomplete"]`,
     ],
   }), [showPromptPanel, showHistoryPanel, showAutoComplete])
 

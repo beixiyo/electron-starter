@@ -7,7 +7,9 @@ import { Hash, History, Lightbulb } from 'lucide-react'
 import { motion } from 'motion/react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { cn, trackCursorCoord } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../../constants/dataAttributes'
 import { Z } from '../../../constants/z-index'
+import { useNestedLayerPriority } from '../../../hooks/useKeyboardLayerHost'
 import { useT } from '../../../i18n'
 
 export const AutoCompletePanel = memo<AutoCompletePanelProps>((
@@ -101,10 +103,13 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
     }
   }, [visible, selectedIndex, suggestions])
 
+  /** 面板不走 Portal，ChatInput 嵌在弹窗里时要压过弹窗，否则 Esc 关掉的是整个弹窗 */
+  const panelLayerPriority = useNestedLayerPriority(Z.dropdown)
+
   useKeyboardLayer({
     active: visible,
     keys: ['Escape'],
-    priority: Z.dropdown,
+    priority: panelLayerPriority,
     allowRepeat: false,
     onKeyDown: onClose,
   })
@@ -193,7 +198,7 @@ export const AutoCompletePanel = memo<AutoCompletePanelProps>((
   return (
     <motion.div
       ref={ panelRef }
-      data-panel="autocomplete"
+      { ...{ [INTERNAL_DATA_ATTR.chatInput.panel]: 'autocomplete' } }
       className={ cn(
         'fixed z-dropdown',
         'overflow-hidden rounded-xl backdrop-blur-md',

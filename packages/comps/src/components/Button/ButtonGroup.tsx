@@ -2,9 +2,9 @@ import type { ButtonGroupProps } from './types'
 import { useMutationObserver, useResizeObserver } from 'hooks'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { getRoundedStyles } from '../../utils/roundedUtils'
 import { ButtonGroupContext } from './ButtonGroupContext'
-import { BUTTON_ATTR } from './constants'
 
 /**
  * 按钮组组件，用于在多个选项之间切换（类似 Segmented Control）
@@ -45,7 +45,7 @@ export const ButtonGroup = memo<ButtonGroupProps>((props) => {
 
     const registeredEl = buttonsRef.current.get(currentValue)
     const activeButton = registeredEl ?? container.querySelector(
-      `button[${BUTTON_ATTR.name}="${currentValue}"]`,
+      `button[${DATA_ATTR.button.name}="${currentValue}"]`,
     ) as HTMLElement | null
 
     if (activeButton) {

@@ -3,6 +3,7 @@
 import type { TabsContentProps } from './types'
 import { Activity, memo, useMemo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { KeepAlive } from '../KeepAlive'
 
 /**
@@ -50,7 +51,7 @@ function InnerTabsContent({
             'className': cn('size-full shrink-0', itemClassName),
             'style': itemStyle,
             'role': 'tabpanel',
-            'data-active': isActive,
+            [DATA_ATTR.tabs.active]: isActive,
             'aria-hidden': !isActive,
           }
 

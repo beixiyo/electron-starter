@@ -4,12 +4,12 @@ import { getHours, setHours } from 'date-fns'
 import { useLatestCallback } from 'hooks'
 import { memo, useMemo } from 'react'
 import { cn } from 'utils'
+import { DATA_ATTR } from '../../constants/dataAttributes'
 import { useT } from '../../i18n'
 import { Button } from '../Button'
 import { Cascader } from '../Cascader'
 import { QuickTimePopover } from './components/QuickTimePopover'
 import { TimeSegmentInput } from './components/TimeSegmentInput'
-import { DATA_DATE_PICKER_IGNORE } from './constants'
 import type { TimePickerProps } from './types'
 
 export const TimePicker = memo<TimePickerProps>(({
@@ -93,7 +93,7 @@ export const TimePicker = memo<TimePickerProps>(({
          }
         dropdownClassName={ cn('min-w-[80px]!', timeDropdownClassName) }
         dropdownStyle={ timeDropdownStyle }
-        dropdownProps={ { [DATA_DATE_PICKER_IGNORE]: 'true' } as any }
+        dropdownProps={ { [DATA_ATTR.datePicker.ignore]: 'true' } as any }
         enableScrollAnimation={ enableTimeUnitScrollAnimation }
       />
     )

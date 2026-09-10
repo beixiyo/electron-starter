@@ -5,6 +5,7 @@ import './tailwind.css'
 export * from './components'
 
 // 3. 导出常量
+export { DATA_ATTR } from './constants/dataAttributes'
 export { Z } from './constants/z-index'
 export type { ZLayer } from './constants/z-index'
 

@@ -4,6 +4,7 @@ import type { DropdownItem, DropdownVirtualOptions } from './types'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { memo, useRef } from 'react'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../constants/dataAttributes'
 
 /**
  * 分区内的虚拟列表（基于 TanStack Virtual，动态高度自动测量）
@@ -52,6 +53,7 @@ export const VirtualItemList = memo<VirtualItemListProps>((props) => {
             <div
               key={ virtualRow.key }
               data-index={ virtualRow.index }
+              { ...{ [INTERNAL_DATA_ATTR.virtual.itemIndex]: virtualRow.index } }
               ref={ virtualizer.measureElement }
               className={ cn('absolute left-0 top-0 w-full', getRowClassName(item)) }
               style={ { transform: `translateY(${virtualRow.start}px)` } }

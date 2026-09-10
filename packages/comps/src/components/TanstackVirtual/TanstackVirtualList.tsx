@@ -6,6 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { onMounted, onUnmounted, useComposedRef } from 'hooks'
 import { memo, useImperativeHandle, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../constants/dataAttributes'
 import { LoadingIcon } from '../Loading/LoadingIcon'
 
 /**
@@ -136,6 +137,7 @@ function InnerTanstackVirtualList<T>(props: TanstackVirtualListProps<T>) {
             <div
               key={ virtualRow.key }
               data-index={ virtualRow.index }
+              { ...{ [INTERNAL_DATA_ATTR.virtual.itemIndex]: virtualRow.index } }
               ref={ virtualizer.measureElement }
               className={ cn('absolute left-0 top-0 w-full', rowClassName) }
               style={ { transform: `translateY(${virtualRow.start}px)` } }

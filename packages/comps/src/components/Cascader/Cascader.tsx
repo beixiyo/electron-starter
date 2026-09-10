@@ -6,6 +6,7 @@ import { ChevronDown } from 'lucide-react'
 import { forwardRef, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
 import { Z } from '../../constants/z-index'
+import { useNestedLayerPriority } from '../../hooks/useKeyboardLayerHost'
 import { EmptyIcon } from '../../icons/EmptyIcon'
 import { findOption } from '../../utils/optionTree'
 import { AnimateShow } from '../Animate'
@@ -127,12 +128,17 @@ const InnerCascader = forwardRef<CascaderRef, CascaderProps>((props, ref) => {
     { placement, offset },
   )
 
+  /** 嵌在弹窗 / 气泡里时至少压过宿主，否则 Esc 关掉的是宿主而不是这个面板 */
+  const layerPriority = useNestedLayerPriority(
+    typeof dropdownStyle?.zIndex === 'number'
+      ? dropdownStyle.zIndex
+      : Z.dropdown,
+  )
+
   useKeyboardLayer({
     active: isOpen,
     keys: ['Escape'],
-    priority: typeof dropdownStyle?.zIndex === 'number'
-      ? dropdownStyle.zIndex
-      : Z.dropdown,
+    priority: layerPriority,
     allowRepeat: false,
     onKeyDown: () => setOpen(false),
   })

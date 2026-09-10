@@ -7,6 +7,7 @@ import { Edit3, Eye, Maximize2, Minimize2 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { cn } from 'utils'
+import { INTERNAL_DATA_ATTR } from '../../constants/dataAttributes'
 import { Button } from '../Button'
 import { TitleBarButtons } from '../TitleBarButtons'
 import { MdToHtml } from './MdToHtml'
@@ -326,7 +327,7 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
                   ? 'border-r border-border'
                   : '',
               ) }
-              data-panel="editor"
+              { ...{ [INTERNAL_DATA_ATTR.mdEditor.panel]: 'editor' } }
               style={ currentLayout === 'vertical' && verticalPanelHeight !== undefined
                 ? {
                     flexBasis: `${verticalPanelHeight}px`,
@@ -357,7 +358,7 @@ export const MdEditor = memo(forwardRef<MdEditorRef, MdEditorProps>(({
             <div
               ref={ previewPanelRef }
               className="flex-1 flex min-h-0 flex-col overflow-hidden"
-              data-panel="preview"
+              { ...{ [INTERNAL_DATA_ATTR.mdEditor.panel]: 'preview' } }
               style={ currentLayout === 'vertical' && verticalPanelHeight !== undefined
                 ? {
                     flexBasis: `${verticalPanelHeight}px`,
