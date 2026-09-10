@@ -18,14 +18,14 @@ export function useShortcutActions(options: UseShortcutActionsOptions) {
     ...promptShortcut,
     enabled: promptEnabled && promptShortcut.valid,
     ignoreWhenEditable: false,
-    fn: openPrompt,
+    onKeyDown: openPrompt,
   })
 
   useShortCutKey({
     ...historyShortcut,
     enabled: historyEnabled && historyShortcut.valid,
     ignoreWhenEditable: false,
-    fn: openHistory,
+    onKeyDown: openHistory,
   })
 }
 

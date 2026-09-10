@@ -303,6 +303,9 @@ importers:
       react-dom:
         specifier: ^19.2.4
         version: 19.2.4(react@19.2.4)
+      utils:
+        specifier: workspace:*
+        version: link:../utils
 
   packages/http-api:
     dependencies:
@@ -7181,6 +7184,7 @@ snapshots:
       config: file:packages/config
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
+      utils: file:packages/utils(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
   hosted-git-info@4.1.0:
     dependencies:

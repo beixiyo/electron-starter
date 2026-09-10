@@ -1,0 +1,134 @@
+/**
+ * 焦点位置判定：区分「焦点在可编辑区域」与「焦点在普通元素」
+ */
+
+/**
+ * 焦点是否位于输入框、文本域或 contenteditable 区域内
+ *
+ * 全局快捷键用它避开与文字输入冲突；键盘层可在 `when` 里复用同一份判定
+ * @param selector 自定义可编辑区域选择器
+ * @default EDITABLE_SELECTOR
+ */
+export function isFocusInEditable(selector: string = EDITABLE_SELECTOR): boolean {
+  if (typeof document === 'undefined')
+    return false
+
+  const el = document.activeElement
+  return !!el && el instanceof HTMLElement && !!el.closest(selector)
+}
+
+/** 匹配显式开启的 contenteditable 容器；配合 closest 可识别继承编辑能力的后代 */
+export const CONTENTEDITABLE_SELECTOR = '[contenteditable]:not([contenteditable="false"])'
+
+/**
+ * 默认视为可编辑区域的选择器
+ *
+ * contenteditable 走 `CONTENTEDITABLE_SELECTOR` 而不是 `[contenteditable="true"]`：
+ * `contenteditable=""` 与 `plaintext-only` 同样可编辑，写死 `"true"` 会让富文本编辑器里的
+ * 方向键、Enter 被全局快捷键抢走；`select` 的上下键也属于控件自身语义
+ */
+export const EDITABLE_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  CONTENTEDITABLE_SELECTOR,
+].join(',')
+
+const PARENT_ENTER_IGNORE_SELECTOR = [
+  'textarea',
+  'select',
+  'button',
+  'a[href]',
+  CONTENTEDITABLE_SELECTOR,
+  '[role="button"]',
+  '[role="combobox"]',
+  '[role="listbox"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+].join(',')
+
+const PARENT_ENTER_IGNORE_INPUT_TYPE_SET = new Set([
+  'button',
+  'checkbox',
+  'color',
+  'file',
+  'hidden',
+  'image',
+  'radio',
+  'range',
+  'reset',
+  'submit',
+])
+
+const TABBABLE_CANDIDATE_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'button',
+  'input:not([type="hidden"])',
+  'select',
+  'textarea',
+  'audio[controls]',
+  'video[controls]',
+  CONTENTEDITABLE_SELECTOR,
+  '[tabindex]',
+].join(',')
+
+const HIDDEN_FROM_FOCUS_SELECTOR = '[hidden], [aria-hidden="true"], [inert]'
+
+/** 判断事件目标是否位于表单控件或 contenteditable 区域内 */
+export function isEditableTarget(
+  target: EventTarget | null,
+  selector: string = EDITABLE_SELECTOR,
+): boolean {
+  return typeof Element !== 'undefined'
+    && target instanceof Element
+    && !!target.closest(selector)
+}
+
+/** 判断父级 Enter 处理器是否应保留目标控件自身的键盘语义 */
+export function shouldIgnoreParentEnter(target: EventTarget | null): boolean {
+  if (typeof Element === 'undefined' || !(target instanceof Element))
+    return false
+
+  if (target.closest(PARENT_ENTER_IGNORE_SELECTOR))
+    return true
+
+  const input = target.closest('input')
+  return typeof HTMLInputElement !== 'undefined'
+    && input instanceof HTMLInputElement
+    && PARENT_ENTER_IGNORE_INPUT_TYPE_SET.has(input.type)
+}
+
+/** 返回容器内按 DOM 顺序排列且能够进入 Tab 顺序的元素 */
+export function getTabbableElements(container: ParentNode): HTMLElement[] {
+  return Array.from(container.querySelectorAll<HTMLElement>(TABBABLE_CANDIDATE_SELECTOR))
+    .filter((element) =>
+      isInTabOrder(element)
+      && !element.matches(':disabled')
+      && !element.closest(HIDDEN_FROM_FOCUS_SELECTOR)
+    )
+}
+
+function isInTabOrder(element: HTMLElement): boolean {
+  if (element.tabIndex >= 0)
+    return true
+
+  if (element.hasAttribute('tabindex') || !element.matches(CONTENTEDITABLE_SELECTOR))
+    return false
+
+  return !element.parentElement?.closest(CONTENTEDITABLE_SELECTOR)
+}
+
+/** 使用 preventScroll 聚焦元素，并兼容不支持 FocusOptions 的环境 */
+export function focusElement(element: HTMLElement | null | undefined): void {
+  if (!element)
+    return
+
+  try {
+    element.focus({ preventScroll: true })
+  }
+  catch {
+    element.focus()
+  }
+}
