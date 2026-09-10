@@ -13,7 +13,7 @@ import { ClipboardCopy, Pin, RotateCw, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
-import { useRoundedWindowHitTest, useWindowDrag } from '../shared'
+import { useRoundedWindowHitTest, useWindowDrag, WINDOW_SURFACE_SHADOW } from '../shared'
 import { useFocusState } from './useFocusState'
 
 type FocusState = 'idle' | 'focused'
@@ -80,7 +80,7 @@ export const FocusNativeApp = memo<FocusNativeAppProps>((props) => {
           { ...dragHandlers }
           className={ cn(
             'relative h-full overflow-hidden bg-background text-textPrimary',
-            'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+            WINDOW_SURFACE_SHADOW,
             'cursor-grab active:cursor-grabbing',
             state === 'idle'
               ? 'rounded-full'
@@ -132,7 +132,7 @@ export const FocusNativeApp = memo<FocusNativeAppProps>((props) => {
           { ...dragHandlers }
           className={ cn(
             'relative grid shrink-0 place-items-center overflow-hidden bg-background',
-            'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+            WINDOW_SURFACE_SHADOW,
             'cursor-grab active:cursor-grabbing',
             state === 'idle'
               ? 'grid-cols-4 rounded-full px-2 py-1'

@@ -1,6 +1,6 @@
 import { isObj } from '@jl-org/tool'
-import type { WindowBounds, WindowConfig, WindowMetadata } from '@shared'
-import { PHYSICAL_WINDOW_CONFIGS, WindowType } from '@shared'
+import type { WindowBounds, WindowConfig, WindowInsets, WindowMetadata } from '@shared'
+import { clampWindowBounds, PHYSICAL_WINDOW_CONFIGS, resolveAlwaysOnTopLevel, resolveVisibleContentInsets, WindowType } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { screen } from 'electron'
 import { getSavedBounds, saveBounds } from './bounds-store'
@@ -51,7 +51,7 @@ class WindowManager {
     if (config.persistBounds) {
       const saved = getSavedBounds(type)
       if (saved) {
-        const clamped = this.clampToScreen(saved)
+        const clamped = this.clampToScreen(saved, resolveVisibleContentInsets(config))
         config.width = clamped.width
         config.height = clamped.height
         config.position = { x: clamped.x, y: clamped.y }
@@ -117,7 +117,7 @@ class WindowManager {
 
     const meta = this.metadata.get(type)
     if (meta?.config.setAlwaysOnTopOnShow) {
-      window.setAlwaysOnTop(true)
+      window.setAlwaysOnTop(true, resolveAlwaysOnTopLevel(meta.config))
     }
 
     this.restoreIfMinimized(window)
@@ -147,7 +147,7 @@ class WindowManager {
 
     const meta = this.metadata.get(type)
     if (meta?.config.setAlwaysOnTopOnShow) {
-      window.setAlwaysOnTop(true)
+      window.setAlwaysOnTop(true, resolveAlwaysOnTopLevel(meta.config))
     }
 
     this.restoreIfMinimized(window)
@@ -239,6 +239,11 @@ class WindowManager {
    * 调整窗口尺寸并按锚点重定位：
    * - `top-right` 窗口（如 RECORDING）：固定右上角，仅向左下伸缩，保持原位（避免居中重算导致窗口跳动）
    * - 其它窗口：水平居中、底边锚定（向上扩展）
+   *
+   * 落定前统一按窗口自己的可见内容留白收敛，与创建时的位置计算同源：
+   * 只认窗口边的话，底部浮层为压低可见内容而下探的那段透明留白会被判成越界，
+   * 第一次 resize 就把它拽回工作区内
+   *
    * animate 仅在 macOS 有原生过渡效果
    */
   resizeTo(type: WindowType, width: number, height: number, animate = false): boolean {
@@ -246,26 +251,36 @@ class WindowManager {
     if (!win || win.isDestroyed()) return false
 
     const current = win.getBounds()
-    const position = this.metadata.get(type)?.config.position
+    const config = this.metadata.get(type)?.config
+    const display = screen.getDisplayNearestPoint({
+      x: current.x + current.width / 2,
+      y: current.y + current.height / 2,
+    })
 
-    let x: number
-    let y: number
-    if (position === 'top-right') {
+    let nextBounds: WindowBounds
+    if (config?.position === 'top-right') {
       /** 右上角锚点：右边与上边固定，仅向左下伸缩 */
-      x = current.x + current.width - width
-      y = current.y
+      nextBounds = {
+        x: current.x + current.width - width,
+        y: current.y,
+        width,
+        height,
+      }
     }
     else {
-      const display = screen.getDisplayNearestPoint({
-        x: current.x + current.width / 2,
-        y: current.y + current.height / 2,
-      })
       const workArea = display.workArea
-      x = Math.round(workArea.x + (workArea.width - width) / 2)
-      y = current.y + current.height - height
+      nextBounds = {
+        x: Math.round(workArea.x + (workArea.width - width) / 2),
+        y: current.y + current.height - height,
+        width,
+        height,
+      }
     }
 
-    win.setBounds({ x, y, width, height }, animate)
+    const insets = config
+      ? resolveVisibleContentInsets(config)
+      : undefined
+    win.setBounds(clampWindowBounds(nextBounds, display.workArea, insets), animate)
     return true
   }
 
@@ -289,20 +304,28 @@ class WindowManager {
     return win.getBounds()
   }
 
-  /** 把保存的 bounds 裁剪进最近的显示器工作区，避免还原到屏幕外 */
-  private clampToScreen(bounds: WindowBounds): WindowBounds {
+  /**
+   * 把保存的 bounds 收敛进最近的显示器工作区，避免还原到屏幕外
+   *
+   * 尺寸先夹进工作区，位置再交给 `clampWindowBounds`——后者只保证「可见内容」留在
+   * 工作区里，透明窗四周那圈投影留白允许越过屏幕边缘
+   */
+  private clampToScreen(bounds: WindowBounds, insets?: Partial<WindowInsets>): WindowBounds {
     const display = screen.getDisplayNearestPoint({
       x: bounds.x + bounds.width / 2,
       y: bounds.y + bounds.height / 2,
     })
     const area = display.workArea
 
-    const width = Math.min(bounds.width, area.width)
-    const height = Math.min(bounds.height, area.height)
-    const x = Math.min(Math.max(bounds.x, area.x), area.x + area.width - width)
-    const y = Math.min(Math.max(bounds.y, area.y), area.y + area.height - height)
-
-    return { x, y, width, height }
+    return clampWindowBounds(
+      {
+        ...bounds,
+        width: Math.min(bounds.width, area.width),
+        height: Math.min(bounds.height, area.height),
+      },
+      area,
+      insets,
+    )
   }
 
   private restoreIfMinimized(window: BrowserWindow): void {

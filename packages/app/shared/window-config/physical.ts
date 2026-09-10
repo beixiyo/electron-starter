@@ -1,9 +1,11 @@
 import { WindowType } from '../types/window'
 import {
   FLOATING_STATUS_POOL_WINDOW_SIZE,
+  GLOBAL_TOAST_SHADOW_INSET,
   GLOBAL_TOAST_WINDOW_SIZE,
   MENUBAR_WINDOW_SIZE,
   PERMISSION_DRAG_GUIDE_WINDOW_SIZE,
+  SHADOW_WINDOW_INSETS,
   UTILITY_PANEL_POOL_WINDOW_SIZE,
   VOICE_IME_WINDOW_SIZE,
 } from './metrics'
@@ -52,6 +54,12 @@ export const PHYSICAL_WINDOW_CONFIGS = {
   [WindowType.VOICE_IME]: {
     width: VOICE_IME_WINDOW_SIZE.idle.width,
     height: VOICE_IME_WINDOW_SIZE.idle.height,
+    /**
+     * 窗口四边都是给 box-shadow 的透明留白（{@link SHADOW_INSET}），
+     * 位置计算与边界收敛都必须认它，否则窗口为压低可见内容而下探的那段留白会被
+     * 当成越界收回来，可见内容离底就变成一个 inset
+     */
+    visibleContentInsets: SHADOW_WINDOW_INSETS,
     position: 'bottom-center',
     title: 'Voice IME',
     frame: false,
@@ -113,6 +121,16 @@ export const PHYSICAL_WINDOW_CONFIGS = {
   [WindowType.GLOBAL_TOAST]: {
     width: GLOBAL_TOAST_WINDOW_SIZE.width,
     height: GLOBAL_TOAST_WINDOW_SIZE.height,
+    /**
+     * 本窗的透明留白比其它浮窗窄（{@link GLOBAL_TOAST_SHADOW_INSET}），
+     * 必须显式声明，不能落到「透明无边框窗」的缺省档上
+     */
+    visibleContentInsets: {
+      top: GLOBAL_TOAST_SHADOW_INSET,
+      right: GLOBAL_TOAST_SHADOW_INSET,
+      bottom: GLOBAL_TOAST_SHADOW_INSET,
+      left: GLOBAL_TOAST_SHADOW_INSET,
+    },
     /** 首次创建先放在底部；每次显示时会根据目标位置重新计算 bounds */
     position: 'bottom-center',
     title: 'Global Toast',
@@ -200,18 +218,17 @@ export const PHYSICAL_WINDOW_CONFIGS = {
      * 不写这一条就永远看不到透明效果（实测卡片是一块实心浅灰）
      */
     visualEffectState: 'active',
+    alwaysOnTop: true,
     /**
-     * `window-factory.ts` 对任意 `alwaysOnTop: true` 的窗口统一 `setAlwaysOnTop(true, 'floating')`，
-     * 层级由此固定为 floating（3），配置里没有也不需要单独的层级字段
-     *
-     * floating 必须高于「系统设置」（普通层级 0），否则卡片会被它盖住——引导整个失去意义
+     * floating（3）必须高于被引导的普通应用窗口（普通层级 0），否则卡片会被它盖住——
+     * 引导整个失去意义
      *
      * 不能用更高的 screen-saver（1000）：macOS 的拖拽图像窗口在 kCGDraggingWindowLevel（500），
      * 低于 screen-saver。本窗虽然只是拖拽**源**、不接收 drop，但按下瞬间光标仍在卡片范围内，
      * 跟手的图标会被卡片自己盖住，直到光标离开卡片才出现
      * 浮于全屏 App 之上由 macFullscreenAuxiliary 的 collectionBehavior 保证，与层级无关
      */
-    alwaysOnTop: true,
+    alwaysOnTopLevel: 'floating',
     skipTaskbar: true,
     resizable: false,
     movable: false,

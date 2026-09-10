@@ -1,3 +1,4 @@
+export * from './defaults'
 export * from './metrics'
 export * from './physical'
 export * from './registry'

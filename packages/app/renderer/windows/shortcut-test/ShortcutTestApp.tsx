@@ -12,6 +12,7 @@ import {
   ResizeHandles,
   useRoundedWindowHitTest,
   useWindowDrag,
+  WINDOW_SURFACE_SHADOW,
 } from '../shared'
 
 /** 缩放尺寸下限（含阴影留白），与窗口 config 的 minWidth/minHeight 对齐 */
@@ -153,7 +154,7 @@ export const ShortcutTestApp = memo<ShortcutTestAppProps>((props) => {
         className={ cn(
           'relative flex h-full w-full min-h-0 flex-col',
           'bg-background rounded-2xl',
-          'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+          WINDOW_SURFACE_SHADOW,
           'overflow-hidden cursor-grab active:cursor-grabbing',
         ) }
       >

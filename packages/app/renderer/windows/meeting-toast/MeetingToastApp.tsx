@@ -9,7 +9,7 @@ import { AudioLines, Loader2, Pause, Play, Square, X } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo, useEffect, useMemo } from 'react'
 import { cn } from 'utils'
-import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
+import { getInsetWindowHitTestRegion, useRoundedWindowHitTest, WINDOW_SURFACE_SHADOW } from '../shared'
 import { useMeetingToast } from './useMeetingToast'
 
 /** 检测态描边参数：紫色倒计时描边 + 白底内缩（内缩量 = 可见紫线宽度） */
@@ -110,7 +110,7 @@ export const MeetingToastApp = memo<MeetingToastAppProps>((props) => {
             key="toast-container"
             className={ cn(
               'relative rounded-2xl',
-              'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+              WINDOW_SURFACE_SHADOW,
               /**
                * 检测态由 CountdownBorder 提供白底 + 紫描边、关闭按钮悬出容器外，
                * 故容器不加 bg / overflow-hidden；录制 / 处理态沿用白底裁切容器

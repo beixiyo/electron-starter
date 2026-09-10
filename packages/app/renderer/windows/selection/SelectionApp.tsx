@@ -10,6 +10,7 @@ import {
   ResizeHandles,
   useRoundedWindowHitTest,
   useWindowDrag,
+  WINDOW_SURFACE_SHADOW,
 } from '../shared'
 
 export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
@@ -34,7 +35,7 @@ export function SelectionApp(props: SelectionAppProps = {}): React.JSX.Element {
         className={ cn(
           'flex-1 flex flex-col min-h-0 overflow-hidden',
           'bg-background rounded-2xl',
-          'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+          WINDOW_SURFACE_SHADOW,
         ) }
       >
         {/* 标题栏 — 可拖拽区域 */}

@@ -5,7 +5,7 @@ import { cn } from 'utils'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
 import { initRendererDiagnostics } from '@/logging'
 import { useShortcutRuntime } from '@/shortcuts/useShortcutRuntime'
-import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
+import { getInsetWindowHitTestRegion, useRoundedWindowHitTest, WINDOW_SURFACE_SHADOW } from '../shared'
 
 import 'styles/css/index.css'
 
@@ -33,7 +33,7 @@ function MenuBarApp() {
       <div className={ cn(
         'flex h-full w-full select-none flex-col gap-3 overflow-hidden rounded-2xl p-4',
         'bg-background text-text',
-        'shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]',
+        WINDOW_SURFACE_SHADOW,
       ) }>
         <h2 className="text-sm font-semibold">Electron Starter</h2>
 

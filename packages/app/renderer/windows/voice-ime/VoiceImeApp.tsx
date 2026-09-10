@@ -1,22 +1,20 @@
-import type { VoiceRecorderStatus } from 'comps'
 import { WindowType } from '@shared'
 import { SHADOW_INSET, VOICE_IME_CONTENT_SIZE, VOICE_IME_WINDOW_SIZE } from '@shared/window-config/metrics'
+import type { VoiceRecorderStatus } from 'comps'
 import { LiveWaveAudio } from 'comps'
 import { useTheme, useUpdateEffect } from 'hooks'
 import { Mic } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
-import { getInsetWindowHitTestRegion, useRoundedWindowHitTest } from '../shared'
+import { getInsetWindowHitTestRegion, useRoundedWindowHitTest, WINDOW_SURFACE_SHADOW } from '../shared'
 import { useVoiceIme } from './useVoiceIme'
 
 type DisplayState = 'idle' | 'recording' | 'processing'
 
 function toDisplayState(status: VoiceRecorderStatus): DisplayState {
-  if (status === 'recording')
-    return 'recording'
-  if (status === 'processing')
-    return 'processing'
+  if (status === 'recording') return 'recording'
+  if (status === 'processing') return 'processing'
   return 'idle'
 }
 
@@ -43,14 +41,16 @@ export function VoiceImeApp(): React.JSX.Element {
   return (
     <div style={ { padding: SHADOW_INSET } }>
       <motion.div
-        className="relative overflow-hidden bg-background rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.08),0_8px_24px_rgba(0,0,0,0.12)]"
+        className={ cn('relative overflow-hidden bg-background rounded-2xl', WINDOW_SURFACE_SHADOW) }
         animate={ { width: contentSize.width, height: contentSize.height } }
         transition={ { type: 'spring', stiffness: 400, damping: 35 } }
       >
-        {/*
-          LiveWaveAudio 必须始终挂载——liveWaveRef 在 hold 事件触发前就需要就绪。
-          仅通过 opacity 控制可见性，不能用条件渲染。
-        */}
+        {
+          /*
+          LiveWaveAudio 必须始终挂载——liveWaveRef 在 hold 事件触发前就需要就绪
+          仅通过 opacity 控制可见性，不能用条件渲染
+        */
+        }
         <div
           className={ cn(
             'absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 py-3',
@@ -72,7 +72,7 @@ export function VoiceImeApp(): React.JSX.Element {
           />
         </div>
 
-        {/* idle / processing 覆盖层，覆盖在波形上方；recording 时退出，波形层透出 */}
+        { /* idle / processing 覆盖层，覆盖在波形上方；recording 时退出，波形层透出 */ }
         <AnimatePresence>
           { displayState === 'idle' && (
             <motion.div
@@ -127,7 +127,7 @@ IdleContent.displayName = 'IdleContent'
 const ProcessingContent = memo(() => (
   <div className="flex items-center gap-2.5">
     <div className="flex gap-1">
-      { [0, 1, 2].map(i => (
+      { [0, 1, 2].map((i) => (
         <motion.span
           key={ i }
           className="w-1.5 h-1.5 rounded-full bg-sky-400"

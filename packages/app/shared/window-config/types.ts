@@ -4,21 +4,34 @@ import type { WindowType } from '../types/window'
 /**
  * 窗口位置策略
  */
-export type WindowPosition
-  = | 'center' // 屏幕居中
-    | 'top-center' // 屏幕顶部居中
-    | 'bottom-center' // 屏幕底部居中
-    | 'top-left' // 屏幕左上角
-    | 'top-right' // 屏幕右上角
-    | 'bottom-left' // 屏幕左下角
-    | 'bottom-right' // 屏幕右下角
-    | { x: number, y: number } // 自定义坐标
+export type WindowPosition =
+  | 'center' // 屏幕居中
+  | 'top-center' // 屏幕顶部居中
+  | 'bottom-center' // 屏幕底部居中
+  | 'top-left' // 屏幕左上角
+  | 'top-right' // 屏幕右上角
+  | 'bottom-left' // 屏幕左下角
+  | 'bottom-right' // 屏幕右下角
+  | { x: number; y: number } // 自定义坐标
 
 /**
  * 窗口配置接口
  */
 export interface WindowConfig extends BrowserWindowConstructorOptions {
   position?: WindowPosition
+  /**
+   * 透明窗口中，可见内容相对 BrowserWindow 四边的留白
+   *
+   * 位置预设与本仓的边界收敛都按「可见内容」而非窗口边计量：声明之后，
+   * 纯透明的阴影留白允许越过工作区边缘，可见内容仍被保证留在工作区内
+   *
+   * 注意这只是本仓自己的口径。系统那道边界收敛能不能一并解除另有条件
+   * （无边框 + 不可拖动），见 `allowsFrameOutsideWorkArea`——不满足时，
+   * 窗口仍会在展示那一刻被系统夹回可用区
+   *
+   * @default 透明无边框且自绘投影（`hasShadow: false`）的窗口按 `SHADOW_WINDOW_INSETS`，其余四边皆 0
+   */
+  visibleContentInsets?: Partial<WindowInsets>
   /**
    * 是否挂载应用预加载脚本
    *
@@ -40,6 +53,15 @@ export interface WindowConfig extends BrowserWindowConstructorOptions {
    * 这样可以覆盖创建时的 alwaysOnTop 配置，实现动态控制
    */
   setAlwaysOnTopOnShow?: boolean
+  /**
+   * alwaysOnTop 使用的 Electron 层级
+   *
+   * 创建路径与 {@link setAlwaysOnTopOnShow} 的展示路径读同一个值，
+   * 避免同一个窗口按不同路径拿到不同层级
+   *
+   * @default 'floating'
+   */
+  alwaysOnTopLevel?: AlwaysOnTopLevel
   /**
    * macOS 原生全屏 Space 辅助窗口（type: 'panel' 非激活面板）
    * 用于 Voice IME / 截图蒙层这类需要显示在绿灯全屏窗口上的浮窗
@@ -68,8 +90,27 @@ export interface WindowBounds {
   height: number
 }
 
+/** 窗口四边内距（屏幕坐标，单位 DIP） */
+export interface WindowInsets {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
 export interface WindowMetadata {
   type: WindowType
   config: WindowConfig
   createdAt: number
 }
+
+/** `BrowserWindow.setAlwaysOnTop` 支持的层级，由低到高 */
+export type AlwaysOnTopLevel =
+  | 'normal'
+  | 'floating'
+  | 'torn-off-menu'
+  | 'modal-panel'
+  | 'main-menu'
+  | 'status'
+  | 'pop-up-menu'
+  | 'screen-saver'

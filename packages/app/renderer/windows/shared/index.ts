@@ -1,12 +1,9 @@
 export { mountTransparentWindow } from './mountTransparentWindow'
 export { ResizeHandles } from './ResizeHandles'
 export type { ResizeHandlesProps } from './ResizeHandles'
+export { WINDOW_SURFACE_SHADOW } from './surfaceShadow'
 export { useLogicalWindowRoute } from './useLogicalWindowRoute'
-export {
-  getInsetWindowHitTestRegion,
-  getResizeHandleHitTestRegions,
-  useRoundedWindowHitTest,
-} from './useRoundedWindowHitTest'
+export { getInsetWindowHitTestRegion, getResizeHandleHitTestRegions, useRoundedWindowHitTest } from './useRoundedWindowHitTest'
 export type { RoundedWindowHitTestRegion } from './useRoundedWindowHitTest'
 export { useWindowDrag } from './useWindowDrag'
 

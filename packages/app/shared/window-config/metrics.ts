@@ -1,8 +1,45 @@
+import type { WindowInsets } from './types'
+
+/** 四边皆 0 的可见内容留白：窗口边就是可见边 */
+export const EMPTY_INSETS: WindowInsets = {
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+}
+
 /**
  * 透明窗口留给 CSS shadow 的单侧边距
  * 阴影远层 blur=24px + offset-y=8px，最远扩散 32px，取 30 作为安全值
  */
 export const SHADOW_INSET = 30
+
+/**
+ * 按 {@link SHADOW_INSET} 画投影的透明浮窗，声明给主进程的四边留白
+ *
+ * 与 {@link SHADOW_INSET} 是同一段留白，只是换成 `visibleContentInsets` 的形状
+ * 不声明它，主进程的边界收敛（`clampWindowBounds`）就只认窗口边：底部浮层为了
+ * 让**可见内容**压到离底 {@link BOTTOM_FLOATING_CLEARANCE} 而下探的那段透明留白会被
+ * 当成越界，第一次 `resizeTo` 就把窗口拽回工作区内，可见内容实际离底一个 inset
+ */
+export const SHADOW_WINDOW_INSETS = {
+  top: SHADOW_INSET,
+  right: SHADOW_INSET,
+  bottom: SHADOW_INSET,
+  left: SHADOW_INSET,
+} as const
+
+/**
+ * 底部浮层「可见内容」底边与工作区底边的净空
+ *
+ * 只承担一点呼吸感，不再额外避让任务栏 / Dock：系统给出的 workArea 已经把常驻任务栏
+ * 排除在外，再自留几十像素当避让等于重复扣了一次。任务栏自动隐藏时 workArea 下探到
+ * 屏幕底，浮层跟着贴到底本值，语义仍然成立
+ *
+ * 本值量的是可见内容而非窗口边——浮窗四周还有一圈透明阴影留白
+ * （{@link SHADOW_WINDOW_INSETS}），由位置计算按窗口自己的 `visibleContentInsets` 让回去
+ */
+export const BOTTOM_FLOATING_CLEARANCE = 8
 
 /** VOICE_IME 各状态内容尺寸（不含 shadow inset） */
 export const VOICE_IME_CONTENT_SIZE = {
