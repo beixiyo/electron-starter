@@ -28,7 +28,7 @@
     "lint:fix": "oxlint ./src --fix"
   },
   "dependencies": {
-    "@jl-org/tool": "^5.0.0",
+    "@jl-org/tool": "^5.1.0",
     "config": "workspace:*",
     "utils": "workspace:*"
   },

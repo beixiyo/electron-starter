@@ -39,7 +39,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@jl-org/tool": "^5.0.0",
+    "@jl-org/tool": "^5.1.0",
     "hooks": "workspace:*"
   },
   "peerDependencies": {

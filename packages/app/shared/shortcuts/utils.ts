@@ -1,3 +1,4 @@
+import { isRecord } from '@jl-org/tool'
 import type {
   ActiveKeyboardShortcutEntry,
   FnModifier,
@@ -707,6 +708,3 @@ export function isFnShortcutKey(value: unknown): value is FnShortcutKey {
     && (FN_SHORTCUT_KEYS as readonly string[]).includes(value)
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
