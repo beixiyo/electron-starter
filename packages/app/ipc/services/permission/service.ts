@@ -65,7 +65,7 @@ setPermissionDragGuideStateEmitter((payload, window) => {
  * 上次同步快捷键 runtime 时的 accessibility 状态；
  * 权限弹窗以 1s 轮询 permission.get，仅状态变化时才触发全量重注册，
  * 避免每 tick 重复 spawn 权限探测子进程 + uIOhook stop/start
- * keyboard-listener 崩溃恢复的 resync 走 fn/core.ts onUnexpectedExit 直调，不经此门控
+ * keyboard-listener 崩溃恢复的 resync 走 input/native-mac/backend.ts 的 onUnexpectedExit 直调，不经此门控
  */
 let lastSyncedAccessibilityStatus: PermissionStatus | null = null
 

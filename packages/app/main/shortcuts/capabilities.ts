@@ -1,7 +1,6 @@
 import type { ShortcutBindings, ShortcutRuntimeCapabilities } from '@shared/shortcuts'
 import { createElectronShortcutCapabilities, filterShortcutBindingsByCapabilities, toEffectiveShortcutBindings } from '@shared/shortcuts'
 import { getElectronShortcutRuntimeProviders, isElectronShortcutRuntimeProviderAvailable } from './providers'
-import { refreshUiohookBackendHealth } from './uiohook-lifecycle'
 
 /** Electron 可配置快捷键能力；只按平台判断，不受当前权限影响 */
 export function getElectronShortcutCapabilities(): ShortcutRuntimeCapabilities {
@@ -22,12 +21,6 @@ export function getElectronShortcutCapabilities(): ShortcutRuntimeCapabilities {
 
 /** Electron 当前运行时快捷键能力；按平台、权限和 native backend 状态判断 */
 export function getElectronShortcutRuntimeCapabilities(): ShortcutRuntimeCapabilities {
-  /**
-   * uIOhook 的权限探测只覆盖 macOS；Windows/Linux 还需要实际 start 才能知道
-   * native backend 是否可用（例如 Wayland 下常见的启动失败）。失败状态会在
-   * lifecycle 中触发 runtime sync，使下一次解析直接降级到 renderer DOM。
-   */
-  refreshUiohookBackendHealth()
   const providers = getElectronShortcutRuntimeProviders()
   const fnAvailable = isElectronShortcutRuntimeProviderAvailable('fn')
 

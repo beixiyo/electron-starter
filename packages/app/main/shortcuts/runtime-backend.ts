@@ -1,17 +1,23 @@
+/** runtime backend 契约：调度器与各 backend 之间的注册、派发接口 */
+
 import type {
   ShortcutBinding,
   ShortcutBindings,
   ShortcutRuntimeEvent,
-  ShortcutRuntimeProviderDescriptor,
 } from '@shared/shortcuts'
 
 /** action id -> 快捷键 runtime 事件处理器 */
 export type ShortcutRuntimeHandlers = Partial<Record<string, (event: ShortcutRuntimeEvent) => void>>
 
-export type ShortcutRuntimeBackendDescriptor = ShortcutRuntimeProviderDescriptor
-
-/** 单个快捷键 runtime backend，负责一种输入源或一种捕获实现 */
-export type ShortcutRuntimeBackend = ShortcutRuntimeBackendDescriptor & {
+/**
+ * 单个快捷键 runtime backend
+ *
+ * backend 按自己的规则认领 binding 并接到某个捕获实现上；它与 capabilities 里的
+ * provider 声明解耦：一个 backend 可以同时服务多个 provider（系统级输入同时认领
+ * Fn 与全局 keyboard）
+ */
+export type ShortcutRuntimeBackend = {
+  readonly id: string
   /** 清理该 backend 现有注册和运行态 */
   reset: () => void
   /** 注册项就绪后按当前外部状态同步底层资源，例如 native helper 启停 */

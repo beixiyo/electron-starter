@@ -38,7 +38,8 @@ function emitKeyboardEvent(
   port.postMessage({ type, event } satisfies UiohookWorkerMessage)
 }
 
-type UiohookWorkerMessage
+/** 后端需要按消息类型分派，类型随模块一起导出 */
+export type UiohookWorkerMessage
   = | { type: 'ready' }
     | { type: 'failed', error: string }
     | { type: 'keydown' | 'keyup', event: UiohookKeyboardEvent }

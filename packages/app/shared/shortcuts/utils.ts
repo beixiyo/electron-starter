@@ -252,10 +252,9 @@ export function pressKeyboardShortcutChord<Key>(
  *
  * 两种情况：纯修饰键组合追加新成员（先按 ⌘ 再按 ⌥ 得到 ⌘⌥），以及裸 Fn 变成 Fn 组合键
  *
- * 本仓目前没有调用方：手势与录制状态机仍在用只覆盖前一种情况的
- * {@link isKeyboardModifierChordPrefixOf}，因此裸 Fn 的候选不会被 Fn 组合键撤销
- * （按下 Fn+Space 会连带触发「按下 Fn」）。换掉那两处调用是状态机的行为变更，
- * 留到录制与运行时改造时一起做
+ * 手势与录制状态机共用这一个判据：前者据此撤销 previous 的候选，避免 Fn+Space 同时
+ * 触发「按下 Fn」；后者据此把 activeChord 换成更长的组合。两边必须一致，否则录下来的
+ * 组合和实际会触发的组合不是一回事
  */
 export function isShortcutChordPrefixOf(previous: ShortcutChord, next: ShortcutChord): boolean {
   if (previous.source === 'fn' || next.source === 'fn') {

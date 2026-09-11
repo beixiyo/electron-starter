@@ -62,7 +62,7 @@ export class NativeBridge<T extends Record<string, any>> {
   }
 
   start(): void {
-    /** 与 startFnKeyListener 约定一致：非 macOS 静默跳过而非抛错，避免上层产生 unhandled rejection */
+    /** 约定：非 macOS 静默跳过而非抛错，避免上层产生 unhandled rejection */
     if (process.platform !== 'darwin') {
       log.info('process.skipped', 'native helper start skipped on unsupported platform', {
         helper: this.config.name,

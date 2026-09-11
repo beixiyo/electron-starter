@@ -149,8 +149,10 @@ export function createShortcutConfigService(options: CreateShortcutConfigService
         suspendShortcutRuntime()
         recordOwnerId = senderWindow.sender.id
         const win = senderWindow.win
-        startRecordShortcutDetection((recordEvent) => {
-          service.emit('record', recordEvent, win ?? undefined)
+        startRecordShortcutDetection({
+          emit: (recordEvent) => {
+            service.emit('record', recordEvent, win ?? undefined)
+          },
         })
         bindRecordAutoStop(win ?? undefined)
       },

@@ -27,7 +27,7 @@ import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
 import { warmScreenshotOverlays } from './screenshot'
 import { initSelectionHook } from './selection'
-import { holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync, setupFnKeyIpc } from './shortcuts'
+import { attachFnComboSuppression, holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
 import { initTray } from './tray'
 import { createVoiceImeShortcutController } from './voice-ime-shortcut'
@@ -252,6 +252,9 @@ function setupBrowserWindowLifecycle(): void {
      */
     optimizer.watchWindowShortcuts(window, { zoom: true })
 
+    /** Fn 组合的物理键仍会走到窗口里，聚焦输入框时会多打出 `fn+\`` 的反引号、`fn+Space` 的空格 */
+    attachFnComboSuppression(window.webContents)
+
     const webContentsId = window.webContents?.id
 
     window.on('closed', () => {
@@ -307,10 +310,6 @@ function createMainWindow(): void {
       ? { icon }
       : {}),
   })!
-
-  if (process.platform === 'darwin') {
-    setupFnKeyIpc(mainWindow)
-  }
 
   /**
    * 主窗创建即显示（见 PHYSICAL_WINDOW_CONFIGS[MAIN]），首帧由 index.html 内的静态 splash 提供；

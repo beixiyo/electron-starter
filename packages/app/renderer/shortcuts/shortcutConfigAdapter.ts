@@ -133,7 +133,7 @@ export async function resumeShortcutRecord(): Promise<void> {
  * Electron 桌面走 IPC + native/uIOhook，Web 走 DOM KeyboardEvent fallback
  */
 export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOptions): () => void {
-  const { emit, onReset } = options
+  const { emit } = options
   const cleanupFns: Array<() => void> = []
   let fnActive = false
   let suppressKeyboardUntil = 0
@@ -157,7 +157,15 @@ export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOption
     emit(event)
   }
 
-  /** 等待独立的 Fn native 事件源先到达，避免把 Fn combo 同时录成普通 keyboard */
+  /**
+   * 等待主进程的 Fn chord 先到达，避免把 Fn combo 同时录成普通 keyboard
+   *
+   * `fnActive` 只靠主进程的 Fn down/up 翻转：捕获后端丢失物理状态（helper 重启、系统
+   * 禁用 tap）时那条 up 不会来，而 Fn 又没有 DOM 兜底，`fnActive` 会卡在 true 压掉
+   * 后续全部 keyboard 事件，要等后端恢复后再按一次 Fn 才解开，期间还可能录出一次假的
+   * Fn press/hold。治本是给 `shortcut-config` 补一条 reset 通道，由主进程的
+   * `startRecordShortcutDetection({ onReset })` 驱动
+   */
   const emitKeyboardRecordEvent = (event: ShortcutRecordEvent): void => {
     const timer = setTimeout(() => {
       pendingKeyboardTimers.delete(timer)
@@ -171,27 +179,16 @@ export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOption
   if (isElectron()) {
     const ipc = window.$ipc
     cleanupFns.push(
-      ipc.fn.on('raw', (event) => {
-        if (event.type === 'reset') {
-          fnActive = false
-          suppressKeyboardUntil = 0
-          recentKeyboardEvent = null
-          onReset()
+      ipc.shortcutConfig.on('record', (event) => {
+        /** Fn combo 已由主进程合成为 fn chord，压住同一物理动作在 DOM 侧产生的 keyboard 噪音 */
+        if (event.chord.source === 'fn') {
+          if (event.chord.key === 'Fn')
+            fnActive = event.phase === 'down'
+          suppressKeyboardUntil = Date.now() + FN_KEYBOARD_DISAMBIGUATION_MS
+          emitRecordEvent(event)
           return
         }
 
-        if (event.chord.key === 'Fn')
-          fnActive = event.phase === 'down'
-        suppressKeyboardUntil = Date.now() + FN_KEYBOARD_DISAMBIGUATION_MS
-
-        emitRecordEvent({
-          phase: event.phase,
-          chord: event.chord,
-          timestamp: event.timestamp,
-        })
-      }),
-      ipc.shortcutConfig.on('record', (event) => {
-        /** Fn combo 已由 native helper 合成为 fn chord，忽略同一物理动作产生的底层 keyboard 噪音 */
         emitKeyboardRecordEvent(event)
       }),
     )
@@ -215,7 +212,6 @@ export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOption
 
 type BindShortcutRecordEventsOptions = {
   emit: (event: ShortcutRecordEvent) => void
-  onReset: () => void
 }
 
 function getShortcutConfigIpc(): Window['$ipc']['shortcutConfig'] | null {

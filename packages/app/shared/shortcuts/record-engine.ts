@@ -5,7 +5,7 @@ import type {
   ShortcutRecordEvent,
 } from './types'
 import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
-import { isKeyboardModifierChordPrefixOf, shortcutChordsEqual } from './utils'
+import { isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
 
 const DEFAULT_HOLD_MIN_DURATION_MS = 400
 const DEFAULT_UNSUPPORTED_RESET_MS = 1500
@@ -70,7 +70,7 @@ export function createShortcutRecordEngine(
     if (!canAcceptInput())
       return
     if (activeChord) {
-      if (!isKeyboardModifierChordPrefixOf(activeChord, chord))
+      if (!isShortcutChordPrefixOf(activeChord, chord))
         return
 
       clearTimer()

@@ -4,7 +4,7 @@ import type {
   ShortcutRuntimeEvent,
 } from './types'
 import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
-import { isKeyboardModifierChordPrefixOf, shortcutChordsEqual } from './utils'
+import { isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
 
 const DEFAULT_HOLD_MIN_DURATION_MS = 300
 
@@ -50,7 +50,7 @@ export function createShortcutGestureEngine<T extends ShortcutBinding>(
 
   const handleDown = (event: ShortcutRecordEvent): boolean => {
     for (const entry of entries) {
-      if (isKeyboardModifierChordPrefixOf(entry.binding.chord, event.chord))
+      if (isShortcutChordPrefixOf(entry.binding.chord, event.chord))
         cancelChord(entry.binding.chord)
     }
 

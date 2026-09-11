@@ -1,6 +1,5 @@
 import { electronAPI } from '@electron-toolkit/preload'
 import { audioLabClient } from '@ipc/services/audio-lab/client'
-import { fnClient } from '@ipc/services/fn/client'
 import { focusClient } from '@ipc/services/focus/client'
 import { globalToastClient } from '@ipc/services/global-toast/client'
 import { holdClient } from '@ipc/services/hold/client'
@@ -36,7 +35,6 @@ export const ipc = {
   oauth: oauthClient,
   permission: permissionClient,
   recording: recordingClient,
-  fn: fnClient,
   screenshot: screenshotClient,
   meetingDetection: meetingDetectionClient,
   notification: notificationClient,

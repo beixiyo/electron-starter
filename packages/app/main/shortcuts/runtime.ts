@@ -1,16 +1,16 @@
+/** 快捷键 runtime 调度：过滤 binding 后依次重置、应用、同步所有 backend */
+
 import type { ShortcutBindings } from '@shared/shortcuts'
 import type { ShortcutRuntimeHandlers } from './runtime-backend'
 import { resolveRuntimeShortcutBindings } from './capabilities'
-import { fnShortcutRuntimeBackend } from './fn'
-import { keyboardShortcutRuntimeBackend } from './global'
+import { systemInputShortcutRuntimeBackend } from './input-runtime-backend'
 import { createShortcutRuntimeBackendContext } from './runtime-backend'
 import { canTriggerShortcutBinding } from './scope'
 
 export type { ShortcutRuntimeHandlers } from './runtime-backend'
 
 const SHORTCUT_RUNTIME_BACKENDS = [
-  fnShortcutRuntimeBackend,
-  keyboardShortcutRuntimeBackend,
+  systemInputShortcutRuntimeBackend,
 ]
 
 /** 按当前权限、平台和持久化配置重新注册所有快捷键 backend */

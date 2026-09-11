@@ -267,13 +267,21 @@ export type KeyboardInputEvent = {
   /** 事件发生时按住的逻辑修饰键 */
   modifiers: FnModifier[]
   fn: boolean
-  /** 后端内单调毫秒，不同后端之间不可比较 */
+  /**
+   * 事件时刻，统一为 `Date.now()` 的 epoch 毫秒
+   *
+   * 时间基归一是**后端的职责**：平台时钟五花八门（macOS helper 报的是开机以来的
+   * uptime 毫秒），必须在 adapter 边界换算成同一个基准再交给上层。否则 IPC 与 DOM
+   * 两条路径混进同一个状态机时，`timestamp` 相减会得出上千亿毫秒，
+   * 去重窗口永远不命中、轻点一下也会被判成 hold
+   */
   timestamp: number
 }
 
 /** 后端丢失物理状态（helper 重启、系统禁用 tap）时发出，消费方应清空按键状态 */
 export type KeyboardInputResetEvent = {
   phase: 'reset'
+  /** 与 {@link KeyboardInputEvent.timestamp} 同一时间基 */
   timestamp: number
 }
 

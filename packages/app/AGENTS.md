@@ -239,10 +239,10 @@ macOS Fn helper 只输出物理 `down/up/reset`，press、doublePress、hold 均
 ### 键盘监听（keyboard-listener）
 
 - Swift 子进程通过 CGEventTap 捕获全键盘物理相位：普通键、左右修饰键与 Fn/Globe
-- stdout 使用严格 NDJSON 协议（v2），上报 `down/up/reset`、逻辑修饰键快照、`fn` 组合归属与 monotonic timestamp
+- stdout 使用严格 NDJSON 协议（v2），上报 `down/up/reset`、逻辑修饰键快照、`fn` 组合归属与 uptime timestamp（由后端平移成 epoch）
 - Swift 不判断 chord、press、doublePress、hold、action 或 scope
 - Swift 源码：`native/mac/accessibility/Sources/KeyboardListener/`
-- TypeScript 入口：`main/shortcuts/fn/core.ts`、`protocol.ts`、`runtime-backend.ts`
+- TypeScript 入口：`main/shortcuts/input/native-mac/`（解码与进程生命周期）、`main/shortcuts/input-runtime-backend.ts`（接手势状态机）
 
 ### 文本焦点检测（focus-check）
 

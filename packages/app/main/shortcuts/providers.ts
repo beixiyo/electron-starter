@@ -1,9 +1,9 @@
-import type { ShortcutRuntimeProviderDescriptor } from '@shared/shortcuts'
-import { getAppAccessibilityStatus, getKeyboardListenerAccessibilityStatus } from '@main/permissions'
-import { canUseFnKeyListenerBackend } from './fn/core'
-import { canUseUiohookBackend } from './uiohook-lifecycle'
+/** Electron 快捷键捕获 provider 注册表：按平台与运行时可用性声明 Fn / keyboard 捕获能力 */
 
-/** main 进程 Fn/Globe provider，负责 macOS native helper 事件 */
+import type { ShortcutRuntimeProviderDescriptor } from '@shared/shortcuts'
+import { keyboardInputBackend } from './input'
+
+/** main 进程 Fn/Globe provider，由 macOS keyboard-listener helper 提供 */
 export const FN_SHORTCUT_RUNTIME_PROVIDER = {
   id: 'fn',
   source: 'fn',
@@ -28,19 +28,19 @@ export const RENDERER_KEYBOARD_SHORTCUT_RUNTIME_PROVIDER = {
  * Electron 快捷键捕获提供方注册表
  *
  * 捕获提供方的描述、平台过滤和运行时可用性都在这里集中声明；
- * 能力计算与运行时调度只消费派生结果，新增捕获后端
- * 时不需要再维护一套独立的能力矩阵
+ * 能力计算与运行时调度只消费派生结果。Fn 与 global keyboard 共用同一个
+ * 系统级捕获后端，可用性也只看它一个
  */
 const ELECTRON_SHORTCUT_RUNTIME_PROVIDER_REGISTRY: readonly ElectronShortcutRuntimeProviderRegistryEntry[] = [
   {
     descriptor: FN_SHORTCUT_RUNTIME_PROVIDER,
     platforms: ['darwin'] as const,
-    isRuntimeAvailable: canUseFnProvider,
+    isRuntimeAvailable: () => keyboardInputBackend.isAvailable(),
   },
   {
     descriptor: KEYBOARD_SHORTCUT_RUNTIME_PROVIDER,
     platforms: ['darwin', 'win32', 'linux'] as const,
-    isRuntimeAvailable: canUseKeyboardProvider,
+    isRuntimeAvailable: () => keyboardInputBackend.isAvailable(),
   },
   {
     descriptor: RENDERER_KEYBOARD_SHORTCUT_RUNTIME_PROVIDER,
@@ -73,22 +73,6 @@ function getShortcutRuntimeProviderEntries(
   return ELECTRON_SHORTCUT_RUNTIME_PROVIDER_REGISTRY.filter(entry => (
     entry.platforms.includes(platform)
   ))
-}
-
-function canUseFnProvider(): boolean {
-  return process.platform === 'darwin'
-    && getAppAccessibilityStatus() === 'granted'
-    && getKeyboardListenerAccessibilityStatus() === 'granted'
-    && canUseFnKeyListenerBackend()
-}
-
-function canUseKeyboardProvider(): boolean {
-  /** libuiohook 无法可靠监听原生 Wayland 会话，直接交给聚焦窗口的 DOM 兜底方案 */
-  if (process.platform === 'linux' && process.env.XDG_SESSION_TYPE?.toLowerCase() === 'wayland')
-    return false
-
-  return canUseUiohookBackend()
-    && (process.platform !== 'darwin' || getAppAccessibilityStatus() === 'granted')
 }
 
 type ElectronShortcutRuntimeProviderRegistryEntry = {

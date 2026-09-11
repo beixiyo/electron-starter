@@ -2,7 +2,7 @@
 
 macOS 的 Fn / Globe 无法由 Electron 或 uiohook 稳定捕获，因此由独立 Swift helper（`keyboard-listener`）上报物理事件。Swift 不判断 chord、press、doublePress、hold，也不执行业务 action
 
-> ⚠️ **当前状态**：helper 已换代为全键盘上报、线协议升到 v2；`main/shortcuts/fn/protocol.ts` 仍只解析 v1，down/up 配对与 chord 合成下沉到 TypeScript 的改造安排在输入层改造期。在那之前 Fn 快捷键在运行时不可用。协议细节以 `native/mac/README.md` 为准
+> helper 与 TypeScript 两侧都在 NDJSON v2 上：helper 全键盘上报物理相位，down/up 配对与 chord 合成下沉到 `shared/shortcuts/input-tracker.ts`。协议细节以 `native/mac/README.md` 为准
 
 ## 数据流
 
@@ -11,8 +11,9 @@ CGEventTap
   → KeyboardPhysicalState（内含 FnPhysicalInputClassifier）
   → KeyboardListenerEventEncoder
   → stdout NDJSON v2
-  → main/shortcuts/fn/protocol.ts        ← 当前仍解析 v1，待输入层改造期切换
-  → main/shortcuts/fn/runtime-backend.ts
+  → main/shortcuts/input/native-mac/protocol.ts   ← 严格解码，fail closed
+  → main/shortcuts/input/native-mac/backend.ts    ← 进程生命周期 + 时间基归一到 epoch
+  → shared/shortcuts/input-tracker.ts             ← 合成 chord
   → shared/shortcuts/gesture-engine.ts
 ```
 
@@ -42,21 +43,23 @@ helper 当前输出 v2（无 `sequence`，新增 `fn` 组合归属标记）：
 {"timestamp":123457000,"type":"reset","v":2}
 ```
 
-`key` 用 W3C `KeyboardEvent.code` 命名，与 `shared/shortcuts` 的 `KEYBOARD_CODES` 同空间；**注意 `FN_COMBO_KEYS` 仍是 v1 键名空间**，两者尚未统一
+`key` 用 W3C `KeyboardEvent.code` 命名，与 `shared/shortcuts` 的 `KEYBOARD_CODES` 同空间；`FN_COMBO_KEYS` 由 `KEYBOARD_CODES` 减去修饰键与锁定键派生，两侧共用同一个命名空间
 
-**TS 侧当前仍解析 v1**（`protocol.ts` 的 `PROTOCOL_VERSION = 1`，并要求 `sequence` 字段），因此 v2 的每一行都会被判为非法行丢弃。切到 v2 属于输入层改造期，不要以为这条链路已经通了
+`timestamp` 是 helper 的 **uptime 毫秒**（`ProcessInfo.systemUptime`），由 `native-mac/backend.ts` 在后端边界平移成 `Date.now()` 的 epoch 基，再交给上层 —— DOM 与 uIOhook 后端本来就报 epoch，混基会让去重窗口永不命中、轻点被判成 hold
 
-协议 decoder fail closed：未知字段、未知键名、非法 modifier、重复 down/up 都不会进入 gesture engine
+协议 decoder fail closed：未知版本、字段集合不精确匹配、未知键名、非法 modifier、负数或非整数 timestamp 都会被整行丢弃，不进 tracker
+
+**线格式的黄金样本由两处逐字共同持有**：`Tests/.../KeyboardListenerEventEncoderTests.swift` 与 `main/shortcuts/input/native-mac/protocol.test.ts` 的 `GOLDEN_*`。改字段名必须同时改这两个文件，否则两侧会各自漂移而测试全绿
 
 ## 代码位置
 
 | 职责 | 路径 |
 |---|---|
 | Swift helper 与物理状态机 | `native/mac/accessibility/` |
-| helper 生命周期与 decoder | `main/shortcuts/fn/core.ts`、`protocol.ts` |
-| Fn runtime backend | `main/shortcuts/fn/runtime-backend.ts` |
-| renderer raw event IPC | `ipc/services/fn/` |
-| 手势状态机 | `shared/shortcuts/gesture-engine.ts` |
+| helper 生命周期与 decoder | `main/shortcuts/input/native-mac/` |
+| 系统级 runtime backend | `main/shortcuts/input-runtime-backend.ts` |
+| Fn 组合成员键的窗口内抑制 | `main/shortcuts/fn-combo-suppression.ts` |
+| chord 合成与手势状态机 | `shared/shortcuts/input-tracker.ts`、`gesture-engine.ts` |
 
 ## 构建与验证
 
@@ -64,6 +67,8 @@ helper 当前输出 v2（无 `sequence`，新增 `fn` 组合归属标记）：
 swift test --package-path native/mac/accessibility/Tests
 pnpm build:native:mac
 ```
+
+`resources/native/mac/keyboard-listener` 是 gitignore 的构建产物。**没有它 Fn 与全局快捷键整条链路静默不可用**：后端的 `isAvailable()` 会直接判不可用（并打一条 `keyboard-listener.binary-missing` 错误日志），全局绑定降级成只在窗口内生效。fresh clone 第一件事就是 `pnpm build:native:mac`
 
 静态测试与 universal build 不能证明真实 macOS 行为。发布前仍需在签名应用中验证内置/外接键盘、两种松键顺序、自动重复、辅助功能权限撤销恢复和 helper crash/restart
 

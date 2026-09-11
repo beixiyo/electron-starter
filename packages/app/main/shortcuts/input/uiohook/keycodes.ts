@@ -1,4 +1,7 @@
-/** uIOhook 键码常量，供主进程在不加载 native addon 的前提下使用 */
+/** uIOhook 键码表，以及键码到规范键名的转换 */
+
+import type { KeyboardCode } from '@shared/shortcuts'
+import { normalizeKeyboardCode } from '@shared/shortcuts'
 
 /**
  * `uiohook-napi` 的 `UiohookKey` 键码表副本（复刻自 uiohook-napi@1.5.5）
@@ -15,15 +18,11 @@
  * CFRunLoop，却不复位 `is_worker_running`；主线程的 cleanup 于是再 stop 一次，对着已经悬垂的
  * `CFRunLoopRef` 取 mode，arm64e 的指针认证校验失败直接 `brk`
  *
- * 所以边界是：**只有真正要驱动 hook 的 `uiohook-worker.ts` 才可以值导入 `uiohook-napi`**，
+ * 所以边界是：**只有真正要驱动 hook 的 `worker.ts` 才可以值导入 `uiohook-napi`**，
  * 主进程其余地方一律用这张表；类型导入（`import type`）无运行时副作用，不受此限
  *
  * 治本要等上游把 `AddonCleanUp` 的状态复位补上、并把静态状态改成 per-Environment；在那之前
  * 主进程不能加载这个 addon。数值由上游模块求值导出，与 `UiohookKey` 逐项一致
- *
- * 值的类型故意收敛成 `number` 而不是字面量：上游声明里混有 `number` 类型的键，
- * 字面量联合被并成 `number`，消费方（如 `record/detector.ts` 的 `entry is [string, number]`
- * 谓词）都按 `number` 写；这里若用 `as const` 全字面量，联合不再塌缩，谓词会报 TS2677
  */
 const UIOHOOK_KEY_TABLE = {
   0: 0x000B,
@@ -152,5 +151,31 @@ const UIOHOOK_KEY_TABLE = {
   PrintScreen: 0x0E37,
 } as const
 
-/** 供主进程使用的 uIOhook 键码表，来源、边界与类型取舍见上方说明 */
+/** 供主进程使用的 uIOhook 键码表；值收敛成 `number` 以匹配上游声明 */
 export const UiohookKey: { readonly [K in keyof typeof UIOHOOK_KEY_TABLE]: number } = UIOHOOK_KEY_TABLE
+
+/** uIOhook 把左侧修饰键命名为通用键名，这里补回物理侧别 */
+const SIDE_MODIFIER_CODES: Readonly<Record<string, KeyboardCode>> = {
+  Ctrl: 'ControlLeft',
+  CtrlRight: 'ControlRight',
+  Alt: 'AltLeft',
+  AltRight: 'AltRight',
+  Shift: 'ShiftLeft',
+  ShiftRight: 'ShiftRight',
+  Meta: 'MetaLeft',
+  MetaRight: 'MetaRight',
+}
+
+const KEYCODE_TO_KEYBOARD_CODE: ReadonlyMap<number, KeyboardCode> = new Map(
+  Object.entries(UIOHOOK_KEY_TABLE).flatMap(([name, keycode]) => {
+    const code = SIDE_MODIFIER_CODES[name] ?? normalizeKeyboardCode(name)
+    return code
+      ? [[keycode, code] as const]
+      : []
+  }),
+)
+
+/** 把 uIOhook 键码转换为规范键名；没有对应键名的键返回 null，调用方应丢弃 */
+export function toKeyboardCode(keycode: number): KeyboardCode | null {
+  return KEYCODE_TO_KEYBOARD_CODE.get(keycode) ?? null
+}

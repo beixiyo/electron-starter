@@ -1,10 +1,10 @@
 import { app } from 'electron'
-import { resetFnKeyIpc, stopFnKeyListener } from './fn'
-import { resetKeyboardGestureShortcutStates } from './global'
 import { holdStateManager } from './hold'
+import { keyboardInputBackend } from './input'
+import { systemInputShortcutRuntimeBackend } from './input-runtime-backend'
 
 /**
- * 应用退出前取消注册所有快捷键
+ * 应用退出前取消注册所有快捷键并释放捕获后端
  */
 app.on('will-quit', () => {
   if (!app.isReady()) {
@@ -14,14 +14,9 @@ app.on('will-quit', () => {
   /** 清理所有长按状态 */
   holdStateManager.clearAll()
 
-  /** 清理用户自定义键盘手势快捷键状态 */
-  resetKeyboardGestureShortcutStates()
+  /** 释放已触发的 hold 并摘掉输入订阅 */
+  systemInputShortcutRuntimeBackend.reset()
 
-  if (process.platform === 'darwin') {
-    /** 清理 fn 键快捷键状态 */
-    resetFnKeyIpc()
-
-    /** 停止 keyboard-listener Swift 子进程 */
-    stopFnKeyListener()
-  }
+  /** macOS 停掉 keyboard-listener 子进程；uIOhook Worker 随进程退出 */
+  keyboardInputBackend.shutdown()
 })

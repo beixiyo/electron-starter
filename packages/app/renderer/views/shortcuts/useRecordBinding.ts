@@ -43,7 +43,6 @@ export function useRecordBinding() {
 
     return bindShortcutRecordEvents({
       emit: engine.handle,
-      onReset: engine.reset,
     })
   }, [engine, isActive])
 

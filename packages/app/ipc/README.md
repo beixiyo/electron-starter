@@ -107,22 +107,24 @@ export type MediaContract = IpcContract<{
 
 ```ts
 // contract.ts
-export type FnContract = IpcContract<{
+export type HoldContract = IpcContract<{
   rendererOn: {
-    raw: FnNativeEvent
+    start: { windowType: WindowType }
+    end: { windowType: WindowType }
   }
 }>
 
 // toRenderer.ts
-export const fnToRenderer = createMainToRendererEmitter<FnContract>('fn')
+export const holdToRenderer = createMainToRendererEmitter<HoldContract>('hold')
 
-export function sendFnRawEvent(window: BrowserWindow, event: FnNativeEvent): void {
-  if (!window.isDestroyed())
-    fnToRenderer.emit('raw', event, window)
+export function sendHoldStartEvent(windowType: WindowType): void {
+  const window = windowManager.get(windowType)
+  if (window && !window.isDestroyed())
+    holdToRenderer.emit('start', { windowType }, window)
 }
 
 // client.ts
-export const fnClient = createServiceClient<FnContract>('fn', [])
+export const holdClient = createServiceClient<HoldContract>('hold', [])
 ```
 
 ### 4. 定向推送：只发给发起方
