@@ -14,7 +14,7 @@ import CoreGraphics
 ///
 /// stdout 输出 JSON：{"ok":true,"method":"ax","app":"Notes"} 或 {"ok":false,"reason":"…","app":"…"}
 /// `--method=ax|paste` 只走指定路径，用于排查各 App 的兼容矩阵；默认两条都试
-/// 需要辅助功能权限（与 focus-check / fn-listener 共享同一权限）
+/// 需要辅助功能权限（与 focus-check / keyboard-listener 共享同一权限）
 
 enum InsertMethod: String {
   case ax

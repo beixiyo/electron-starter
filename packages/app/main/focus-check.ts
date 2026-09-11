@@ -30,7 +30,13 @@ export function checkFocusedTextInput(): Promise<FocusCheckResult> {
 }
 
 export type FocusCheckResult = {
-  /** 是否有文本输入焦点 */
+  /**
+   * 是否有可落点的目标，恒等于 helper 的 `tier != 'none'`
+   *
+   * 包含两种情况：AX 拿到可写焦点元素（直插可用），或 AX 看不见焦点元素但有焦点窗口
+   * 且菜单栏挂着标准 Cmd+V（只能粘贴）。所以有焦点窗口的 Finder / 无文本焦点的 Safari
+   * 也会是 `true`，不等同于「光标正停在输入框里」
+   */
   focused: boolean
   /** AX 角色（AXTextField / AXTextArea / AXWebArea / AXComboBox / ...） */
   role: string | null

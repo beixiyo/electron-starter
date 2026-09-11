@@ -272,7 +272,7 @@ for license_file in "${APM_LICENSE_FILES[@]}"; do
 done
 
 build_product accessibility focus-check 11.0
-build_product accessibility fn-listener 11.0
+build_product accessibility keyboard-listener 11.0
 build_product accessibility settings-window 11.0
 build_product accessibility insert-text 11.0
 build_product hour-cycle hour-cycle 14.2

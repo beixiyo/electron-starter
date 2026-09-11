@@ -25,7 +25,7 @@ let audioCaptureBackfillRequested = false
 export function getPermissionStatus(kind: PermissionKind): PermissionStatus {
   if (kind === 'accessibility') {
     return getAppAccessibilityStatus() === 'granted'
-      && getFnListenerAccessibilityStatus() === 'granted'
+      && getKeyboardListenerAccessibilityStatus() === 'granted'
       ? 'granted'
       : 'denied'
   }
@@ -51,13 +51,13 @@ export function getAppAccessibilityStatus(): PermissionStatus {
     : 'denied'
 }
 
-/** Fn listener helper 的辅助功能授权；Fn/Globe 捕获 backend 依赖它 */
-export function getFnListenerAccessibilityStatus(): PermissionStatus {
+/** keyboard-listener helper 的辅助功能授权；Fn/Globe 捕获 backend 依赖它 */
+export function getKeyboardListenerAccessibilityStatus(): PermissionStatus {
   /** 非 macOS 无此概念；Fn backend 仍由平台能力单独判断 */
   if (process.platform !== 'darwin')
     return 'granted'
 
-  return isFnListenerAccessibilityTrusted()
+  return isKeyboardListenerAccessibilityTrusted()
     ? 'granted'
     : 'denied'
 }
@@ -82,7 +82,7 @@ export async function requestPermission(kind: PermissionKind): Promise<Permissio
     }
 
     presentPermissionSettings('accessibility')
-    fnAccessibilityTrustedCache = null
+    keyboardListenerTrustedCache = null
     return getPermissionStatus('accessibility')
   }
 
@@ -166,26 +166,26 @@ function clearSettingsFallback(kind: PermissionKind): void {
 }
 
 /**
- * fn-listener 辅助功能探测要同步 spawn 子进程（~10-50ms 阻塞主进程事件循环），
+ * keyboard-listener 辅助功能探测要同步 spawn 子进程（~10-50ms 阻塞主进程事件循环），
  * 而权限弹窗打开期间以 1s 轮询 permission.get——与 audioCaptureStatusCache 同理加短 TTL 缓存；
  * requestPermission 打开设置页引导授权时主动失效，保证用户决策后尽快反映
  */
-const FN_ACCESSIBILITY_TRUSTED_TTL_MS = 3000
-let fnAccessibilityTrustedCache: { trusted: boolean, at: number } | null = null
+const KEYBOARD_LISTENER_TRUSTED_TTL_MS = 3000
+let keyboardListenerTrustedCache: { trusted: boolean, at: number } | null = null
 
-function isFnListenerAccessibilityTrusted(): boolean {
-  if (fnAccessibilityTrustedCache && Date.now() - fnAccessibilityTrustedCache.at < FN_ACCESSIBILITY_TRUSTED_TTL_MS) {
-    return fnAccessibilityTrustedCache.trusted
+function isKeyboardListenerAccessibilityTrusted(): boolean {
+  if (keyboardListenerTrustedCache && Date.now() - keyboardListenerTrustedCache.at < KEYBOARD_LISTENER_TRUSTED_TTL_MS) {
+    return keyboardListenerTrustedCache.trusted
   }
 
-  const trusted = probeFnListenerAccessibilityTrusted()
-  fnAccessibilityTrustedCache = { trusted, at: Date.now() }
+  const trusted = probeKeyboardListenerAccessibilityTrusted()
+  keyboardListenerTrustedCache = { trusted, at: Date.now() }
   return trusted
 }
 
-function probeFnListenerAccessibilityTrusted(): boolean {
+function probeKeyboardListenerAccessibilityTrusted(): boolean {
   try {
-    execFileSync(getNativeBinaryPath('fn-listener'), ['--check-accessibility'], {
+    execFileSync(getNativeBinaryPath('keyboard-listener'), ['--check-accessibility'], {
       stdio: 'ignore',
     })
     return true

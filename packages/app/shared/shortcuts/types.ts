@@ -1,7 +1,15 @@
 /** Fn 组合键触发时可能附带的修饰符 */
 export type FnModifier = 'Meta' | 'Control' | 'Alt' | 'Shift'
 
-/** 与 native/mac/fn-listener.swift COMBO_KEYS 保持一一对应 */
+/**
+ * Fn 组合键可用的键名白名单
+ *
+ * 注意这里仍是 v1 键名空间（`LeftBracket` / `Grave` / `Left` 等），**与 v2 helper 输出的键名不同**：
+ * `MacKeyCodes.swift` 用的是 W3C `KeyboardEvent.code` 空间，同一批键叫 `BracketLeft` / `Backquote` / `ArrowLeft`，
+ * 与本文件的 `KEYBOARD_CODES` 同空间。直接把 helper 的 key 喂给 `fn/protocol.ts` 的白名单会被当成未知键拒掉
+ *
+ * 两套键名的统一（让 `FN_COMBO_KEYS` 由 `KEYBOARD_CODES` 筛出）留到输入层改造期
+ */
 export const FN_COMBO_KEYS = [
   'A',
   'B',
@@ -78,7 +86,7 @@ export const FN_COMBO_KEYS = [
   'F12',
 ] as const
 
-/** 与 native/mac/fn-listener.swift COMBO_KEYS 保持一一对应 */
+/** v1 键名空间，取值见 {@link FN_COMBO_KEYS} */
 export type FnComboKey = typeof FN_COMBO_KEYS[number]
 
 /** 快捷键修饰键，`Primary` 表示 macOS Command、Windows/Linux Control */

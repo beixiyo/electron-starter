@@ -82,7 +82,7 @@ let generationCounter = 0
  *
  * 返回值要区分「没展示」的原因，调用方才知道该不该自己补开面板：
  * `already-granted` 时本函数**没有**打开任何面板（被拖的 bundle 已授权），
- * 而调用方可能因为别的原因仍需要用户进设置页（例如 accessibility 还差 fn-listener helper），
+ * 而调用方可能因为别的原因仍需要用户进设置页（例如 accessibility 还差 keyboard-listener helper），
  * 这时必须由调用方自行 `openPrivacySettings`
  * `unavailable` 与 `superseded` 在 macOS 上面板**已经打开**，调用方不得再开：
  * 再开一次会重新激活系统设置，打断另一次正在等它停稳的会话
@@ -266,7 +266,7 @@ export function dismissPermissionDragGuide(event: unknown): void {
 /**
  * 只读**被拖拽那个 bundle 自己**的授权状态，不读业务上的合成状态
  *
- * `getPermissionStatus('accessibility')` 还要求 fn-listener helper 同样被信任，
+ * `getPermissionStatus('accessibility')` 还要求 keyboard-listener helper 同样被信任，
  * 拿它当完成信号的话，用户把 App 拖进列表、系统也确实授权了，卡片却永远不变绿
  */
 function isTargetGranted(kind: PermissionDragKind): boolean {

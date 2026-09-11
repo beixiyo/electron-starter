@@ -41,7 +41,7 @@ addShortcutRuntimeSuspensionListener(() => {
 export const fnShortcutRuntimeBackend: ShortcutRuntimeBackend = {
   ...FN_SHORTCUT_RUNTIME_PROVIDER,
   reset: resetFnRuntime,
-  sync: syncFnListenerRuntime,
+  sync: syncFnRuntime,
   apply(bindings, context) {
     resetFnRuntime()
     runtimeContext = context
@@ -60,7 +60,7 @@ function resetFnRuntime(): void {
   runtimeContext = null
 }
 
-function syncFnListenerRuntime(): void {
+function syncFnRuntime(): void {
   if (process.platform !== 'darwin')
     return
 

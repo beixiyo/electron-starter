@@ -1,5 +1,5 @@
 import type { ShortcutRuntimeProviderDescriptor } from '@shared/shortcuts'
-import { getAppAccessibilityStatus, getFnListenerAccessibilityStatus } from '@main/permissions'
+import { getAppAccessibilityStatus, getKeyboardListenerAccessibilityStatus } from '@main/permissions'
 import { canUseFnKeyListenerBackend } from './fn/core'
 import { canUseUiohookBackend } from './uiohook-lifecycle'
 
@@ -78,7 +78,7 @@ function getShortcutRuntimeProviderEntries(
 function canUseFnProvider(): boolean {
   return process.platform === 'darwin'
     && getAppAccessibilityStatus() === 'granted'
-    && getFnListenerAccessibilityStatus() === 'granted'
+    && getKeyboardListenerAccessibilityStatus() === 'granted'
     && canUseFnKeyListenerBackend()
 }
 

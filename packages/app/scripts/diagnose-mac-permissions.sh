@@ -47,6 +47,7 @@ QUARANTINE_STATUS='未检查'
 TCC_STATUS='未检查'
 TCC_SERVICES=''
 DR_COMPAT_STATUS='未检查'
+KEYBOARD_LISTENER_STATUS='未检查'
 
 usage() {
   cat <<'EOF'
@@ -63,6 +64,7 @@ usage() {
   4. 校验 Gatekeeper / notarization / quarantine 状态
   5. 读取当前用户 TCC.db 中该 bundle id 的历史权限记录
   6. 传入两个 .app 时，检查两者 DR 是否互相兼容，用于判断旧权限是否可能沿用
+  7. 直接跑 keyboard-listener helper 的 --check-accessibility，验证子进程自身的辅助功能授权
 
 说明:
   这个脚本只读，不会重置系统权限
@@ -233,6 +235,7 @@ verify_distribution_dmg() {
 
   print_app_identity "$app" "DMG 内 app 身份"
   verify_app "$app"
+  verify_keyboard_listener_accessibility "$app"
   verify_distribution_readiness "$app"
   print_tcc_records "$(plist_value "$app" CFBundleIdentifier)"
   hdiutil detach "$mount_dir" >/dev/null 2>&1 || true
@@ -260,6 +263,39 @@ verify_distribution_readiness() {
     printf '%s\n' "$output"
     ARTIFACT_APP_STATUS='FAIL: 内部 app 未通过 Apple 分发预检'
     warn '内部 app 未通过 Apple 分发预检'
+  fi
+}
+
+# 主 app 显示「已授权」不等于 helper 子进程也被信任：TCC 按代码身份逐个授权，
+# helper 是独立的 Mach-O，必须单独出现在辅助功能列表里。直接跑它自己的自检，
+# 才能戳穿「设置页看起来有权限、Fn 与全局键盘却没反应」的假象
+verify_keyboard_listener_accessibility() {
+  local app="$1"
+  local listener="$app/Contents/Resources/native/mac/keyboard-listener"
+
+  section "keyboard-listener helper 校验"
+
+  if [[ ! -x "$listener" ]]; then
+    KEYBOARD_LISTENER_STATUS='WARN: 找不到可执行的 keyboard-listener'
+    warn "找不到可执行的 keyboard-listener: $listener"
+    return
+  fi
+
+  printf '$ "%s" --check-accessibility\n' "$listener"
+  local output
+  if output="$("$listener" --check-accessibility 2>&1)"; then
+    printf '%s\n' "$output"
+    KEYBOARD_LISTENER_STATUS='PASS: keyboard-listener 具备辅助功能权限，键盘 event tap 可以创建'
+    ok 'keyboard-listener 具备辅助功能权限'
+  else
+    printf '%s\n' "$output"
+    if printf '%s\n' "$output" | grep -q 'ACCESSIBILITY_NOT_TRUSTED'; then
+      KEYBOARD_LISTENER_STATUS='FAIL: keyboard-listener 没有辅助功能权限，Fn 与全局键盘快捷键不可用'
+      warn 'keyboard-listener 没有辅助功能权限；页面显示主 app 已授权不代表子进程已授权'
+    else
+      KEYBOARD_LISTENER_STATUS='FAIL: keyboard-listener 检查失败'
+      warn 'keyboard-listener 检查失败'
+    fi
   fi
 }
 
@@ -536,6 +572,15 @@ print_summary() {
     *) status_line 'TCC 数据库' 'SKIP' "$TCC_STATUS" ;;
   esac
 
+  if [[ "$KEYBOARD_LISTENER_STATUS" != '未检查' ]]; then
+    case "$KEYBOARD_LISTENER_STATUS" in
+      PASS:*) status_line 'Fn helper' 'PASS' "${KEYBOARD_LISTENER_STATUS#PASS: }" ;;
+      FAIL:*) status_line 'Fn helper' 'FAIL' "${KEYBOARD_LISTENER_STATUS#FAIL: }" ;;
+      WARN:*) status_line 'Fn helper' 'WARN' "${KEYBOARD_LISTENER_STATUS#WARN: }" ;;
+      *) status_line 'Fn helper' 'SKIP' "$KEYBOARD_LISTENER_STATUS" ;;
+    esac
+  fi
+
   if [[ "$DR_COMPAT_STATUS" != '未检查' ]]; then
     case "$DR_COMPAT_STATUS" in
       PASS:*) status_line '旧权限迁移' 'PASS' "${DR_COMPAT_STATUS#PASS: }" ;;
@@ -589,6 +634,10 @@ print_summary() {
   if ! has_tcc_service 'kTCCServiceAccessibility'; then
     status_line '权限测试' 'WARN' "要测 Fn / Accessibility，请运行 $DEFAULT_APP_NAME 后在系统设置里给 $APP_DISPLAY_NAME 授权"
   fi
+
+  if [[ "$KEYBOARD_LISTENER_STATUS" == FAIL:* ]]; then
+    status_line '键盘监听修复' 'FAIL' '需要给 keyboard-listener 这个 helper 单独授权，或换用带 helper 授权引导的新包重新安装'
+  fi
 }
 
 main() {
@@ -634,11 +683,13 @@ main() {
     print_app_identity "$app_b" "新 app 身份"
     compare_requirements "$app_a" "$app_b"
     verify_app "$app_b"
+    verify_keyboard_listener_accessibility "$app_b"
     print_tcc_records "$(plist_value "$app_b" CFBundleIdentifier)"
     print_summary
   else
     print_app_identity "$app_a" "app 身份"
     verify_app "$app_a"
+    verify_keyboard_listener_accessibility "$app_a"
     print_tcc_records "$(plist_value "$app_a" CFBundleIdentifier)"
     print_summary
   fi

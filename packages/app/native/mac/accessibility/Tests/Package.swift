@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-  name: "FnListenerCoreTests",
+  name: "KeyboardListenerCoreTests",
   platforms: [.macOS(.v11)],
   dependencies: [
     .package(path: ".."),
@@ -14,9 +14,9 @@ let package = Package(
   ],
   targets: [
     .testTarget(
-      name: "FnListenerCoreTests",
+      name: "KeyboardListenerCoreTests",
       dependencies: [
-        .product(name: "FnListenerCore", package: "accessibility"),
+        .product(name: "KeyboardListenerCore", package: "accessibility"),
         .product(name: "Testing", package: "swift-testing"),
       ]
     ),

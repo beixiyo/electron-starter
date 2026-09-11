@@ -31,10 +31,10 @@ dist-ssr
 # compiled binaries
 packages/app/resources/native/mac/audio-monitor
 packages/app/resources/native/mac/audio-recorder
-packages/app/resources/native/mac/fn-listener
 packages/app/resources/native/mac/focus-check
 packages/app/resources/native/mac/hour-cycle
 packages/app/resources/native/mac/insert-text
+packages/app/resources/native/mac/keyboard-listener
 packages/app/resources/native/mac/screenshot-capture
 packages/app/resources/native/mac/settings-window
 packages/app/resources/native/mac/RecorderAPM-LICENSES

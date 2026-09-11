@@ -5,16 +5,11 @@ public struct FnPhysicalInputClassifier: Sendable {
   public func classify(
     hasFnFlag: Bool,
     isFnDown: Bool
-  ) -> FnPhysicalPhase? {
+  ) -> KeyboardInputPhase? {
     if hasFnFlag {
       return isFnDown ? nil : .down
     }
 
     return isFnDown ? .up : nil
   }
-}
-
-public enum FnPhysicalPhase: Equatable, Sendable {
-  case down
-  case up
 }

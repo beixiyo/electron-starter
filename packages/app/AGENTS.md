@@ -61,15 +61,15 @@ packages/app/
 │
 ├── native/            # 平台原生源码
 │   └── mac/           # macOS Swift helper 源码
-│       ├── accessibility/        # focus-check、fn-listener 与物理事件测试
+│       ├── accessibility/        # focus-check、keyboard-listener 与物理事件测试
 │       ├── audio-monitor/        # 音频设备监听 helper
 │       └── audio-recorder/       # Swift 录音 helper：双引擎、恢复、看门狗与设备自愈
 │
 ├── resources/         # 运行时资源与原生编译产物
 │   ├── icon.png
 │   └── native/mac/    # macOS Swift 编译产物（已 gitignore）
-│       ├── fn-listener
 │       ├── focus-check
+│       ├── keyboard-listener
 │       ├── audio-monitor
 │       └── audio-recorder
 │
@@ -236,18 +236,18 @@ macOS Fn helper 只输出物理 `down/up/reset`，press、doublePress、hold 均
 
 > 详见 `docs/fn-key.md` 和 `docs/focus-check.md`，下手前必读
 
-### Fn 键监听（fn-listener）
+### 键盘监听（keyboard-listener）
 
-- Swift 子进程通过 CGEventTap 捕获 Fn/Globe 与 Fn 组合键物理相位
-- stdout 使用严格 NDJSON 协议，上报 `down/up/reset`、sequence 和 monotonic timestamp
-- Swift 不判断 press、doublePress、hold、action 或 scope
-- Swift 源码：`native/mac/accessibility/Sources/FnListener/`
+- Swift 子进程通过 CGEventTap 捕获全键盘物理相位：普通键、左右修饰键与 Fn/Globe
+- stdout 使用严格 NDJSON 协议（v2），上报 `down/up/reset`、逻辑修饰键快照、`fn` 组合归属与 monotonic timestamp
+- Swift 不判断 chord、press、doublePress、hold、action 或 scope
+- Swift 源码：`native/mac/accessibility/Sources/KeyboardListener/`
 - TypeScript 入口：`main/shortcuts/fn/core.ts`、`protocol.ts`、`runtime-backend.ts`
 
 ### 文本焦点检测（focus-check）
 
 - 通过 Swift 子进程（Accessibility API / AXUIElement）一次性检测当前是否有文本输入焦点
-- 与 fn-listener 不同，focus-check 是**一次性调用**，不常驻
+- 与 keyboard-listener 不同，focus-check 是**一次性调用**，不常驻
 - 典型场景：Voice IME 触发时判断是否直接注入文本
 - Swift 源码：`native/mac/accessibility/Sources/FocusCheck/main.swift`
 - 代码入口：`main/focus-check.ts`

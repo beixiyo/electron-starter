@@ -6,14 +6,14 @@ let package = Package(
   name: "AccessibilityHelpers",
   platforms: [.macOS(.v11)],
   products: [
-    .library(name: "FnListenerCore", targets: ["FnListenerCore"]),
+    .library(name: "KeyboardListenerCore", targets: ["KeyboardListenerCore"]),
     .executable(name: "focus-check", targets: ["FocusCheck"]),
-    .executable(name: "fn-listener", targets: ["FnListener"]),
+    .executable(name: "keyboard-listener", targets: ["KeyboardListener"]),
     .executable(name: "settings-window", targets: ["SettingsWindow"]),
     .executable(name: "insert-text", targets: ["InsertText"]),
   ],
   targets: [
-    .target(name: "FnListenerCore"),
+    .target(name: "KeyboardListenerCore"),
     .executableTarget(
       name: "FocusCheck",
       linkerSettings: [
@@ -37,8 +37,8 @@ let package = Package(
       ],
     ),
     .executableTarget(
-      name: "FnListener",
-      dependencies: ["FnListenerCore"],
+      name: "KeyboardListener",
+      dependencies: ["KeyboardListenerCore"],
       linkerSettings: [
         .linkedFramework("Cocoa"),
         .linkedFramework("CoreGraphics"),

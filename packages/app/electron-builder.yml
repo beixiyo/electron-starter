@@ -40,7 +40,7 @@ mac:
   hardenedRuntime: true
   # extraResources 里的 Mach-O helper 需要显式签名
   binaries:
-    - Contents/Resources/native/mac/fn-listener
+    - Contents/Resources/native/mac/keyboard-listener
     - Contents/Resources/native/mac/focus-check
     - Contents/Resources/native/mac/settings-window
     - Contents/Resources/native/mac/insert-text
@@ -56,8 +56,8 @@ mac:
     NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
     NSAccessibilityUsageDescription: Application requests Accessibility access to detect the focused text field and insert dictated text.
   extraResources:
-    - from: resources/native/mac/fn-listener
-      to: native/mac/fn-listener
+    - from: resources/native/mac/keyboard-listener
+      to: native/mac/keyboard-listener
     - from: resources/native/mac/focus-check
       to: native/mac/focus-check
     - from: resources/native/mac/settings-window

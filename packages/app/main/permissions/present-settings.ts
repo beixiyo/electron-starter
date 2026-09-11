@@ -37,7 +37,7 @@ export function presentPermissionSettings(kind: PermissionKind): boolean {
     .then((result) => {
       /**
        * 只有 `already-granted` 需要补开面板：它说明被拖的 bundle 自己已授权，引导没开任何面板，
-       * 但调用方是因为**别的**缺口才走到这里的（accessibility 还要求 fn-listener helper
+       * 但调用方是因为**别的**缺口才走到这里的（accessibility 还要求 keyboard-listener helper
        * 同样被信任），不补开的话用户点了「去授权」屏幕上什么都不会发生
        *
        * `superseded` / `unavailable` 时面板已由引导自己打开，再开一次会重新激活系统设置，

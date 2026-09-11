@@ -21,7 +21,7 @@ app.on('will-quit', () => {
     /** 清理 fn 键快捷键状态 */
     resetFnKeyIpc()
 
-    /** 停止 fn-listener Swift 子进程 */
+    /** 停止 keyboard-listener Swift 子进程 */
     stopFnKeyListener()
   }
 })

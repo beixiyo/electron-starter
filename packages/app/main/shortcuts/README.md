@@ -46,7 +46,7 @@ shortcuts/
 
 | 手势 | 模块 | 机制 |
 |---|---|---|
-| fn + key (combo) | Swift reducer → `fn/core` → shared gesture engine | CGEventTap NDJSON raw down/up |
+| fn + key (combo) | Swift helper → `fn/core` → shared gesture engine | CGEventTap NDJSON raw down/up |
 | 双击 fn | shared gesture engine | 两次完整 down/up 的决策窗口 |
 | 长按 fn | shared gesture engine | down 后超时触发，up/reset 幂等释放 |
 | 键盘快捷键 **全局激活** | `global/hotkey` → `global/gesture` → shared gesture engine | uiohook 全局监听，只注册 `scope: 'global'` |

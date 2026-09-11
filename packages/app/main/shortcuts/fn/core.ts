@@ -3,9 +3,9 @@ import { NativeBridge } from '../../native-bridge'
 import { requestShortcutRuntimeSync } from '../runtime-sync'
 import { createFnNativeProtocolDecoder } from './protocol'
 
-type FnListenerBackendHealth = 'unknown' | 'healthy' | 'unavailable'
+type KeyboardListenerBackendHealth = 'unknown' | 'healthy' | 'unavailable'
 
-let fnListenerHealth: FnListenerBackendHealth = 'unknown'
+let keyboardListenerHealth: KeyboardListenerBackendHealth = 'unknown'
 let recoveryTimer: ReturnType<typeof setTimeout> | null = null
 
 const decoder = createFnNativeProtocolDecoder({
@@ -13,7 +13,7 @@ const decoder = createFnNativeProtocolDecoder({
 })
 
 const bridge = new NativeBridge<FnEvents>({
-  name: 'fn-listener',
+  name: 'keyboard-listener',
   logStderr: true,
   onUnexpectedExit: handleUnexpectedExit,
   parseLine(line, bus) {
@@ -25,14 +25,14 @@ const bridge = new NativeBridge<FnEvents>({
 
 /** 当前运行时是否可以尝试使用 Fn 原生辅助进程 */
 export function canUseFnKeyListenerBackend(): boolean {
-  return fnListenerHealth !== 'unavailable'
+  return keyboardListenerHealth !== 'unavailable'
 }
 
 export function startFnKeyListener(): void {
   if (process.platform !== 'darwin')
     return
 
-  fnListenerHealth = 'healthy'
+  keyboardListenerHealth = 'healthy'
   clearRecoveryTimer()
   if (!bridge.running)
     emitGenerationReset()
@@ -50,7 +50,7 @@ export function addFnRawEventListener(listener: (event: FnNativeEvent) => void):
 }
 
 function handleUnexpectedExit(): void {
-  fnListenerHealth = 'unavailable'
+  keyboardListenerHealth = 'unavailable'
   emitGenerationReset()
   requestShortcutRuntimeSync()
 
@@ -59,7 +59,7 @@ function handleUnexpectedExit(): void {
 
   recoveryTimer = setTimeout(() => {
     recoveryTimer = null
-    fnListenerHealth = 'unknown'
+    keyboardListenerHealth = 'unknown'
     requestShortcutRuntimeSync()
   }, 5_000)
   recoveryTimer.unref?.()

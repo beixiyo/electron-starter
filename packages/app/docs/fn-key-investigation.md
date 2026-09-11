@@ -1,6 +1,6 @@
 # Fn/Globe 键监听：从「输入监控」到「仅辅助功能」的排查记录
 
-> 本文保留早期 CGEventTap 选型过程，其中旧文本协议、Karabiner fallback 和单文件路径已经过时。当前实现与协议以 `docs/fn-key.md`、`native/mac/README.md` 为准
+> 本文保留早期 CGEventTap 选型过程，其中旧文本协议、Karabiner fallback 和单文件路径已经过时。文中的 `fn-listener` 是历史名字，当前 helper 叫 `keyboard-listener`，源码在 `native/mac/accessibility/Sources/KeyboardListener/`。当前实现与协议以 `docs/fn-key.md`、`native/mac/README.md` 为准
 
 > 背景：打包后 app 会向用户索取 **输入监控（Input Monitoring）** 权限，产品要求「宁可砍掉功能，也不要这个权限」。本文记录为什么会要、试过哪些路、为什么都不行，以及最终怎么做到 **只用「辅助功能」** 就能稳定读 Fn 键
 
@@ -91,7 +91,7 @@
 
 ---
 
-## 五、最终实现要点（`native/mac/fn-listener.swift`）
+## 五、当时的实现要点（`native/mac/fn-listener.swift`，现已迁到 `native/mac/accessibility/Sources/KeyboardListener/main.swift`）
 
 ```swift
 CGEvent.tapCreate(

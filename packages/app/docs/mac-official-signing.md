@@ -77,7 +77,7 @@ mac:
   hardenedRuntime: true
   # extraResources 里的 Mach-O helper 需要显式签名
   binaries:
-    - Contents/Resources/native/mac/fn-listener
+    - Contents/Resources/native/mac/keyboard-listener
     - Contents/Resources/native/mac/focus-check
     - Contents/Resources/native/mac/audio-monitor
     - Contents/Resources/native/mac/audio-recorder
