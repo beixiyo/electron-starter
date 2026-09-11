@@ -3,19 +3,21 @@ import type {
   FnModifier,
   FnShortcutKey,
   KeyboardCode,
+  KeyboardLockCode,
   KeyboardModifierCode,
   KeyboardShortcutChord,
   KeyboardShortcutModifier,
   ShortcutBinding,
   ShortcutBindings,
   ShortcutChord,
+  ShortcutGestureBinding,
   ShortcutGestureType,
   ShortcutModifier,
 } from './types'
 import {
   FN_SHORTCUT_KEYS,
-  KEYBOARD_CODE_ALIASES,
   KEYBOARD_CODES,
+  KEYBOARD_LOCK_CODES,
   KEYBOARD_MODIFIER_BY_CODE,
   KEYBOARD_MODIFIER_CODES,
   SHORTCUT_GESTURES,
@@ -152,18 +154,18 @@ export function normalizeShortcutBinding(binding: unknown): ShortcutBinding | nu
 }
 
 /**
- * 将浏览器、uIOhook 和旧配置中的普通键名归一为规范键名
+ * 校验外部输入是否为规范键名
  *
- * 返回 null 表示该键没有跨捕获后端的可靠映射，保存边界应拒绝它
+ * 返回 null 表示该键不在统一命名空间内，保存边界应拒绝它；各捕获后端的私有键名
+ * 必须在 adapter 里完成转换，不在这里做别名兜底
  */
 export function normalizeKeyboardCode(value: unknown): KeyboardCode | null {
   if (typeof value !== 'string' || !value)
     return null
 
-  if ((KEYBOARD_CODES as readonly string[]).includes(value))
-    return value as KeyboardCode
-
-  return KEYBOARD_CODE_ALIASES[value] ?? null
+  return (KEYBOARD_CODES as readonly string[]).includes(value)
+    ? value as KeyboardCode
+    : null
 }
 
 /**
@@ -242,6 +244,27 @@ export function pressKeyboardShortcutChord<Key>(
   }
   activeEntries.set(keyId, entry)
   return entry.chord
+}
+
+/**
+ * 判断 next 是否在仍按住的 previous 上继续扩展
+ *
+ * 两种情况：纯修饰键组合追加新成员（先按 ⌘ 再按 ⌥ 得到 ⌘⌥），以及裸 Fn 变成 Fn 组合键
+ *
+ * 本仓目前没有调用方：手势与录制状态机仍在用只覆盖前一种情况的
+ * {@link isKeyboardModifierChordPrefixOf}，因此裸 Fn 的候选不会被 Fn 组合键撤销
+ * （按下 Fn+Space 会连带触发「按下 Fn」）。换掉那两处调用是状态机的行为变更，
+ * 留到录制与运行时改造时一起做
+ */
+export function isShortcutChordPrefixOf(previous: ShortcutChord, next: ShortcutChord): boolean {
+  if (previous.source === 'fn' || next.source === 'fn') {
+    return previous.source === 'fn'
+      && next.source === 'fn'
+      && previous.key === 'Fn'
+      && next.key !== 'Fn'
+  }
+
+  return isKeyboardModifierChordPrefixOf(previous, next)
 }
 
 /** 判断新的 keyboard chord 是否在已按住的纯修饰键 chord 上继续扩展 */
@@ -353,8 +376,13 @@ export function getActiveKeyboardModifierCodes(
   )
 }
 
-/** 判断两个 binding 是否会在运行时互相抢占 */
-export function shortcutBindingsConflict(a: ShortcutBinding, b: ShortcutBinding): boolean {
+/**
+ * 判断两个 binding 是否会在运行时互相抢占
+ *
+ * 接受不带 scope 的 {@link ShortcutGestureBinding}：录制结果在写入前还没有 scope，
+ * 而冲突只由 chord 与 gesture 决定，scope 不参与判定
+ */
+export function shortcutBindingsConflict(a: ShortcutGestureBinding, b: ShortcutGestureBinding): boolean {
   if (!shortcutChordsEqual(a.chord, b.chord))
     return false
 
@@ -650,6 +678,12 @@ export function isKeyboardModifierCode(value: unknown): value is KeyboardModifie
     && (KEYBOARD_MODIFIER_CODES as readonly string[]).includes(value)
 }
 
+/** 是否是只切换状态、不参与 chord 的锁定键 */
+export function isKeyboardLockCode(value: unknown): value is KeyboardLockCode {
+  return typeof value === 'string'
+    && (KEYBOARD_LOCK_CODES as readonly string[]).includes(value)
+}
+
 function isShortcutGesture(value: unknown): value is ShortcutGestureType {
   return typeof value === 'string'
     && (SHORTCUT_GESTURES as readonly string[]).includes(value)
@@ -667,7 +701,8 @@ function isKeyboardShortcutModifier(value: unknown): value is KeyboardShortcutMo
   return isShortcutModifier(value) || isKeyboardModifierCode(value)
 }
 
-function isFnShortcutKey(value: unknown): value is FnShortcutKey {
+/** 是否是 Fn chord 能用的主键：规范键名去掉修饰键与锁定键，外加 `Fn` 自己 */
+export function isFnShortcutKey(value: unknown): value is FnShortcutKey {
   return typeof value === 'string'
     && (FN_SHORTCUT_KEYS as readonly string[]).includes(value)
 }

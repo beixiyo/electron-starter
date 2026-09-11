@@ -1,5 +1,4 @@
 import type {
-  ActiveKeyboardShortcutEntry,
   KeyboardModifierCode,
   KeyboardShortcutChord,
   ShortcutBinding,
@@ -12,9 +11,12 @@ import {
   MAC_DEFAULT_BINDINGS,
   SHORTCUT_ACTIONS,
 } from './actions'
-import { normalizeBrowserShortcutKey, toBrowserShortcutChord, toBrowserShortcutRecordEvents } from './browser-key'
+import type { BrowserShortcutKeyEvent } from './browser-key'
+import { normalizeBrowserShortcutKey, toBrowserKeyboardInputEvent } from './browser-key'
 import { createElectronShortcutCapabilities, resolveEffectiveShortcutScope, toEffectiveShortcutBindings } from './capabilities'
 import { createShortcutGestureEngine } from './gesture-engine'
+import type { KeyboardInputTracker } from './input-tracker'
+import { createKeyboardInputTracker } from './input-tracker'
 import {
   normalizeKeyboardCode,
   normalizeKeyboardShortcutChord,
@@ -27,22 +29,23 @@ import {
 } from './utils'
 
 describe('快捷键键名规范化', () => {
-  it('浏览器键码与持久化绑定使用相同键名', () => {
+  it('浏览器键码与持久化绑定使用相同键名，后端私有键名不在持久化边界做别名兜底', () => {
     expect(normalizeBrowserShortcutKey({ code: 'KeyA', key: 'a' })).toBe('A')
     expect(normalizeBrowserShortcutKey({ code: 'Backquote', key: '`' })).toBe('Backquote')
     expect(normalizeShortcutBinding({
       scope: 'global',
       gesture: 'press',
       chord: { source: 'keyboard', key: 'Grave', modifiers: [] },
-    })?.chord).toEqual({
-      source: 'keyboard',
-      key: 'Backquote',
-      modifiers: [],
-    })
+    })).toBeNull()
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Backquote' },
+    })?.chord).toEqual({ source: 'fn', key: 'Backquote', modifiers: [] })
   })
 
   it('拒绝未知键盘按键而不是将其持久化', () => {
-    expect(toBrowserShortcutChord({ code: 'UnknownKey', key: 'UnknownKey' })).toBeNull()
+    expect(normalizeBrowserShortcutKey({ code: 'UnknownKey', key: 'UnknownKey' })).toBeNull()
     expect(() => normalizeShortcutBindingsOrThrow({
       recording: {
         scope: 'global',
@@ -85,17 +88,17 @@ describe('快捷键键名规范化', () => {
   })
 
   it('单独按下和松开右侧 Option 时保留物理侧别', () => {
-    const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
-    const down = toBrowserShortcutRecordEvents({
+    const tracker = createKeyboardInputTracker()
+    const down = browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: true,
-    }, 'down', activeEntries)[0]
-    const up = toBrowserShortcutRecordEvents({
+    }, 'down')[0]
+    const up = browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: false,
-    }, 'up', activeEntries)[0]
+    }, 'up')[0]
 
     expect(down?.chord).toEqual({
       source: 'keyboard',
@@ -106,24 +109,24 @@ describe('快捷键键名规范化', () => {
   })
 
   it('修饰键作为主键时排除自身标志，并在 keyup 复用按下时的 chord', () => {
-    const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
-    toBrowserShortcutRecordEvents({
+    const tracker = createKeyboardInputTracker()
+    browserEvents(tracker, {
       code: 'MetaRight',
       key: 'Meta',
       metaKey: true,
-    }, 'down', activeEntries)
-    const down = toBrowserShortcutRecordEvents({
+    }, 'down')
+    const down = browserEvents(tracker, {
       code: 'AltLeft',
       key: 'Alt',
       altKey: true,
       metaKey: true,
-    }, 'down', activeEntries)[0]
-    const up = toBrowserShortcutRecordEvents({
+    }, 'down')[0]
+    const up = browserEvents(tracker, {
       code: 'AltLeft',
       key: 'Alt',
       altKey: false,
       metaKey: false,
-    }, 'up', activeEntries)[0]
+    }, 'up')[0]
 
     expect(down?.chord).toEqual({
       source: 'keyboard',
@@ -134,33 +137,33 @@ describe('快捷键键名规范化', () => {
   })
 
   it('纯修饰键组合不受按下和松开顺序影响', () => {
-    const firstActive = new Map<string, ActiveKeyboardShortcutEntry>()
-    toBrowserShortcutRecordEvents({ code: 'MetaLeft', key: 'Meta', metaKey: true }, 'down', firstActive)
-    const metaThenAlt = toBrowserShortcutRecordEvents({
+    const firstTracker = createKeyboardInputTracker()
+    browserEvents(firstTracker, { code: 'MetaLeft', key: 'Meta', metaKey: true }, 'down')
+    const metaThenAlt = browserEvents(firstTracker, {
       code: 'AltLeft',
       key: 'Alt',
       altKey: true,
       metaKey: true,
-    }, 'down', firstActive)[0]
-    const releaseMetaFirst = toBrowserShortcutRecordEvents({
+    }, 'down')[0]
+    const releaseMetaFirst = browserEvents(firstTracker, {
       code: 'MetaLeft',
       key: 'Meta',
       altKey: true,
-    }, 'up', firstActive)[0]
+    }, 'up')[0]
 
-    const secondActive = new Map<string, ActiveKeyboardShortcutEntry>()
-    toBrowserShortcutRecordEvents({ code: 'AltLeft', key: 'Alt', altKey: true }, 'down', secondActive)
-    const altThenMeta = toBrowserShortcutRecordEvents({
+    const secondTracker = createKeyboardInputTracker()
+    browserEvents(secondTracker, { code: 'AltLeft', key: 'Alt', altKey: true }, 'down')
+    const altThenMeta = browserEvents(secondTracker, {
       code: 'MetaLeft',
       key: 'Meta',
       altKey: true,
       metaKey: true,
-    }, 'down', secondActive)[0]
-    const releaseAltFirst = toBrowserShortcutRecordEvents({
+    }, 'down')[0]
+    const releaseAltFirst = browserEvents(secondTracker, {
       code: 'AltLeft',
       key: 'Alt',
       metaKey: true,
-    }, 'up', secondActive)[0]
+    }, 'up')[0]
 
     const expected = { source: 'keyboard', key: 'MetaLeft', modifiers: ['AltLeft'] }
     expect(metaThenAlt?.chord).toEqual(expected)
@@ -170,18 +173,18 @@ describe('快捷键键名规范化', () => {
   })
 
   it('普通主键组合保留已按住修饰键的物理侧别', () => {
-    const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
-    toBrowserShortcutRecordEvents({
+    const tracker = createKeyboardInputTracker()
+    browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: true,
-    }, 'down', activeEntries)
+    }, 'down')
 
-    const down = toBrowserShortcutRecordEvents({
+    const down = browserEvents(tracker, {
       code: 'KeyA',
       key: 'a',
       altKey: true,
-    }, 'down', activeEntries)[0]
+    }, 'down')[0]
 
     expect(down?.chord).toEqual({
       source: 'keyboard',
@@ -191,35 +194,41 @@ describe('快捷键键名规范化', () => {
   })
 
   it('任一组合成员松开后清理依赖 chord，后续按键不会继承幽灵 modifier', () => {
-    const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
-    toBrowserShortcutRecordEvents({
+    const tracker = createKeyboardInputTracker()
+    browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: true,
-    }, 'down', activeEntries)
-    toBrowserShortcutRecordEvents({
+    }, 'down')
+    browserEvents(tracker, {
       code: 'KeyA',
       key: 'a',
       altKey: true,
-    }, 'down', activeEntries)
+    }, 'down')
 
-    const released = toBrowserShortcutRecordEvents({
+    const released = browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: false,
-    }, 'up', activeEntries)
-    const next = toBrowserShortcutRecordEvents({
+    }, 'up')
+    const next = browserEvents(tracker, {
       code: 'KeyB',
       key: 'b',
       altKey: false,
-    }, 'down', activeEntries)[0]
+    }, 'down')[0]
+    /** 仍按住的 A 已按当前 modifier 状态重算，松开时不应再带上已经松开的 AltRight */
+    const releasedA = browserEvents(tracker, {
+      code: 'KeyA',
+      key: 'a',
+      altKey: false,
+    }, 'up')[0]
 
     expect(released[0]?.chord).toEqual({
       source: 'keyboard',
       key: 'A',
       modifiers: ['AltRight'],
     })
-    expect(activeEntries.get('KeyA')?.chord).toEqual({
+    expect(releasedA?.chord).toEqual({
       source: 'keyboard',
       key: 'A',
       modifiers: [],
@@ -339,19 +348,19 @@ describe('浏览器快捷键运行时生命周期', () => {
       }],
       emit,
     })
-    const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
+    const tracker = createKeyboardInputTracker()
 
-    for (const event of toBrowserShortcutRecordEvents({
+    for (const event of browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: true,
-    }, 'down', activeEntries))
+    }, 'down'))
       engine.handle(event)
-    for (const event of toBrowserShortcutRecordEvents({
+    for (const event of browserEvents(tracker, {
       code: 'KeyA',
       key: 'a',
       altKey: true,
-    }, 'down', activeEntries))
+    }, 'down'))
       engine.handle(event)
 
     await vi.advanceTimersByTimeAsync(300)
@@ -360,11 +369,11 @@ describe('浏览器快捷键运行时生命周期', () => {
       gesture: 'hold',
     }))
 
-    for (const event of toBrowserShortcutRecordEvents({
+    for (const event of browserEvents(tracker, {
       code: 'AltRight',
       key: 'Alt',
       altKey: false,
-    }, 'up', activeEntries))
+    }, 'up'))
       engine.handle(event)
 
     expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -551,6 +560,18 @@ describe('函数键手势能力', () => {
     }, createCapabilities(true, true))).toBe('global')
   })
 })
+
+/** 把 DOM 事件经浏览器 adapter 与 tracker 合成为 chord 事件 */
+function browserEvents(
+  tracker: KeyboardInputTracker,
+  event: BrowserShortcutKeyEvent,
+  phase: 'down' | 'up',
+) {
+  const input = toBrowserKeyboardInputEvent(event, phase)
+  return input
+    ? tracker.handle(input)
+    : []
+}
 
 function createCapabilities(globalKeyboard: boolean, fn = false) {
   return createElectronShortcutCapabilities({

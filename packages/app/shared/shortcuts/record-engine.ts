@@ -4,9 +4,9 @@ import type {
   ShortcutGestureType,
   ShortcutRecordEvent,
 } from './types'
+import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
 import { isKeyboardModifierChordPrefixOf, shortcutChordsEqual } from './utils'
 
-const DEFAULT_DOUBLE_PRESS_INTERVAL_MS = 300
 const DEFAULT_HOLD_MIN_DURATION_MS = 400
 const DEFAULT_UNSUPPORTED_RESET_MS = 1500
 
@@ -17,7 +17,7 @@ export function createShortcutRecordEngine(
   const {
     onDetectedChange,
     onPhaseChange,
-    doublePressIntervalMs = DEFAULT_DOUBLE_PRESS_INTERVAL_MS,
+    doublePressIntervalMs = DOUBLE_PRESS_INTERVAL_MS,
     holdMinDurationMs = DEFAULT_HOLD_MIN_DURATION_MS,
     unsupportedResetMs = DEFAULT_UNSUPPORTED_RESET_MS,
   } = options
@@ -265,7 +265,7 @@ export type CreateShortcutRecordEngineOptions = {
   onPhaseChange: (phase: ShortcutRecordDetectionPhase) => void
   /** 录制结果变化回调；null 表示清空当前结果 */
   onDetectedChange: (binding: ShortcutGestureBinding | null) => void
-  /** @default 300 */
+  /** @default {@link DOUBLE_PRESS_INTERVAL_MS} */
   doublePressIntervalMs?: number
   /** @default 400 */
   holdMinDurationMs?: number

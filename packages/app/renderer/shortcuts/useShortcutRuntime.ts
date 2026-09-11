@@ -1,5 +1,4 @@
 import type {
-  ActiveKeyboardShortcutEntry,
   KeyboardShortcutChord,
   ShortcutBinding,
   ShortcutBindings,
@@ -8,12 +7,9 @@ import type {
   ShortcutRuntimeEvent,
 } from '@shared/shortcuts'
 import {
-  createShortcutGestureEngine,
-  getActiveKeyboardModifierCodes,
-  getBrowserLogicalShortcutModifiers,
-  keyboardShortcutChordMatchesModifierState,
+  createShortcutInputRuntime,
   SHORTCUT_ACTIONS,
-  toBrowserShortcutRecordEvents,
+  toBrowserKeyboardInputEvent,
   toEffectiveShortcutBindings,
 } from '@shared/shortcuts'
 import { useEffect, useRef } from 'react'
@@ -107,84 +103,33 @@ export function createBrowserShortcutRuntime(
   options: CreateBrowserShortcutRuntimeOptions,
 ): BrowserShortcutRuntime {
   const { bindings, capabilities, canHandle, emit } = options
-  const shortcuts = createBrowserShortcutEntries(bindings, capabilities, canHandle)
-  const activeEntries = new Map<string, ActiveKeyboardShortcutEntry>()
-  const engine = createShortcutGestureEngine({
-    entries: shortcuts,
+  const runtime = createShortcutInputRuntime({
+    entries: createBrowserShortcutEntries(bindings, capabilities, canHandle),
     isPaused: isShortcutRuntimePaused,
     emit,
   })
 
-  const handleKeyDown = (event: KeyboardEvent) => {
+  /** 命中快捷键才吞掉按键；未命中的照常交给页面 */
+  const handle = (event: KeyboardEvent, phase: 'down' | 'up') => {
     if (isShortcutRuntimePaused()) {
-      cancelState()
+      runtime.cancel()
       return
     }
 
-    const recordEvents = toBrowserShortcutRecordEvents(event, 'down', activeEntries)
-    if (recordEvents.length === 0)
+    const input = toBrowserKeyboardInputEvent(event, phase)
+    if (!input || !runtime.handle(input))
       return
 
-    reconcileModifierState(event)
-    let handled = false
-    for (const recordEvent of recordEvents)
-      handled = engine.handle(recordEvent) || handled
-
-    if (handled) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
+    event.preventDefault()
+    event.stopPropagation()
   }
 
-  const handleKeyUp = (event: KeyboardEvent) => {
-    if (isShortcutRuntimePaused()) {
-      cancelState()
-      return
-    }
-
-    const recordEvents = toBrowserShortcutRecordEvents(event, 'up', activeEntries)
-    if (recordEvents.length === 0)
-      return
-
-    let handled = false
-    for (const recordEvent of recordEvents)
-      handled = engine.handle(recordEvent) || handled
-
-    reconcileModifierState(event)
-    if (handled) {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-  }
-
-  /** modifier 状态偏离绑定时立即取消候选，并释放已经触发的 hold */
-  const reconcileModifierState = (event: KeyboardEvent) => {
-    const activePhysicalModifiers = getActiveKeyboardModifierCodes(activeEntries.values())
-    const logicalModifiers = getBrowserLogicalShortcutModifiers(event)
-
-    for (const shortcut of shortcuts) {
-      if (!keyboardShortcutChordMatchesModifierState(
-        shortcut.binding.chord,
-        activePhysicalModifiers,
-        logicalModifiers,
-      )) {
-        engine.cancelChord(shortcut.binding.chord)
-      }
-    }
-  }
-
-  const cancelState = () => {
-    engine.cancelActiveGestures()
-    activeEntries.clear()
-  }
-
-  const handleBlur = () => {
-    cancelState()
-  }
-
+  const handleKeyDown = (event: KeyboardEvent) => handle(event, 'down')
+  const handleKeyUp = (event: KeyboardEvent) => handle(event, 'up')
+  const handleBlur = () => runtime.cancel()
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'hidden')
-      cancelState()
+      runtime.cancel()
   }
 
   window.addEventListener('keydown', handleKeyDown, true)
@@ -198,8 +143,7 @@ export function createBrowserShortcutRuntime(
       window.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('blur', handleBlur)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
-      activeEntries.clear()
-      engine.dispose()
+      runtime.dispose()
     },
   }
 }

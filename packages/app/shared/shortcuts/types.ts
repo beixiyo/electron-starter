@@ -1,102 +1,17 @@
-/** Fn 组合键触发时可能附带的修饰符 */
+/** 快捷键领域模型：键名命名空间、chord、binding、原始输入事件与运行时事件 */
+
+/** 逻辑修饰键，不区分左右侧 */
 export type FnModifier = 'Meta' | 'Control' | 'Alt' | 'Shift'
-
-/**
- * Fn 组合键可用的键名白名单
- *
- * 注意这里仍是 v1 键名空间（`LeftBracket` / `Grave` / `Left` 等），**与 v2 helper 输出的键名不同**：
- * `MacKeyCodes.swift` 用的是 W3C `KeyboardEvent.code` 空间，同一批键叫 `BracketLeft` / `Backquote` / `ArrowLeft`，
- * 与本文件的 `KEYBOARD_CODES` 同空间。直接把 helper 的 key 喂给 `fn/protocol.ts` 的白名单会被当成未知键拒掉
- *
- * 两套键名的统一（让 `FN_COMBO_KEYS` 由 `KEYBOARD_CODES` 筛出）留到输入层改造期
- */
-export const FN_COMBO_KEYS = [
-  'A',
-  'B',
-  'C',
-  'D',
-  'E',
-  'F',
-  'G',
-  'H',
-  'I',
-  'J',
-  'K',
-  'L',
-  'M',
-  'N',
-  'O',
-  'P',
-  'Q',
-  'R',
-  'S',
-  'T',
-  'U',
-  'V',
-  'W',
-  'X',
-  'Y',
-  'Z',
-  '0',
-  '1',
-  '2',
-  '3',
-  '4',
-  '5',
-  '6',
-  '7',
-  '8',
-  '9',
-  'Enter',
-  'Escape',
-  'Backspace',
-  'Tab',
-  'Space',
-  'Minus',
-  'Equal',
-  'LeftBracket',
-  'RightBracket',
-  'Backslash',
-  'Semicolon',
-  'Quote',
-  'Grave',
-  'Comma',
-  'Period',
-  'Slash',
-  'Home',
-  'End',
-  'PageUp',
-  'PageDown',
-  'Delete',
-  'Left',
-  'Right',
-  'Up',
-  'Down',
-  'F1',
-  'F2',
-  'F3',
-  'F4',
-  'F5',
-  'F6',
-  'F7',
-  'F8',
-  'F9',
-  'F10',
-  'F11',
-  'F12',
-] as const
-
-/** v1 键名空间，取值见 {@link FN_COMBO_KEYS} */
-export type FnComboKey = typeof FN_COMBO_KEYS[number]
 
 /** 快捷键修饰键，`Primary` 表示 macOS Command、Windows/Linux Control */
 export type ShortcutModifier = FnModifier | 'Primary'
 
 /**
- * 普通键盘快捷键持久化使用的规范键名
+ * 全部键盘捕获后端共用的规范键名
  *
- * 这些值同时能由浏览器 `KeyboardEvent.code` 和 uIOhook 解析；浏览器的
- * `KeyA` / `Digit1` 等带前缀名称只在输入边界转换，不进入配置文件
+ * 取自 W3C `KeyboardEvent.code`，字母与数字去掉 `Key` / `Digit` 前缀。浏览器 `code`、
+ * uIOhook 键码和 macOS 虚拟键码都只在各自 adapter 边界转换到这里，配置文件、IPC、
+ * 录制与运行时全部使用同一套名字
  */
 export const KEYBOARD_CODES = [
   'Backspace',
@@ -141,6 +56,16 @@ export const KEYBOARD_CODES = [
   'X',
   'Y',
   'Z',
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
   'Numpad0',
   'Numpad1',
   'Numpad2',
@@ -215,7 +140,7 @@ export const KEYBOARD_CODES = [
   'ShiftRight',
 ] as const
 
-/** 普通键盘快捷键的规范键名类型 */
+/** 规范键名类型 */
 export type KeyboardCode = typeof KEYBOARD_CODES[number]
 
 /** 物理修饰键；顺序同时用于纯修饰键组合的稳定归一化 */
@@ -233,21 +158,15 @@ export const KEYBOARD_MODIFIER_CODES = [
 /** 带物理侧别的键盘修饰键 */
 export type KeyboardModifierCode = typeof KEYBOARD_MODIFIER_CODES[number]
 
-/** 输入边界的非规范键名到持久化键名的别名 */
-export const KEYBOARD_CODE_ALIASES: Readonly<Record<string, KeyboardCode>> = {
-  Grave: 'Backquote',
-  Left: 'ArrowLeft',
-  Right: 'ArrowRight',
-  Up: 'ArrowUp',
-  Down: 'ArrowDown',
-  LeftBracket: 'BracketLeft',
-  RightBracket: 'BracketRight',
-  Return: 'Enter',
-  Esc: 'Escape',
-  Del: 'Delete',
-  CtrlLeft: 'ControlLeft',
-  CtrlRight: 'ControlRight',
-} as const
+/** 锁定键只切换状态、不参与 chord；所有捕获后端在进入 tracker 前统一丢弃 */
+export const KEYBOARD_LOCK_CODES = [
+  'CapsLock',
+  'NumLock',
+  'ScrollLock',
+] as const satisfies readonly KeyboardCode[]
+
+/** 锁定键键名 */
+export type KeyboardLockCode = typeof KEYBOARD_LOCK_CODES[number]
 
 /** 作为主键使用时，对应的逻辑修饰键 */
 export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, FnModifier>>> = {
@@ -260,6 +179,21 @@ export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, Fn
   ShiftLeft: 'Shift',
   ShiftRight: 'Shift',
 }
+
+/** 可与 Fn 组成组合键的普通键：规范键名去掉修饰键与锁定键 */
+export const FN_COMBO_KEYS = KEYBOARD_CODES.filter((code): code is FnComboKey => (
+  !(KEYBOARD_MODIFIER_CODES as readonly string[]).includes(code)
+  && !(KEYBOARD_LOCK_CODES as readonly string[]).includes(code)
+))
+
+/** Fn 组合键的主键 */
+export type FnComboKey = Exclude<KeyboardCode, KeyboardModifierCode | KeyboardLockCode>
+
+/** Fn chord 支持的按键集合，`Fn` 表示 Fn 键自身 */
+export const FN_SHORTCUT_KEYS = ['Fn', ...FN_COMBO_KEYS] as const
+
+/** Fn chord 支持的按键 */
+export type FnShortcutKey = 'Fn' | FnComboKey
 
 /** 键盘 chord 的 modifier；录制结果使用物理侧别，声明式默认值仍可使用逻辑修饰键 */
 export type KeyboardShortcutModifier = ShortcutModifier | KeyboardModifierCode
@@ -286,12 +220,6 @@ export type FnShortcutChord = {
 
 /** 统一快捷键 chord */
 export type ShortcutChord = KeyboardShortcutChord | FnShortcutChord
-
-/** Fn chord 支持的按键集合 */
-export const FN_SHORTCUT_KEYS = ['Fn', ...FN_COMBO_KEYS] as const
-
-/** Fn chord 支持的按键集合 */
-export type FnShortcutKey = typeof FN_SHORTCUT_KEYS[number]
 
 /** 快捷键手势类型 */
 export type ShortcutGestureType = 'press' | 'hold' | 'doublePress'
@@ -321,14 +249,45 @@ export type ShortcutBinding = ShortcutGestureBinding & {
 /** action id → 绑定，null 表示禁用 */
 export type ShortcutBindings = Record<string, ShortcutBinding | null>
 
-/** 录制阶段的输入事件，由 native/uIOhook/browser backend 产生，renderer 按 action 能力判定最终手势 */
+/** 原始输入事件里可能出现的键：规范键名，外加只有 macOS native 后端会产出的 `Fn` */
+export type KeyboardInputKey = KeyboardCode | 'Fn'
+
+/** 原始输入相位 */
+export type KeyboardInputPhase = 'down' | 'up'
+
+/**
+ * 所有键盘捕获后端统一产出的原始物理输入
+ *
+ * 只描述物理事实，不含 chord、手势或 action 语义；每个 `down` 都是一次新的物理按下，
+ * 系统自动重复由各后端在边界过滤。`fn` 表示该按键属于 Fn 组合，uIOhook 与 DOM 后端恒为 false
+ */
+export type KeyboardInputEvent = {
+  phase: KeyboardInputPhase
+  key: KeyboardInputKey
+  /** 事件发生时按住的逻辑修饰键 */
+  modifiers: FnModifier[]
+  fn: boolean
+  /** 后端内单调毫秒，不同后端之间不可比较 */
+  timestamp: number
+}
+
+/** 后端丢失物理状态（helper 重启、系统禁用 tap）时发出，消费方应清空按键状态 */
+export type KeyboardInputResetEvent = {
+  phase: 'reset'
+  timestamp: number
+}
+
+/** 键盘捕获后端向消费方派发的全部消息 */
+export type KeyboardInput = KeyboardInputEvent | KeyboardInputResetEvent
+
+/** 由 tracker 把原始输入合成后的 chord 事件，录制状态机与手势状态机只消费这一种结构 */
 export type ShortcutRecordEvent = {
   phase: ShortcutRecordPhase
   chord: ShortcutChord
   timestamp: number
 }
 
-/** 录制阶段的输入事件相位；`press` 表示 backend 只能报告一次完整按压 */
+/** chord 事件相位；`press` 表示 backend 只能报告一次完整按压 */
 export type ShortcutRecordPhase = 'down' | 'up' | 'press'
 
 /** runtime 触发事件相位 */

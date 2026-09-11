@@ -42,11 +42,11 @@ export type ShortcutAction = {
 
 const FN_KEY_DISPLAY: Record<string, string> = {
   Space: 'Space',
-  Grave: '`',
+  Backquote: '`',
   Minus: '-',
   Equal: '=',
-  LeftBracket: '[',
-  RightBracket: ']',
+  BracketLeft: '[',
+  BracketRight: ']',
   Backslash: '\\',
   Semicolon: ';',
   Quote: '\'',
@@ -62,10 +62,10 @@ const FN_KEY_DISPLAY: Record<string, string> = {
   PageUp: 'PgUp',
   PageDown: 'PgDn',
   Delete: 'Del',
-  Left: '←',
-  Right: '→',
-  Up: '↑',
-  Down: '↓',
+  ArrowLeft: '←',
+  ArrowRight: '→',
+  ArrowUp: '↑',
+  ArrowDown: '↓',
 }
 
 const IS_APPLE_PLATFORM = detectApplePlatform()

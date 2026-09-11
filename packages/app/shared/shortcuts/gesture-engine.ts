@@ -3,9 +3,9 @@ import type {
   ShortcutRecordEvent,
   ShortcutRuntimeEvent,
 } from './types'
+import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
 import { isKeyboardModifierChordPrefixOf, shortcutChordsEqual } from './utils'
 
-const DEFAULT_DOUBLE_PRESS_INTERVAL_MS = 300
 const DEFAULT_HOLD_MIN_DURATION_MS = 300
 
 /** 创建统一快捷键手势状态机，消费按下、松开和完整按压录制事件，并派发运行时触发或释放事件 */
@@ -158,7 +158,7 @@ export function createShortcutGestureEngine<T extends ShortcutBinding>(
 
     clearPendingPressTimer(chordId)
     const intervalMs = Math.max(...doubleEntries.map(entry => (
-      entry.binding.intervalMs ?? DEFAULT_DOUBLE_PRESS_INTERVAL_MS
+      entry.binding.intervalMs ?? DOUBLE_PRESS_INTERVAL_MS
     )))
     pendingPressTimers.set(chordId, setTimeout(() => {
       pendingPressTimers.delete(chordId)
@@ -171,7 +171,7 @@ export function createShortcutGestureEngine<T extends ShortcutBinding>(
 
   const triggerDoublePress = (entry: ShortcutGestureRuntimeEntry<T>, timestamp: number): boolean => {
     const { id, binding } = entry
-    const intervalMs = binding.intervalMs ?? DEFAULT_DOUBLE_PRESS_INTERVAL_MS
+    const intervalMs = binding.intervalMs ?? DOUBLE_PRESS_INTERVAL_MS
     const last = lastPressTimes.get(id) ?? 0
     const existingTimer = doublePressTimers.get(id)
     const isDoublePress = existingTimer !== undefined && timestamp - last <= intervalMs

@@ -1,77 +1,35 @@
-import type {
-  ActiveKeyboardShortcutEntry,
-  KeyboardCode,
-  KeyboardShortcutChord,
-  KeyboardShortcutModifier,
-  ShortcutModifier,
-  ShortcutRecordEvent,
-} from './types'
-import {
-  normalizeKeyboardCode,
-  normalizeKeyboardShortcutChord,
-  pressKeyboardShortcutChord,
-  releaseActiveKeyboardChords,
-  specializeKeyboardShortcutModifiers,
-} from './utils'
+/** DOM KeyboardEvent → 统一原始输入：浏览器捕获后端的 adapter */
 
-const BROWSER_LOCK_KEYS = new Set([
-  'CapsLock',
-  'NumLock',
-  'ScrollLock',
-])
+import type { FnModifier, KeyboardCode, KeyboardInputEvent, KeyboardInputPhase } from './types'
+import { normalizeKeyboardCode } from './utils'
 
-/** 将一次 DOM 按键相位转换为标准事件；成员释放时可能结束多个冻结 chord */
-export function toBrowserShortcutRecordEvents(
+/**
+ * 把一次 DOM 按键相位转换为统一原始输入
+ *
+ * 系统自动重复的 keydown 在这里过滤；DOM 拿不到 Fn/Globe，`fn` 恒为 false
+ * 返回 null 表示该键不在规范键名空间内
+ */
+export function toBrowserKeyboardInputEvent(
   event: BrowserShortcutKeyEvent,
-  phase: BrowserShortcutRecordPhase,
-  activeEntries: Map<string, ActiveKeyboardShortcutEntry>,
-): ShortcutRecordEvent[] {
-  const keyId = getBrowserShortcutKeyId(event)
-  const timestamp = Date.now()
+  phase: KeyboardInputPhase,
+): KeyboardInputEvent | null {
+  if (phase === 'down' && event.repeat)
+    return null
 
-  if (phase === 'up') {
-    return releaseActiveKeyboardChords(
-      activeEntries,
-      keyId,
-      getBrowserLogicalShortcutModifiers(event),
-    ).map(chord => ({
-      phase,
-      chord,
-      timestamp,
-    }))
-  }
-
-  if (event.repeat || activeEntries.has(keyId) || BROWSER_LOCK_KEYS.has(event.key))
-    return []
-
-  const key = normalizeBrowserShortcutKey(event)
-  if (!key)
-    return []
-
-  const chord = pressKeyboardShortcutChord(
-    activeEntries,
-    keyId,
-    key,
-    getBrowserLogicalShortcutModifiers(event),
-  )
-  return [{
-    phase,
-    chord,
-    timestamp,
-  }]
-}
-
-export function toBrowserShortcutChord(
-  event: BrowserShortcutKeyEvent,
-  activeEntries: Iterable<ActiveKeyboardShortcutEntry> = [],
-): KeyboardShortcutChord | null {
   const key = normalizeBrowserShortcutKey(event)
   if (!key)
     return null
 
-  return normalizeKeyboardShortcutChord(key, getBrowserShortcutModifiers(event, activeEntries))
+  return {
+    phase,
+    key,
+    modifiers: getBrowserLogicalShortcutModifiers(event),
+    fn: false,
+    timestamp: Date.now(),
+  }
 }
 
+/** 把浏览器 `code` 归一为规范键名；`code` 缺失时退回 `key` */
 export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): KeyboardCode | null {
   const { code, key } = event
 
@@ -81,7 +39,7 @@ export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): Key
     return normalizeKeyboardCode(code.slice(5))
   if (code)
     return normalizeKeyboardCode(code)
-  if (key && !BROWSER_LOCK_KEYS.has(key)) {
+  if (key) {
     return normalizeKeyboardCode(key.length === 1
       ? key.toUpperCase()
       : key)
@@ -90,21 +48,11 @@ export function normalizeBrowserShortcutKey(event: BrowserShortcutKeyEvent): Key
   return null
 }
 
-export function getBrowserShortcutModifiers(
-  event: BrowserShortcutKeyEvent,
-  activeEntries: Iterable<ActiveKeyboardShortcutEntry> = [],
-): KeyboardShortcutModifier[] {
-  return specializeKeyboardShortcutModifiers(
-    getBrowserLogicalShortcutModifiers(event),
-    activeEntries,
-  )
-}
-
 /** 读取 DOM 事件的逻辑 modifier flags，不推断左右物理侧 */
 export function getBrowserLogicalShortcutModifiers(
   event: BrowserShortcutKeyEvent,
-): ShortcutModifier[] {
-  const modifiers: ShortcutModifier[] = []
+): FnModifier[] {
+  const modifiers: FnModifier[] = []
 
   if (event.metaKey)
     modifiers.push('Meta')
@@ -118,10 +66,6 @@ export function getBrowserLogicalShortcutModifiers(
   return modifiers
 }
 
-export function getBrowserShortcutKeyId(event: BrowserShortcutKeyEvent): string {
-  return event.code || event.key || 'Unidentified'
-}
-
 /** 浏览器 KeyboardEvent 的快捷键归一化所需字段子集 */
 export type BrowserShortcutKeyEvent = {
   code: string
@@ -132,5 +76,3 @@ export type BrowserShortcutKeyEvent = {
   altKey?: boolean
   shiftKey?: boolean
 }
-
-type BrowserShortcutRecordPhase = Extract<ShortcutRecordEvent['phase'], 'down' | 'up'>

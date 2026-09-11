@@ -38,7 +38,7 @@ export const SHORTCUT_ACTIONS = [
     scope: 'global',
     activation: 'trigger',
     recordingChord: { fn: 'combination', keyboard: 'any' },
-    binding: { gesture: 'press', chord: { source: 'fn', key: 'Grave' } },
+    binding: { gesture: 'press', chord: { source: 'fn', key: 'Backquote' } },
     keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'B', modifiers: ['Primary', 'Shift'] } },
     supportedGestures: SHORTCUT_GESTURES,
   },
