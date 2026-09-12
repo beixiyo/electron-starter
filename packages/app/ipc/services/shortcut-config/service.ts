@@ -1,3 +1,4 @@
+/** 快捷键配置与录制的主进程入口，负责发送方校验和会话清理 */
 import type { ShortcutBindings, ShortcutRuntimeEvent } from '@shared/shortcuts'
 import type { IpcMainInvokeEvent } from 'electron'
 import type { ShortcutConfigContract, ShortcutTriggerRequest } from './contract'
@@ -7,6 +8,7 @@ import {
   getElectronShortcutCapabilities,
   getElectronShortcutRuntimeCapabilities,
   isShortcutRuntimeSuspended,
+  refreshMacSystemShortcuts,
   resolveRuntimeShortcutBindings,
   resumeShortcutRuntime,
   startRecordShortcutDetection,
@@ -21,6 +23,8 @@ let emitRuntimeChanged: (() => void) | null = null
 let releaseActiveLocalHold: ((event: ShortcutRuntimeEvent) => void) | null = null
 const activeLocalHolds = new Map<string, ActiveLocalHold>()
 let recordOwnerId: number | null = null
+let recordNativeCapture = false
+let recordGeneration = 0
 
 /**
  * 通知所有渲染进程重新认领窗口内快捷键。
@@ -142,19 +146,30 @@ export function createShortcutConfigService(options: CreateShortcutConfigService
 
       async pauseForRecord(e) {
         const senderWindow = getTrustedMainWindow(e)
-        if (!senderWindow || recordOwnerId !== null)
-          return
+        if (!senderWindow)
+          throw new Error('Shortcut recording requires the main window')
+        if (recordOwnerId !== null && recordOwnerId !== senderWindow.sender.id)
+          throw new Error('Shortcut recording is already owned by another window')
 
-        clearActiveLocalHolds()
-        suspendShortcutRuntime()
-        recordOwnerId = senderWindow.sender.id
-        const win = senderWindow.win
-        startRecordShortcutDetection({
-          emit: (recordEvent) => {
-            service.emit('record', recordEvent, win ?? undefined)
-          },
-        })
-        bindRecordAutoStop(win ?? undefined)
+        const { win, sender } = senderWindow
+        if (recordOwnerId === null) {
+          clearActiveLocalHolds()
+          suspendShortcutRuntime()
+          recordOwnerId = sender.id
+          recordGeneration++
+          recordNativeCapture = startRecordShortcutDetection({
+            emit: recordEvent => service.emit('record', recordEvent, win),
+            onReset: () => service.emit('recordReset', undefined, win),
+          })
+          bindRecordAutoStop(win)
+        }
+
+        /** 先认领会话和清理监听，再异步读盘；窗口隐藏或取消不能被迟到结果复活 */
+        const generation = recordGeneration
+        const systemShortcuts = [...await refreshMacSystemShortcuts()]
+        if (generation !== recordGeneration || recordOwnerId !== sender.id)
+          throw new Error('Shortcut recording was canceled')
+        return { nativeCapture: recordNativeCapture, systemShortcuts }
       },
 
       async resumeAfterRecord(e) {
@@ -279,15 +294,14 @@ function stopRecordDetection(): void {
   stopRecordShortcutDetection()
   resumeShortcutRuntime()
   recordOwnerId = null
+  recordNativeCapture = false
+  recordGeneration++
 }
 
 /** renderer 隐藏或销毁时自动结束录制，避免全局 hook 和暂停状态泄漏 */
-function bindRecordAutoStop(win: BrowserWindow | undefined): void {
+function bindRecordAutoStop(win: BrowserWindow): void {
   detachRecordAutoStop?.()
   detachRecordAutoStop = null
-  if (!win)
-    return
-
   const onGone = () => stopRecordDetection()
   win.once('hide', onGone)
   win.webContents.once('destroyed', onGone)

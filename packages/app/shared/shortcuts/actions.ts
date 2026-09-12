@@ -1,5 +1,5 @@
 import type { ShortcutBinding, ShortcutGestureBinding, ShortcutGestureType, ShortcutScope } from './types'
-import { SHORTCUT_GESTURES } from './types'
+import { canShortcutChordDoublePress } from './validation'
 
 export const SHORTCUT_ACTIONS = [
   {
@@ -7,40 +7,33 @@ export const SHORTCUT_ACTIONS = [
     label: '录音',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'any' },
-    binding: { gesture: 'press', chord: { source: 'fn', key: 'Space' } },
-    keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'R', modifiers: ['Primary', 'Shift'] } },
-    supportedGestures: SHORTCUT_GESTURES,
+    binding: { chord: { source: 'fn', key: 'Space' } },
+    keyboardBinding: { chord: { source: 'keyboard', key: 'R', modifiers: ['Primary', 'Shift'] } },
   },
   {
-    id: 'askAssistant',
-    label: 'Ask',
+    id: 'assistant',
+    label: '助手',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'single', keyboard: 'any' },
+    /** 裸 Fn 保留双击；普通键盘默认值使用单击，避免双击白名单拒绝默认值 */
     binding: { gesture: 'doublePress', chord: { source: 'fn', key: 'Fn' } },
-    keyboardBinding: { gesture: 'doublePress', chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
-    supportedGestures: SHORTCUT_GESTURES,
+    keyboardBinding: { chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
   },
   {
     id: 'voiceDictation',
     label: '语音听写',
     scope: 'global',
     activation: 'toggle',
-    recordingChord: { fn: 'single', keyboard: 'any' },
-    binding: { gesture: 'press', chord: { source: 'fn', key: 'Fn' } },
-    keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'V', modifiers: ['Primary', 'Shift'] } },
-    supportedGestures: SHORTCUT_GESTURES,
+    binding: { chord: { source: 'fn', key: 'Fn' } },
+    keyboardBinding: { chord: { source: 'keyboard', key: 'V', modifiers: ['Primary', 'Shift'] } },
   },
   {
     id: 'bookmark',
     label: '标记',
     scope: 'global',
     activation: 'trigger',
-    recordingChord: { fn: 'combination', keyboard: 'any' },
-    binding: { gesture: 'press', chord: { source: 'fn', key: 'Backquote' } },
-    keyboardBinding: { gesture: 'press', chord: { source: 'keyboard', key: 'B', modifiers: ['Primary', 'Shift'] } },
-    supportedGestures: SHORTCUT_GESTURES,
+    binding: { chord: { source: 'fn', key: 'Backquote' } },
+    keyboardBinding: { chord: { source: 'keyboard', key: 'B', modifiers: ['Primary', 'Shift'] } },
   },
 ] as const satisfies readonly ShortcutActionDefinition[]
 
@@ -61,58 +54,46 @@ export const DEFAULT_BINDINGS = detectShortcutDefaultPlatform() === 'darwin'
   ? MAC_DEFAULT_BINDINGS
   : DEFAULT_KEYBOARD_BINDINGS
 
-/** 给录制结果补上 action 声明的生效范围 */
+/** 给录制结果补上 action 声明的生效范围；默认绑定可显式覆盖激活方式的手势 */
 export function toShortcutActionBinding(
   action: Pick<ShortcutActionDefinition, 'activation' | 'scope'>,
-  binding: ShortcutGestureBinding | null,
+  binding: ShortcutGestureBinding | ShortcutActionInputBinding | null,
 ): ShortcutBinding | null {
-  return binding
-    ? { ...binding, gesture: getShortcutActionGesture(action, binding.gesture), scope: action.scope }
-    : null
+  if (!binding)
+    return null
+
+  const gesture = binding.gesture ?? getShortcutActionGesture(action)
+
+  return { ...binding, gesture, scope: action.scope }
 }
 
-/** hold / toggle 的交互语义固定手势；普通 trigger 保留 action 声明的手势 */
+/** hold / toggle 的交互语义固定手势；普通 trigger 默认使用单击 */
 export function getShortcutActionGesture(
   action: Pick<ShortcutActionDefinition, 'activation'>,
-  triggerGesture: ShortcutGestureType,
 ): ShortcutGestureType {
-  if (action.activation === 'hold')
-    return 'hold'
-  if (action.activation === 'toggle')
-    return 'press'
-  return triggerGesture
+  return action.activation === 'hold'
+    ? 'hold'
+    : 'press'
 }
 
-/** 设置页允许录制的手势由 action 激活方式决定 */
-export function getShortcutActionSupportedGestures(
-  action: Pick<ShortcutActionDefinition, 'activation' | 'supportedGestures'>,
-): readonly ShortcutGestureType[] {
-  if (action.activation === 'hold')
-    return ['hold']
-  if (action.activation === 'toggle')
-    return ['press']
-  return action.supportedGestures
+/** 设置页允许录制的手势由 action 激活方式决定；普通动作额外允许裸 Fn 双击 */
+export function getShortcutActionRecordGestures(
+  action: Pick<ShortcutActionDefinition, 'activation'>,
+): ShortcutGestureType[] {
+  return action.activation === 'hold'
+    ? ['hold']
+    : ['press', 'doublePress']
 }
 
-/** 判断录制结果是否满足 action 声明的手势和按键形态 */
+/** 判断绑定的手势是否满足 action 声明；按键本身的合法性由录制校验负责 */
 export function isShortcutGestureBindingSupportedByAction(
-  action: Pick<ShortcutActionDefinition, 'activation' | 'recordingChord' | 'supportedGestures'>,
+  action: Pick<ShortcutActionDefinition, 'activation'>,
   binding: ShortcutGestureBinding,
 ): boolean {
-  if (!getShortcutActionSupportedGestures(action).includes(binding.gesture))
+  if (!getShortcutActionRecordGestures(action).includes(binding.gesture))
     return false
 
-  const isSingle = binding.chord.source === 'fn'
-    ? binding.chord.key === 'Fn'
-    : binding.chord.modifiers.length === 0
-
-  const chordShape = action.recordingChord[binding.chord.source]
-  if (chordShape === 'any')
-    return true
-
-  return chordShape === 'single'
-    ? isSingle
-    : !isSingle
+  return binding.gesture !== 'doublePress' || canShortcutChordDoublePress(binding.chord)
 }
 
 /** 内置快捷键 action id */
@@ -126,17 +107,16 @@ export type ShortcutActionDefinition = {
   readonly scope: ShortcutScope
   /** `trigger` 每次执行动作；`hold` 按住生效；`toggle` 在开始和结束间切换 */
   readonly activation: 'trigger' | 'hold' | 'toggle'
-  /** 设置页允许录制的按键形态 */
-  readonly recordingChord: Readonly<Record<'fn' | 'keyboard', ShortcutRecordingChordShape>>
-  /** macOS 默认绑定；scope 统一取自 action */
-  readonly binding: ShortcutGestureBinding | null
-  /** 非 macOS 平台和 Web 的普通键盘默认绑定 */
-  readonly keyboardBinding: ShortcutGestureBinding
-  readonly supportedGestures: readonly ShortcutGestureType[]
+  /** 默认绑定；未显式指定 gesture 时由 activation 补全 */
+  readonly binding: ShortcutActionInputBinding | null
+  /** 非 macOS 平台和 Web 默认使用普通键盘绑定 */
+  readonly keyboardBinding: ShortcutActionInputBinding
 }
 
-/** 设置页允许录制的按键形态；`any` 同时接受单键和组合键 */
-export type ShortcutRecordingChordShape = 'single' | 'combination' | 'any'
+/** 内置 action 的输入绑定；默认手势可省略，也可为特殊默认值显式指定 */
+export type ShortcutActionInputBinding = Omit<ShortcutGestureBinding, 'gesture'> & {
+  readonly gesture?: ShortcutGestureType
+}
 
 /** 内置 action 的绑定集合 */
 export type ShortcutBindingsByAction = Record<ShortcutActionId, ShortcutBinding | null>

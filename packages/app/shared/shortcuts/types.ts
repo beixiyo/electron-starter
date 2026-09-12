@@ -168,6 +168,16 @@ export const KEYBOARD_LOCK_CODES = [
 /** 锁定键键名 */
 export type KeyboardLockCode = typeof KEYBOARD_LOCK_CODES[number]
 
+/**
+ * 能互相组成一个 chord 的普通键分组
+ *
+ * 同组的键同时按住合成一个 chord（方向键之间），跨组或组外的普通键同时按住仍是各自独立的
+ * chord，录制时会被当成多主键组合拒绝。组内顺序用于成员的稳定归一化与展示
+ */
+export const KEYBOARD_CHORD_KEY_GROUPS = [
+  ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
+] as const satisfies readonly (readonly KeyboardCode[])[]
+
 /** 作为主键使用时，对应的逻辑修饰键 */
 export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, FnModifier>>> = {
   MetaLeft: 'Meta',
@@ -203,6 +213,12 @@ export type KeyboardShortcutChord = {
   source: 'keyboard'
   key: KeyboardCode
   modifiers: KeyboardShortcutModifier[]
+  /**
+   * 与主键同时按住的同组普通键，按 {@link KEYBOARD_CHORD_KEY_GROUPS} 组内顺序排列
+   *
+   * 只有与主键同组的键能出现，主键取组内最靠前的成员；省略等同于空
+   */
+  keys?: KeyboardCode[]
 }
 
 /** 单个已按下物理键及其 keydown 时冻结的 keyboard chord */
@@ -211,7 +227,12 @@ export type ActiveKeyboardShortcutEntry = {
   chord: KeyboardShortcutChord
 }
 
-/** Fn/Globe 快捷键 chord，`Fn` 表示 Fn 键自身 */
+/**
+ * Fn/Globe 快捷键 chord
+ *
+ * `key: 'Fn'` 表示 Fn 键自身是主键：不带 modifiers 是裸 Fn，带 modifiers 是 Fn 与修饰键的组合；
+ * 其余 key 是 Fn 组合键的普通主键。修饰键一律是逻辑家族，不分左右侧
+ */
 export type FnShortcutChord = {
   source: 'fn'
   key: FnShortcutKey

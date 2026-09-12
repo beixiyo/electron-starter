@@ -1,6 +1,6 @@
 /** 验证快捷键展示能让用户辨认左右物理修饰键 */
+import { formatBinding } from '@/utils/shortcutFormat'
 import { describe, expect, it } from 'vitest'
-import { formatBinding } from './types'
 
 describe('快捷键展示', () => {
   it('左右 Option 使用不同文案', () => {

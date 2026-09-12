@@ -1,6 +1,7 @@
 import type { ShortcutBinding, ShortcutBindings } from '@shared/shortcuts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { refreshMacSystemShortcuts, startRecordShortcutDetection, stopRecordShortcutDetection, resumeShortcutRuntime } from '@main/shortcuts'
 import { createShortcutConfigService } from './service'
 
 const harness = vi.hoisted(() => {
@@ -54,6 +55,7 @@ const harness = vi.hoisted(() => {
 vi.mock('electron', () => ({ BrowserWindow: harness.FakeBrowserWindow }))
 vi.mock('@ipc/core', () => ({ createIpcService: harness.createIpcService }))
 vi.mock('@main/shortcuts', () => ({
+  refreshMacSystemShortcuts: vi.fn(async () => []),
   filterPersistableShortcutBindings: (bindings: ShortcutBindings) => bindings,
   getElectronShortcutCapabilities: vi.fn(),
   getElectronShortcutRuntimeCapabilities: vi.fn(),
@@ -75,11 +77,47 @@ vi.mock('@main/window-manager', () => ({
 
 describe('快捷键配置触发边界', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     harness.state.bindings = {}
     harness.state.impl = null
     harness.state.emitter.emit.mockReset()
     harness.state.suspended = false
     harness.state.mainWindow = null
+  })
+
+  it('返回捕获归属与系统键，并把后端 reset 推送给录制窗口', async () => {
+    const { sender, window } = makeSender(1)
+    harness.state.mainWindow = window
+    createShortcutConfigService({ onReapply: vi.fn(), onTrigger: vi.fn() })
+    vi.mocked(startRecordShortcutDetection).mockReturnValue(true)
+    const systemShortcuts = [keyboardBinding('press').chord]
+    vi.mocked(refreshMacSystemShortcuts).mockResolvedValueOnce(systemShortcuts)
+
+    const session = await harness.state.impl.mainHandle.pauseForRecord({ sender, senderFrame: sender.mainFrame })
+    expect(session).toEqual({ nativeCapture: true, systemShortcuts })
+    vi.mocked(startRecordShortcutDetection).mock.lastCall?.[0].onReset?.()
+    expect(harness.state.emitter.emit).toHaveBeenCalledWith('recordReset', undefined, window)
+    await harness.state.impl.mainHandle.resumeAfterRecord({ sender, senderFrame: sender.mainFrame })
+  })
+
+  it('系统键读取期间窗口隐藏会撤销会话，迟到结果不会重新占用捕获', async () => {
+    const { sender, window } = makeSender(1)
+    harness.state.mainWindow = window
+    createShortcutConfigService({ onReapply: vi.fn(), onTrigger: vi.fn() })
+    let finish!: (value: []) => void
+    vi.mocked(refreshMacSystemShortcuts).mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    vi.mocked(startRecordShortcutDetection).mockReturnValue(true)
+    const pending = harness.state.impl.mainHandle.pauseForRecord({ sender, senderFrame: sender.mainFrame })
+    const settled = Promise.resolve(pending).then(() => 'started', () => 'canceled')
+    const hide = window.once.mock.calls.find(([name]) => name === 'hide')?.[1]
+    hide?.()
+    const startsAfterHide = vi.mocked(startRecordShortcutDetection).mock.calls.length
+    finish([])
+
+    expect(await settled).toBe('canceled')
+    expect(startRecordShortcutDetection).toHaveBeenCalledTimes(startsAfterHide)
+    expect(stopRecordShortcutDetection).toHaveBeenCalled()
+    expect(resumeShortcutRuntime).toHaveBeenCalled()
   })
 
   it('要求窗口聚焦，并使用主进程绑定重建事件', async () => {

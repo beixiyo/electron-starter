@@ -76,6 +76,6 @@ shortcuts/
 - **uIOhook 不可停止**：Worker 首次启动后驻留进程，消费者归零只减引用；native abort 无法由 Node Worker 隔离，不得把按会话 start/stop 加回来，也不得在主线程值导入 `uiohook-napi`（哪怕只为了 `UiohookKey` 常量，理由见 `input/uiohook/keycodes.ts` 的头注释）
 - **Fn 组合成员键要在窗口层吞掉**：helper 恒定透传 CGEvent，`fn+X` 触发动作的同时那颗键照样打进聚焦的输入框（`fn+\`` 出反引号、`fn+Space` 出空格）。`fn-combo-suppression.ts` 只 `subscribe` 不 `acquire`，搭 `input-runtime-backend` 的引用计数顺风车，在 `before-input-event` 里对通过 `canTrigger` 门禁的组合键 `preventDefault`。这只管本 App 的窗口；别的 App 里仍会收到字符，治本需要 helper 在 tap 层 `return nil`
 - **录制校验规则是声明式的**：禁用键、键数上限、双击白名单全部写在 `shared/shortcuts/validation-policy.ts`，按数组顺序命中即返回；`validation.ts` 只是不含具体按键的执行引擎。新增禁用组合往 `patterns` 里加模式，新增失败原因要同步补 i18n 文案
-- **系统快捷键只认写死在 plist 里的**：`system/` 读 `com.apple.symbolichotkeys`，但 macOS 对「从未被用户改过的系统默认快捷键」只落 `{ enabled: true }` 不落按键，那部分读不到。宁可漏报也不猜默认值——猜错会把一个完全可用的组合判成保留键，用户永远设不上。本模块目前只提供读取与解码，尚未接进录制校验
+- **系统快捷键只认写死在 plist 里的**：`system/` 读 `com.apple.symbolichotkeys`，但 macOS 对「从未被用户改过的系统默认快捷键」只落 `{ enabled: true }` 不落按键，那部分读不到。宁可漏报也不猜默认值——猜错会把一个完全可用的组合判成保留键，用户永远设不上。录制开始时读取本模块的实时结果并交给 shared 校验；本模块仍只负责读取与解码
 - **Swift 只归一物理输入**：helper 输出每个键的 down/up/reset 与 `fn` 归属，不判断 chord、press、doublePress、hold、scope 或 action
 - **hold 槽位与输入层无关**：`hold/` 只是按窗口类型记录「谁正在长按、何时开始、松开时回调谁」的通用状态槽位，由业务在收到 runtime 的 `trigger` / `release` 时自行写入；它不订阅输入流，也不该被用来替代手势状态机

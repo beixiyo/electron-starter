@@ -313,7 +313,11 @@ export function createShortcutGestureEngine<T extends ShortcutBinding>(
 }
 
 function getShortcutChordId(chord: ShortcutBinding['chord']): string {
-  return `${chord.source}:${chord.key}:${[...(chord.modifiers ?? [])].sort().join('+')}`
+  const keys = chord.source === 'keyboard'
+    ? chord.keys ?? []
+    : []
+
+  return `${chord.source}:${[chord.key, ...keys].join('+')}:${[...(chord.modifiers ?? [])].sort().join('+')}`
 }
 
 function findMatchingEntries<T extends ShortcutBinding>(

@@ -44,17 +44,20 @@ export function canShortcutChordDoublePress(chord: ShortcutChord): boolean {
 /**
  * 统计 chord 的按键数量
  *
- * 纯修饰键 chord 的主键本身就是修饰键之一，与普通组合同样按「主键 + 修饰键」计数；
- * Fn 组合额外加上 fn 自己，裸 fn 只算一个键
+ * 纯修饰键 chord 的主键本身就是修饰键之一，与普通组合同样按「主键 + 修饰键」计数，
+ * 同组普通键各算一个；Fn 组合额外加上 fn 自己，裸 fn 只算一个键，Fn 与修饰键的组合按
+ * Fn 加修饰键数计
  */
 export function countShortcutChordKeys(chord: ShortcutChord): number {
   if (chord.source === 'fn') {
+    const modifierCount = chord.modifiers?.length ?? 0
+
     return chord.key === 'Fn'
-      ? 1
-      : 2 + (chord.modifiers?.length ?? 0)
+      ? 1 + modifierCount
+      : 2 + modifierCount
   }
 
-  return 1 + chord.modifiers.length
+  return 1 + chord.modifiers.length + (chord.keys?.length ?? 0)
 }
 
 /** chord 是否命中模式；模式里省略的字段不参与比较 */
@@ -69,6 +72,9 @@ export function matchesShortcutChordPattern(chord: ShortcutChord, pattern: Short
     if (!keys.includes(chord.key))
       return false
   }
+
+  if (pattern.keys === 'none' && chord.source === 'keyboard' && chord.keys?.length)
+    return false
 
   const modifiers = chord.modifiers ?? []
   const constraint = pattern.modifiers ?? 'any'

@@ -19,6 +19,7 @@ export const SHORTCUT_KEY_GROUPS = {
   numpadDigits: KEYBOARD_CODES.filter(code => /^Numpad[0-9]$/.test(code)),
   /** F1–F19；F20–F24 不在其中，常规键盘上没有它们 */
   functionKeys: KEYBOARD_CODES.filter(code => /^F([1-9]|1[0-9])$/.test(code)),
+  arrowKeys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
 } as const satisfies Record<string, readonly KeyboardCode[]>
 
 /**
@@ -60,8 +61,18 @@ export const SHORTCUT_RECORD_RULES = [
     patterns: [
       {
         source: 'keyboard',
-        key: ['Escape', 'Space', 'Tab', 'Backspace', 'Enter', 'CapsLock', ...SHORTCUT_KEY_GROUPS.functionKeys],
+        key: [
+          'Escape',
+          'Space',
+          'Tab',
+          'Backspace',
+          'Enter',
+          'CapsLock',
+          ...SHORTCUT_KEY_GROUPS.arrowKeys,
+          ...SHORTCUT_KEY_GROUPS.functionKeys,
+        ],
         modifiers: 'none',
+        keys: 'none',
       },
     ],
     systemShortcuts: true,
@@ -85,7 +96,7 @@ export const SHORTCUT_RECORD_RULES = [
  * 默认只给裸 fn 开双击（`fn + fn`），⌘ ⌃ ⌥ ⇧ 这类修饰键连击容易和系统行为撞车
  */
 export const SHORTCUT_DOUBLE_PRESS_CHORDS = [
-  { source: 'fn', key: 'Fn' },
+  { source: 'fn', key: 'Fn', modifiers: 'none' },
 ] as const satisfies readonly ShortcutChordPattern[]
 
 /** 校验失败原因，与设置页提示文案一一对应 */
@@ -107,6 +118,11 @@ export type ShortcutChordPattern = {
    * @default 'any'
    */
   modifiers?: 'none' | 'any' | readonly ShortcutModifier[]
+  /**
+   * 同组普通键约束：`none` 只能是单个主键，`any` 不限
+   * @default 'any'
+   */
+  keys?: 'none' | 'any'
 }
 
 /** 模式里能出现的主键：规范键名，外加只有 Fn chord 才有的 `Fn` */

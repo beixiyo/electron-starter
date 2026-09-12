@@ -366,7 +366,7 @@ function showShortcutTestWindow(
 /** hotkey 绑定的触发处理器，按 action id 索引 */
 const SHORTCUT_ACTION_HANDLERS: ShortcutRuntimeHandlers = {
   recording: handleShortcutAction,
-  askAssistant: handleShortcutAction,
+  assistant: handleShortcutAction,
   voiceDictation: handleShortcutAction,
   bookmark: handleShortcutAction,
 }
@@ -376,8 +376,8 @@ function handleShortcutAction(event: ShortcutRuntimeEvent): void {
     case 'recording':
       showShortcutActionTestWindow('Recording', event)
       return
-    case 'askAssistant':
-      showShortcutActionTestWindow('Ask', event)
+    case 'assistant':
+      showShortcutActionTestWindow('Assistant', event)
       return
     case 'voiceDictation':
       handleVoiceDictationShortcut(event)

@@ -120,7 +120,7 @@ describe('macOS 后端时间基归一', () => {
     const detected: Array<{ gesture: string } | null> = []
     const engine = createShortcutRecordEngine({
       onPhaseChange: () => {},
-      onDetectedChange: binding => detected.push(binding && { gesture: binding.gesture }),
+      onDetectedChange: result => detected.push(result && { gesture: result.binding.gesture }),
     })
     engine.start(['press', 'hold'])
 

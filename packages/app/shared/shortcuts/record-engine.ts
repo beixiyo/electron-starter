@@ -1,14 +1,14 @@
 import type {
+  KeyboardCode,
   ShortcutChord,
   ShortcutGestureBinding,
   ShortcutGestureType,
   ShortcutRecordEvent,
 } from './types'
 import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
-import { isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
+import { isKeyboardModifierCode, isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
 
 const DEFAULT_HOLD_MIN_DURATION_MS = 400
-const DEFAULT_UNSUPPORTED_RESET_MS = 1500
 
 /** 创建快捷键录制状态机，消费标准化输入事件并输出最终 binding */
 export function createShortcutRecordEngine(
@@ -17,9 +17,10 @@ export function createShortcutRecordEngine(
   const {
     onDetectedChange,
     onPhaseChange,
+    onActiveChange,
+    canDoublePress = () => true,
     doublePressIntervalMs = DOUBLE_PRESS_INTERVAL_MS,
     holdMinDurationMs = DEFAULT_HOLD_MIN_DURATION_MS,
-    unsupportedResetMs = DEFAULT_UNSUPPORTED_RESET_MS,
   } = options
 
   let phase: ShortcutRecordDetectionPhase = 'idle'
@@ -30,6 +31,10 @@ export function createShortcutRecordEngine(
   let pendingChord: ShortcutChord | null = null
   let holdDetected = false
   let completesDoublePress = false
+  /** 主键按住期间又按下的其他普通键，chord 结构无法容纳时单独保留用于回显与校验 */
+  let extraKeys: KeyboardCode[] = []
+  /** 上一次对外通报的中间态，用于去重 */
+  let lastActive: ShortcutRecordActive | null = null
 
   const start = (nextSupportedGestures: readonly ShortcutGestureType[]): void => {
     clearRecordState()
@@ -69,19 +74,18 @@ export function createShortcutRecordEngine(
   const handleShortcutDown = (chord: ShortcutChord, timestamp: number): void => {
     if (!canAcceptInput())
       return
-    if (activeChord) {
-      if (!isShortcutChordPrefixOf(activeChord, chord))
-        return
 
-      clearTimer()
-      clearActiveChord()
+    /** 前缀扩展直接换成新 chord，中间不经过空态，实时回显不会闪回占位文案 */
+    if (activeChord && !isShortcutChordPrefixOf(activeChord, chord)) {
+      collectExtraKey(chord)
+      return
     }
 
     const isSecondPress = canFinishDoublePress(chord)
 
     clearTimer()
-    pendingChord = null
-    activeChord = chord
+    setPendingChord(null)
+    setActiveChord(chord)
     activeStartedAt = timestamp
     holdDetected = false
     completesDoublePress = isSecondPress
@@ -113,6 +117,12 @@ export function createShortcutRecordEngine(
     const wasCompletingDoublePress = completesDoublePress
     clearTimer()
     clearActiveChord()
+
+    /** 多主键组合不分手势：它只会被校验拒掉，吐出去是为了回显完整组合 */
+    if (extraKeys.length) {
+      detect({ gesture: 'press', chord })
+      return
+    }
 
     if (wasHoldDetected)
       return
@@ -158,15 +168,15 @@ export function createShortcutRecordEngine(
 
   const finishShortPress = (chord: ShortcutChord): void => {
     const canPress = hasGesture('press')
-    const canDoublePress = hasGesture('doublePress')
 
-    if (canDoublePress) {
+    /** 只有允许双击的 chord 才等待第二次按下，其余键立即判定单击 */
+    if (allowsDoublePress(chord)) {
       clearTimer()
-      pendingChord = chord
+      setPendingChord(chord)
       setPhase('wait_double')
       timer = setTimeout(() => {
         timer = null
-        pendingChord = null
+        setPendingChord(null)
 
         if (canPress) {
           detect({ gesture: 'press', chord })
@@ -181,27 +191,34 @@ export function createShortcutRecordEngine(
     detect({ gesture: 'press', chord })
   }
 
-  const detect = (binding: ShortcutGestureBinding): void => {
-    clearRecordState()
-    onDetectedChange(binding)
+  /** 主键按住期间按下的其他普通键攒进 extraKeys，长按计时同时作废 */
+  const collectExtraKey = (chord: ShortcutChord): void => {
+    if (chord.key === 'Fn' || isKeyboardModifierCode(chord.key))
+      return
 
-    if (supportedGestures.includes(binding.gesture)) {
-      setPhase('detected')
+    clearTimer()
+    if (extraKeys.includes(chord.key))
+      return
+
+    extraKeys.push(chord.key)
+    notifyActive()
+  }
+
+  const detect = (binding: ShortcutGestureBinding): void => {
+    const detectedExtraKeys = extraKeys
+    clearRecordState()
+
+    if (!detectedExtraKeys.length && !supportedGestures.includes(binding.gesture)) {
+      setPhase('waiting')
       return
     }
 
-    setPhase('unsupported')
-    timer = setTimeout(() => {
-      timer = null
-      if (phase === 'unsupported') {
-        onDetectedChange(null)
-        setPhase('waiting')
-      }
-    }, unsupportedResetMs)
+    onDetectedChange({ binding, extraKeys: detectedExtraKeys })
+    setPhase('detected')
   }
 
   const canFinishDoublePress = (chord: ShortcutChord): boolean => {
-    return hasGesture('doublePress')
+    return allowsDoublePress(chord)
       && !!pendingChord
       && shortcutChordsEqual(pendingChord, chord)
   }
@@ -216,17 +233,59 @@ export function createShortcutRecordEngine(
     return supportedGestures.includes(gesture)
   }
 
+  const allowsDoublePress = (chord: ShortcutChord): boolean => {
+    return hasGesture('doublePress') && canDoublePress(chord)
+  }
+
   const clearRecordState = (): void => {
     clearTimer()
     clearActiveChord()
     pendingChord = null
+    extraKeys = []
+    notifyActive()
   }
 
   const clearActiveChord = (): void => {
-    activeChord = null
+    setActiveChord(null)
     activeStartedAt = 0
     holdDetected = false
     completesDoublePress = false
+  }
+
+  const setActiveChord = (chord: ShortcutChord | null): void => {
+    if (activeChord === chord)
+      return
+
+    activeChord = chord
+    notifyActive()
+  }
+
+  const setPendingChord = (chord: ShortcutChord | null): void => {
+    if (pendingChord === chord)
+      return
+
+    pendingChord = chord
+    notifyActive()
+  }
+
+  /** 判定完成前的按键要对外可见，双击等待阶段也保持当前 chord 回显 */
+  const notifyActive = (): void => {
+    const chord = activeChord ?? pendingChord
+    const next: ShortcutRecordActive | null = chord
+      ? { chord, extraKeys: [...extraKeys] }
+      : null
+
+    if (!next && !lastActive)
+      return
+    if (
+      next && lastActive
+      && next.chord === lastActive.chord
+      && next.extraKeys.length === lastActive.extraKeys.length
+    )
+      return
+
+    lastActive = next
+    onActiveChange?.(next)
   }
 
   const clearTimer = (): void => {
@@ -258,19 +317,38 @@ export function createShortcutRecordEngine(
 }
 
 /** 快捷键录制 UI 阶段 */
-export type ShortcutRecordDetectionPhase = 'idle' | 'waiting' | 'deciding' | 'wait_double' | 'detected' | 'unsupported'
+export type ShortcutRecordDetectionPhase = 'idle' | 'waiting' | 'deciding' | 'wait_double' | 'detected'
+
+/** 判定完成前的中间态：正按住的 chord，或松开后仍在等第二次按下的 chord */
+export type ShortcutRecordActive = {
+  chord: ShortcutChord
+  /** 主键按住期间又按下的其他普通键 */
+  extraKeys: readonly KeyboardCode[]
+}
+
+/** 一轮录制的结果：用户按了什么，合法与否由校验决定 */
+export type ShortcutRecordDetection = {
+  binding: ShortcutGestureBinding
+  /** 主键按住期间又按下的其他普通键，按按下顺序排列 */
+  extraKeys: readonly KeyboardCode[]
+}
 
 export type CreateShortcutRecordEngineOptions = {
   /** 状态机阶段变化回调 */
   onPhaseChange: (phase: ShortcutRecordDetectionPhase) => void
   /** 录制结果变化回调；null 表示清空当前结果 */
-  onDetectedChange: (binding: ShortcutGestureBinding | null) => void
+  onDetectedChange: (detection: ShortcutRecordDetection | null) => void
+  /** 判定完成前的中间态变化回调；null 表示当前没有可回显的按键 */
+  onActiveChange?: (active: ShortcutRecordActive | null) => void
+  /**
+   * 该 chord 是否允许录成双击；返回 false 时按下即判定为单击，不再等待第二次
+   * @default 全部允许
+   */
+  canDoublePress?: (chord: ShortcutChord) => boolean
   /** @default {@link DOUBLE_PRESS_INTERVAL_MS} */
   doublePressIntervalMs?: number
   /** @default 400 */
   holdMinDurationMs?: number
-  /** @default 1500 */
-  unsupportedResetMs?: number
 }
 
 export type ShortcutRecordEngine = {

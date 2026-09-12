@@ -61,13 +61,7 @@ export function stopRecordShortcutDetection(): void {
 
 export type StartRecordShortcutDetectionOptions = {
   emit: (event: ShortcutRecordEvent) => void
-  /**
-   * 捕获后端丢失物理状态时通知，调用方据此清空本轮录制
-   *
-   * 目前没有调用方传入：`shortcut-config` 还没有对应的 reset 通道，主进程只能清自己的
-   * tracker。后果是录制中 helper 重启时，渲染端的 Fn 按住状态会卡住（Fn 没有 DOM 兜底，
-   * 那条 up 永远不会来），压掉后续按键并可能录出一次假的 Fn 手势。补通道时把它接上
-   */
+  /** 捕获后端丢失物理状态时通知，调用方据此清空本轮录制 */
   onReset?: () => void
 }
 

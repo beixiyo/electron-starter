@@ -1,3 +1,5 @@
+/** 快捷键配置持久化、变更订阅与录制事件来源的跨平台适配 */
+import type { ShortcutRecordSession } from '@ipc/services/shortcut-config/contract'
 import type {
   ShortcutBindings,
   ShortcutRecordEvent,
@@ -18,16 +20,13 @@ import { isElectron } from '@/utils/env'
 import { bindBrowserShortcutRecordEvents } from './browserRecordEvent'
 
 const WEB_SHORTCUT_BINDINGS_KEY = 'shortcut-bindings'
-const RECORD_EVENT_DEDUP_MS = 120
-const FN_KEYBOARD_DISAMBIGUATION_MS = 120
 const bindingListeners = new Set<() => void>()
 
 let shortcutRuntimePaused = false
 
-/**
- * 读取快捷键配置。
- * Electron 桌面使用主进程持久化；Web 预览使用 localStorage 保持同一套 renderer 代码可运行
- */
+export type { ShortcutRecordSession }
+
+/** 读取快捷键配置：桌面使用主进程持久化，Web 预览使用 localStorage */
 export async function getShortcutBindings(): Promise<ShortcutBindings> {
   const ipc = getShortcutConfigIpc()
   if (ipc)
@@ -106,11 +105,15 @@ export function isShortcutRuntimePaused(): boolean {
   return shortcutRuntimePaused
 }
 
-/** 进入录制态前暂停桌面全局快捷键；Web 环境暂停 local runtime */
-export async function pauseShortcutRecord(): Promise<void> {
+/**
+ * 进入录制态前暂停桌面全局快捷键；Web 环境暂停 local runtime
+ *
+ * @returns 本轮录制的捕获归属；Web 或主进程接管失败时由 DOM 产出录制事件
+ */
+export async function pauseShortcutRecord(): Promise<ShortcutRecordSession> {
   shortcutRuntimePaused = true
   try {
-    await getShortcutConfigIpc()?.pauseForRecord()
+    return (await getShortcutConfigIpc()?.pauseForRecord()) ?? { nativeCapture: false, systemShortcuts: [] }
   }
   catch (error) {
     shortcutRuntimePaused = false
@@ -129,89 +132,41 @@ export async function resumeShortcutRecord(): Promise<void> {
 }
 
 /**
- * 绑定录制事件源。
- * Electron 桌面走 IPC + native/uIOhook，Web 走 DOM KeyboardEvent fallback
+ * 绑定录制事件源
+ *
+ * 主进程接管时 Fn 组合与普通键盘来自同一条 IPC 事件流，DOM 层只吞按键；
+ * 否则由 DOM 产出录制事件。裸 Esc 不是取消键，与其他键一样交给设置页校验
  */
 export function bindShortcutRecordEvents(options: BindShortcutRecordEventsOptions): () => void {
-  const { emit } = options
-  const cleanupFns: Array<() => void> = []
-  let fnActive = false
-  let suppressKeyboardUntil = 0
-  let recentKeyboardEvent: ShortcutRecordEvent | null = null
-  const pendingKeyboardTimers = new Set<ReturnType<typeof setTimeout>>()
+  const { emit, onReset, nativeCapture } = options
+  const cleanups: Array<() => void> = []
 
-  /** native/uIOhook 与 DOM fallback 可能同时报告同一个物理按键，只交给录制状态机一次 */
-  const emitRecordEvent = (event: ShortcutRecordEvent): void => {
-    if (event.chord.source === 'keyboard') {
-      if (recentKeyboardEvent
-        && recentKeyboardEvent.phase === event.phase
-        && recentKeyboardEvent.chord.source === 'keyboard'
-        && recentKeyboardEvent.chord.key === event.chord.key
-        && JSON.stringify(recentKeyboardEvent.chord.modifiers) === JSON.stringify(event.chord.modifiers)
-        && Math.abs(event.timestamp - recentKeyboardEvent.timestamp) <= RECORD_EVENT_DEDUP_MS) {
-        return
-      }
-      recentKeyboardEvent = event
-    }
-
-    emit(event)
-  }
-
-  /**
-   * 等待主进程的 Fn chord 先到达，避免把 Fn combo 同时录成普通 keyboard
-   *
-   * `fnActive` 只靠主进程的 Fn down/up 翻转：捕获后端丢失物理状态（helper 重启、系统
-   * 禁用 tap）时那条 up 不会来，而 Fn 又没有 DOM 兜底，`fnActive` 会卡在 true 压掉
-   * 后续全部 keyboard 事件，要等后端恢复后再按一次 Fn 才解开，期间还可能录出一次假的
-   * Fn press/hold。治本是给 `shortcut-config` 补一条 reset 通道，由主进程的
-   * `startRecordShortcutDetection({ onReset })` 驱动
-   */
-  const emitKeyboardRecordEvent = (event: ShortcutRecordEvent): void => {
-    const timer = setTimeout(() => {
-      pendingKeyboardTimers.delete(timer)
-      if (fnActive || Date.now() < suppressKeyboardUntil)
-        return
-      emitRecordEvent(event)
-    }, FN_KEYBOARD_DISAMBIGUATION_MS)
-    pendingKeyboardTimers.add(timer)
-  }
-
-  if (isElectron()) {
-    const ipc = window.$ipc
-    cleanupFns.push(
-      ipc.shortcutConfig.on('record', (event) => {
-        /** Fn combo 已由主进程合成为 fn chord，压住同一物理动作在 DOM 侧产生的 keyboard 噪音 */
-        if (event.chord.source === 'fn') {
-          if (event.chord.key === 'Fn')
-            fnActive = event.phase === 'down'
-          suppressKeyboardUntil = Date.now() + FN_KEYBOARD_DISAMBIGUATION_MS
-          emitRecordEvent(event)
-          return
-        }
-
-        emitKeyboardRecordEvent(event)
-      }),
+  const ipc = getShortcutConfigIpc()
+  if (ipc && nativeCapture) {
+    cleanups.push(
+      ipc.on('record', emit),
+      ipc.on('recordReset', () => onReset()),
     )
+  }
 
-    /** uIOhook 不可用时普通 keyboard 仍可在设置页通过 DOM 录制；Fn 事件仍只依赖 native */
-    cleanupFns.push(bindBrowserShortcutRecordEvents((event) => {
-      emitKeyboardRecordEvent(event)
-    }))
-  }
-  else {
-    cleanupFns.push(bindBrowserShortcutRecordEvents(emitRecordEvent))
-  }
+  cleanups.push(bindBrowserShortcutRecordEvents(
+    nativeCapture
+      ? {}
+      : { emit },
+  ))
 
   return () => {
-    pendingKeyboardTimers.forEach(clearTimeout)
-    pendingKeyboardTimers.clear()
-    for (const cleanup of cleanupFns)
+    for (const cleanup of cleanups)
       cleanup()
   }
 }
 
 type BindShortcutRecordEventsOptions = {
+  /** 主进程是否已接管系统级捕获；见 {@link ShortcutRecordSession.nativeCapture} */
+  nativeCapture: boolean
   emit: (event: ShortcutRecordEvent) => void
+  /** 捕获后端丢失物理状态时清空本轮录制 */
+  onReset: () => void
 }
 
 function getShortcutConfigIpc(): Window['$ipc']['shortcutConfig'] | null {
@@ -235,10 +190,7 @@ function readWebShortcutBindings(): ShortcutBindings {
 }
 
 function writeWebShortcutBindings(bindings: ShortcutBindings): void {
-  try {
-    window.localStorage.setItem(WEB_SHORTCUT_BINDINGS_KEY, JSON.stringify(bindings))
-  }
-  catch {}
+  window.localStorage.setItem(WEB_SHORTCUT_BINDINGS_KEY, JSON.stringify(bindings))
 }
 
 function toWebShortcutBindings(bindings: ShortcutBindings): ShortcutBindings {

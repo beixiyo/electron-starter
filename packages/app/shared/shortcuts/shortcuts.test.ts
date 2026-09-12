@@ -6,7 +6,7 @@ import type {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_KEYBOARD_BINDINGS,
-  getShortcutActionSupportedGestures,
+  getShortcutActionRecordGestures,
   isShortcutGestureBindingSupportedByAction,
   MAC_DEFAULT_BINDINGS,
   SHORTCUT_ACTIONS,
@@ -71,6 +71,51 @@ describe('快捷键键名规范化', () => {
 
     expect(normalizeShortcutBinding(binding)).toBeNull()
     expect(() => normalizeShortcutBindingsOrThrow({ recording: binding })).toThrow('recording')
+  })
+
+  it('Fn 与修饰键的组合保留 modifier，且与裸 Fn 区分', () => {
+    const fnMeta = normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Fn', modifiers: ['Meta'] },
+    })!.chord
+    const bareFn = normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Fn' },
+    })!.chord
+
+    expect(fnMeta).toEqual({ source: 'fn', key: 'Fn', modifiers: ['Meta'] })
+    expect(bareFn).toEqual({ source: 'fn', key: 'Fn' })
+    expect(shortcutChordsEqual(fnMeta, bareFn)).toBe(false)
+    expect(shortcutBindingsConflict(
+      { gesture: 'press', chord: fnMeta },
+      { gesture: 'press', chord: bareFn },
+    )).toBe(false)
+  })
+
+  it('方向键组合按成员顺序归一，跨组成员在持久化边界拒绝', () => {
+    const upLeft = normalizeKeyboardShortcutChord('ArrowLeft', [], ['ArrowUp'])
+
+    expect(upLeft).toEqual({
+      source: 'keyboard',
+      key: 'ArrowUp',
+      modifiers: [],
+      keys: ['ArrowLeft'],
+    })
+    expect(shortcutChordsEqual(
+      upLeft,
+      normalizeKeyboardShortcutChord('ArrowUp', [], ['ArrowLeft']),
+    )).toBe(true)
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['A'] },
+    })).toBeNull()
+    expect(shortcutBindingsConflict(
+      { gesture: 'press', chord: upLeft },
+      { gesture: 'press', chord: normalizeKeyboardShortcutChord('ArrowUp', [], ['ArrowLeft']) },
+    )).toBe(true)
   })
 
   it('只接受带左右侧的物理修饰键主键', () => {
@@ -471,6 +516,46 @@ describe('浏览器快捷键运行时生命周期', () => {
 
     expect(emit).toHaveBeenCalledOnce()
   })
+
+  it('运行时按方向键组合 chord 触发，单独方向键不触发', () => {
+    const emit = vi.fn()
+    const engine = createShortcutGestureEngine({
+      entries: [{
+        id: 'recording',
+        binding: {
+          scope: 'local',
+          gesture: 'press',
+          chord: {
+            source: 'keyboard',
+            key: 'ArrowUp',
+            modifiers: [],
+            keys: ['ArrowLeft'],
+          },
+        },
+      }],
+      emit,
+    })
+    const tracker = createKeyboardInputTracker()
+
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down'))
+      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up'))
+      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'down'))
+      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down'))
+      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'up'))
+      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up'))
+      engine.handle(event)
+
+    expect(emit).toHaveBeenCalledOnce()
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'trigger',
+      gesture: 'press',
+    }))
+  })
 })
 
 describe('跨平台快捷键默认值', () => {
@@ -488,7 +573,7 @@ describe('跨平台快捷键默认值', () => {
     expect(action.activation).toBe('toggle')
     expect(MAC_DEFAULT_BINDINGS.voiceDictation?.gesture).toBe('press')
     expect(DEFAULT_KEYBOARD_BINDINGS.voiceDictation?.gesture).toBe('press')
-    expect(getShortcutActionSupportedGestures(action)).toEqual(['press'])
+    expect(getShortcutActionRecordGestures(action)).toEqual(['press', 'doublePress'])
     expect(isShortcutGestureBindingSupportedByAction(action, {
       gesture: 'press',
       chord: { source: 'keyboard', key: 'AltRight', modifiers: [] },
@@ -501,7 +586,7 @@ describe('跨平台快捷键默认值', () => {
 
   it('所有普通键盘动作同时接受单键和组合键', () => {
     for (const action of SHORTCUT_ACTIONS) {
-      const gesture = getShortcutActionSupportedGestures(action)[0]
+      const gesture = getShortcutActionRecordGestures(action)[0]
 
       expect(isShortcutGestureBindingSupportedByAction(action, {
         gesture,

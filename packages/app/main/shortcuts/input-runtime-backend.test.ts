@@ -230,6 +230,60 @@ describe('系统级输入 runtime backend', () => {
     expect(emitted).toEqual([{ id: 'recording', phase: 'trigger', gesture: 'press' }])
   })
 
+  it('fn + 修饰键只触发该组合，不论按下顺序都撤销裸候选', async () => {
+    vi.useFakeTimers()
+    apply({
+      voiceDictation: fn('press', 'Fn'),
+      bookmark: keyboard('press', 'MetaLeft'),
+      recording: {
+        scope: 'global',
+        gesture: 'press',
+        chord: { source: 'fn', key: 'Fn', modifiers: ['Meta'] },
+      },
+    })
+
+    send('down', 'Fn')
+    send('down', 'MetaLeft', ['Meta'], true)
+    send('up', 'MetaLeft', [], true)
+    send('up', 'Fn')
+    await vi.advanceTimersByTimeAsync(300)
+
+    send('down', 'MetaLeft', ['Meta'])
+    send('down', 'Fn')
+    send('up', 'Fn')
+    send('up', 'MetaLeft')
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(emitted).toEqual([
+      { id: 'recording', phase: 'trigger', gesture: 'press' },
+      { id: 'recording', phase: 'trigger', gesture: 'press' },
+    ])
+  })
+
+  it('方向键组合按一个 chord 触发，单独的方向键不触发它', () => {
+    apply({
+      recording: {
+        scope: 'global',
+        gesture: 'press',
+        chord: {
+          source: 'keyboard',
+          key: 'ArrowUp',
+          modifiers: [],
+          keys: ['ArrowLeft'],
+        },
+      },
+    })
+
+    send('down', 'ArrowUp')
+    send('up', 'ArrowUp')
+    send('down', 'ArrowLeft')
+    send('down', 'ArrowUp')
+    send('up', 'ArrowLeft')
+    send('up', 'ArrowUp')
+
+    expect(emitted).toEqual([{ id: 'recording', phase: 'trigger', gesture: 'press' }])
+  })
+
   it('捕获后端 reset 会释放 active hold', async () => {
     vi.useFakeTimers()
     apply({ voiceDictation: { ...fn('hold', 'Fn'), scope: 'local' } })

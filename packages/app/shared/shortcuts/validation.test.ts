@@ -2,7 +2,7 @@
 
 import type { ShortcutBindings, ShortcutChord, ShortcutGestureBinding } from './types'
 import { describe, expect, it } from 'vitest'
-import { validateShortcutRecording } from './validation'
+import { canShortcutChordDoublePress, validateShortcutRecording } from './validation'
 import type { ShortcutRecordRule } from './validation-policy'
 
 const OTHER_BINDINGS: ShortcutBindings = {
@@ -24,6 +24,14 @@ describe('快捷键校验', () => {
   it('Fn 组合把 fn 自己算进键数', () => {
     expect(validate(press({ source: 'fn', key: 'R', modifiers: ['Control', 'Alt'] })))
       .toBe('tooManyKeys')
+  })
+
+  it('fn + 修饰键按 fn 加修饰键计数，且不允许录成双击', () => {
+    expect(validate(press({ source: 'fn', key: 'Fn', modifiers: ['Meta', 'Shift'] }))).toBeNull()
+    expect(validate(press({ source: 'fn', key: 'Fn', modifiers: ['Control', 'Alt', 'Shift'] })))
+      .toBe('tooManyKeys')
+    expect(canShortcutChordDoublePress({ source: 'fn', key: 'Fn', modifiers: ['Meta'] })).toBe(false)
+    expect(canShortcutChordDoublePress({ source: 'fn', key: 'Fn' })).toBe(true)
   })
 
   it('键数超限先于其他原因命中', () => {
@@ -67,9 +75,20 @@ describe('快捷键校验', () => {
     expect(validate(press({ source: 'keyboard', key: 'A', modifiers: ['Shift'] }))).toBeNull()
   })
 
-  it('单独的标点与方向键通过', () => {
+  it('单独的标点通过', () => {
     expect(validate(press({ source: 'keyboard', key: 'Comma', modifiers: [] }))).toBeNull()
-    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [] }))).toBeNull()
+  })
+
+  it('单独的方向键按系统保留拒绝，方向键组合与带修饰键的方向键放行', () => {
+    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [] }))).toBe('systemReserved')
+    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['ArrowLeft'] }))).toBeNull()
+    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: ['Meta'] }))).toBeNull()
+    expect(validate(press({
+      source: 'keyboard',
+      key: 'ArrowUp',
+      modifiers: [],
+      keys: ['ArrowDown', 'ArrowLeft', 'ArrowRight'],
+    }))).toBe('tooManyKeys')
   })
 
   it('与另一项当前快捷键相同不通过', () => {
