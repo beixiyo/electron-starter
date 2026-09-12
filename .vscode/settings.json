@@ -1,6 +1,5 @@
 {
   "i18n-ally.localesPaths": [
-    "packages/web/src/locales",
-    "./packages/electron/renderer/locales"
+    "packages/app/renderer/locales"
   ]
 }

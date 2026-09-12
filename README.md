@@ -71,7 +71,9 @@ cd packages/app
 pnpm dev
 ```
 
-VSCode 开发直接按下 **F5**
+VSCode 开发直接按下 **F5**。macOS 的 `pnpm -F app dev` 会先检查原生 helper 是否存在且可执行，缺失时调用现有构建脚本。
+
+所有渲染窗口的 CSP 由 `packages/app/vite.config.csp.ts` 统一注入。部署时可在构建环境或 `packages/app/env` 的环境文件中设置 `VITE_CSP_CONNECT_SRC`，以空格或逗号分隔需要连接的来源，例如 `https://api.example.com wss://api.example.com`。其他资源来源通过 `cspPlugin` 的 `additionalSources` 按指令追加；来源要包含协议和所需端口。渲染代码可直接读取构建期常量 `__APP_VERSION__`。
 
 ---
 

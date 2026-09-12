@@ -43,6 +43,7 @@ vi.mock('@main/permission-required', () => ({
  * 少一个就会以「No X export is defined on the electron mock」整套 skip
  */
 vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn(), on: vi.fn() },
   app: { on: vi.fn(), getPath: vi.fn(() => '/tmp'), whenReady: vi.fn(() => Promise.resolve()) },
   systemPreferences: { getMediaAccessStatus: vi.fn(() => 'granted') },
   screen: { getPrimaryDisplay: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } })) },

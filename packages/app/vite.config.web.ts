@@ -5,8 +5,10 @@ import { codeInspectorPlugin } from 'code-inspector-plugin'
 import { resolve } from 'node:path'
 import AutoImport from 'unplugin-auto-import/vite'
 import type { UserConfigFnObject } from 'vite'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import svgr from 'vite-plugin-svgr'
+import pkg from './package.json'
+import { cspPlugin } from './vite.config.csp'
 
 /**
  * 本地开发服务端代理基础地址
@@ -16,8 +18,13 @@ import svgr from 'vite-plugin-svgr'
 const devUrl = '192.168.5.195:8080'
 
 export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
+  const envDir = resolve(__dirname, './env')
+  const env = loadEnv(mode, envDir, 'VITE_CSP_')
+  const connectSources = (env.VITE_CSP_CONNECT_SRC ?? '').split(/[,\s]+/).filter(Boolean)
+
   return {
-    envDir: '../env',
+    define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+    envDir,
     root: resolve(__dirname, './renderer'),
 
     server: {
@@ -48,7 +55,12 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       target: 'esnext',
       sourcemap: mode === 'development',
       outDir: resolve(__dirname, './out/renderer'),
-      rollupOptions: {
+      rolldownOptions: {
+        output: {
+          minify: mode === 'production'
+            ? { compress: { dropConsole: true, dropDebugger: true } }
+            : undefined,
+        },
         input: {
           index: resolve(__dirname, './renderer/index.html'),
           voiceIme: resolve(__dirname, './renderer/windows/voice-ime/index.html'),
@@ -71,11 +83,6 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
         'react-dom',
       ],
     },
-    esbuild: {
-      drop: process.env.NODE_ENV === 'production'
-        ? ['console', 'debugger']
-        : [],
-    },
     resolve: {
       alias: {
         '@': resolve(__dirname, './renderer'),
@@ -94,6 +101,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       },
     },
     plugins: [
+      cspPlugin({ additionalSources: { 'connect-src': connectSources } }),
       tailwindcss(),
       svgr(),
       codeInspectorPlugin({

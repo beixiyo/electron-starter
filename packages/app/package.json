@@ -17,7 +17,7 @@
 
     "----- dev -----": "-----",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
+    "dev": "node scripts/ensure-native.mjs && electron-vite dev",
     "dev:web": "vite --config vite.config.web.ts",
 
     "----- native -----": "-----",

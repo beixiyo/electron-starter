@@ -3,6 +3,7 @@
   "include": [
     "electron.vite.config.*",
     "vite.config.web.ts",
+    "vite.config.csp.ts",
     "./main",
     "./preload",
     "./shared",
