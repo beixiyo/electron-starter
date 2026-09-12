@@ -69,13 +69,16 @@ export function createHttpInstance(config: HttpInstanceConfig = {}) {
     },
 
     respErrInterceptor: respErrInterceptor || (async (error: RespErrInterceptorError): Promise<any> => {
-      const { rawResp, request } = error
+      const { rawResp, request, error: requestError } = error
 
       if (rawResp instanceof Response) {
         let data: any
         try {
-          const cloned = rawResp.clone()
-          data = await cloned.json()
+          /** 已消费或被 reader 锁定的流不能克隆，直接交回原始错误。 */
+          if (!rawResp.bodyUsed && !rawResp.body?.locked) {
+            const cloned = rawResp.clone()
+            data = await cloned.json()
+          }
         }
         catch (jsonError) {
           console.log('Failed to parse error response json:', jsonError)
@@ -109,10 +112,14 @@ export function createHttpInstance(config: HttpInstanceConfig = {}) {
           onUnauthorized?.(unauthorizedError)
           return Promise.reject(unauthorizedError)
         }
+        if (typeof data?.msg === 'string' && data.msg) {
+          const apiError = Object.assign(new Error(data.msg), { code: data.code })
+          return Promise.reject(apiError)
+        }
       }
 
-      console.warn(error)
-      return Promise.reject(error)
+      /** 保留 Response / 网络错误身份，不把含完整请求的拦截器载荷泄漏给调用方。 */
+      return Promise.reject(requestError)
     }),
   })
 

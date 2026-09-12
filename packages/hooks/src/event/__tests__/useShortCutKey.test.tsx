@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
 import type { KeyEnum } from 'utils/keyboard'
+import { describe, expect, it, vi } from 'vitest'
 import type { ShortCutKeyOpts } from '../useShortCutKey'
 import { useShortCutKey } from '../useShortCutKey'
 
@@ -176,14 +176,18 @@ describe('useShortCutKey', () => {
 
   it('只传 onKeyUp 时不监听 keydown', () => {
     const onUp = vi.fn()
+    /** 断言监听级行为而不是回调是否被调用：空的 keydown handler 也会让旧断言通过 */
+    const addEventListener = vi.spyOn(window, 'addEventListener')
+
     render(
       <ShortcutProbeKeyUpOnly
         onKeyUp={ onUp }
       />,
     )
 
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(onUp).not.toHaveBeenCalled()
+    const listenedTypes = addEventListener.mock.calls.map(([type]) => type)
+    expect(listenedTypes).toContain('keyup')
+    expect(listenedTypes).not.toContain('keydown')
 
     fireEvent.keyUp(window, { key: 'Escape' })
     expect(onUp).toHaveBeenCalledOnce()

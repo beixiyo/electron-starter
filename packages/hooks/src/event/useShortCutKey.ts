@@ -116,8 +116,16 @@ export function useShortCutKey(opts: ShortCutKeyOpts) {
 
 export type ShortCutTarget = HTMLElement | Window | Document
 
+/**
+ * 修饰键期望的兼容名称
+ *
+ * `ModifierExpectation` 是键盘公共层的规范类型；保留这个旧导出名，避免已有调用方
+ * 因键盘匹配逻辑抽到 utils 后必须同时改 import
+ */
+export type ShortCutKeyModifierOpts = ModifierExpectation
+
 export type ShortCutKeyOpts =
-  & ModifierExpectation
+  & ShortCutKeyModifierOpts
   & ShortCutKeyBaseOpts
   & ShortCutKeyTarget
   & ShortCutKeyHandlers

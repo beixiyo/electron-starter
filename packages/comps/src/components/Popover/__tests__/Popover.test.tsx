@@ -61,8 +61,8 @@ describe('Popover', () => {
 
     /** 默认 offset 8：无箭头时面板边缘距目标 8px */
     expect(await getFloatingLeft(false)).toBe('8px')
-    /** 默认箭头宽 22，尖端与根部磨圆后高约 7.07，压入面板 1px，尖端凸出约 6.07，面板需再远这一段 */
-    expect(Number.parseFloat(await getFloatingLeft(true))).toBeCloseTo(14.072, 2)
+    /** 默认箭头高 7，压入面板 1px 后尖端凸出 6，面板需再远这一段 */
+    expect(await getFloatingLeft(true)).toBe('14px')
   })
 
   it('关闭控件使用可聚焦的原生按钮并能关闭浮层', async () => {
@@ -83,6 +83,24 @@ describe('Popover', () => {
     expect(document.activeElement).toBe(closeButton)
     expect(closeButton).toHaveProperty('tabIndex', 0)
 
+    fireEvent.click(closeButton)
+
+    await waitFor(() => expect(closeButton.parentElement?.style.display).toBe('none'))
+  })
+
+  it('关闭控件配置会透传按钮属性并能关闭浮层', async () => {
+    render(
+      <Popover
+        trigger="click"
+        closeBtn={ { 'aria-label': 'Dismiss popover' } }
+        content={ <div>Configured popover content</div> }
+      >
+        <button type="button">Open configured popover</button>
+      </Popover>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open configured popover' }))
+    const closeButton = await screen.findByRole('button', { name: 'Dismiss popover' })
     fireEvent.click(closeButton)
 
     await waitFor(() => expect(closeButton.parentElement?.style.display).toBe('none'))
@@ -117,5 +135,5 @@ describe('Popover', () => {
 })
 
 function sleep(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms))
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }

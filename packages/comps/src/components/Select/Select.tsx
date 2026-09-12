@@ -9,7 +9,7 @@ import { cn } from 'utils'
 import { DATA_ATTR } from '../../constants/dataAttributes'
 import { Z } from '../../constants/z-index'
 import { useNestedLayerPriority } from '../../hooks/useKeyboardLayerHost'
-import { findLabel, findOption } from '../../utils/optionTree'
+import { findOption } from '../../utils/optionTree'
 import { CloseBtn } from '../CloseBtn'
 import { useFormField } from '../Form/useFormField'
 import { Input } from '../Input'
@@ -65,7 +65,6 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
 
   const isCascading = useMemo(() => options.some((opt) => opt.children && opt.children.length > 0), [options])
   const [searchQuery, setSearchQuery] = useState('')
-  const [currentLabel, setCurrentLabel] = useState<React.ReactNode>('')
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [isTriggerHovered, setIsTriggerHovered] = useState(false)
 
@@ -103,9 +102,19 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
     keys: ['Escape'],
     priority: layerPriority,
     allowRepeat: false,
+    /**
+     * 让路给 Select 自己内部的输入框与按钮：编辑态 input 的 Escape 回退文本、
+     * 搜索框的 Escape 自行关闭下拉，都由它们各自的 onKeyDown 处理
+     *
+     * 只对容器内的元素让路。`when` 返回 false 时整个键盘层栈会跳过这次事件
+     * （不会落到下一层），若把范围放宽到任意 INPUT / BUTTON，焦点移到宿主弹窗的
+     * 按钮上再按 Esc 就成了死键：这层不认，弹窗那层也收不到
+     */
     when: (event) => {
       const target = event.target as HTMLElement | null
-      return target?.tagName !== 'INPUT' && target?.tagName !== 'BUTTON'
+      if (!target || !containerRef.current?.contains(target)) return true
+
+      return target.tagName !== 'INPUT' && target.tagName !== 'BUTTON'
     },
     onKeyDown: () => setIsOpen(false),
   })
@@ -136,31 +145,17 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
     resetHighlight,
   } = useSelectMenuStack(options)
 
-  const [internalValue, setInternalValue] = useState<T>(() => {
-    if (actualValue !== undefined) {
-      return Array.isArray(actualValue)
-        ? actualValue
-        : [actualValue] as T
-    }
-    if (defaultValue !== undefined) {
-      return Array.isArray(defaultValue)
-        ? defaultValue
-        : [defaultValue] as T
-    }
-    return [] as unknown as T
-  })
-
-  useEffect(() => {
-    if (actualValue !== undefined) {
-      const values = Array.isArray(actualValue)
-        ? actualValue
-        : [actualValue] as T
-      setInternalValue(values)
-      if (isCascading && values.length > 0) {
-        setCurrentLabel(findLabel(options, (values as string[])[0]))
-      }
-    }
-  }, [actualValue, isCascading, options])
+  /**
+   * 选中值只从 actualValue 派生，不另存一份乐观状态：
+   * 非受控 / 表单态由 useFormField 持有并在 handleChangeVal 里更新；
+   * 受控态由父级决定，父级收到 onChange 后不改 value（例如二次确认被取消）时，显示值必须留在原值
+   */
+  const internalValue = useMemo<T>(() => {
+    if (actualValue === undefined) return [] as unknown as T
+    return (Array.isArray(actualValue)
+      ? actualValue
+      : [actualValue]) as T
+  }, [actualValue])
 
   const filteredOptions = useMemo(() => {
     if (isCascading) return options
@@ -199,8 +194,6 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
       if (isCascading) {
         const option = findOption(options, optionValue)
         if (option && !option.children) {
-          setInternalValue([optionValue] as T)
-          setCurrentLabel(option.label)
           handleChangeVal(optionValue as T, {} as any)
           setIsOpen(false)
         }
@@ -217,7 +210,6 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
 
       if (!multiple) setIsOpen(false)
 
-      setInternalValue(newValues as T)
       handleChangeVal(
         (multiple
           ? newValues
@@ -245,16 +237,13 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
     handleOptionClick,
   })
 
-  const selectedLabels = useMemo(() => {
-    if (isCascading) {
-      return currentLabel
-        ? [currentLabel]
-        : []
-    }
-    return (internalValue as any[])
-      .map((val) => findOption(options, val)?.label)
-      .filter(Boolean)
-  }, [internalValue, options, isCascading, currentLabel])
+  const selectedLabels = useMemo(
+    () =>
+      (internalValue as string[])
+        .map((val) => findOption(options, val)?.label)
+        .filter(Boolean),
+    [internalValue, options],
+  )
 
   const clearConfig = typeof clearable === 'object'
     ? clearable
@@ -265,8 +254,6 @@ function InnerSelect<T extends string | string[] = string>(props: SelectProps<T>
     event.stopPropagation()
     if (!canClear) return
 
-    setInternalValue([] as unknown as T)
-    setCurrentLabel('')
     handleChangeVal(
       (multiple
         ? []

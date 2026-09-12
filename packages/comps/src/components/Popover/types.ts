@@ -1,4 +1,5 @@
 import type { Variants } from 'motion/react'
+import type { CloseBtnProps } from '../CloseBtn'
 import type { FloatingArrowConfig } from '../FloatingArrow'
 
 /** Popover 显示位置 */
@@ -62,8 +63,13 @@ export interface PopoverProps {
    */
   trigger?: PopoverTrigger
   /**
-   * 是否显示关闭按钮
+   * 是否显示关闭按钮；传对象时可配置关闭按钮外观与角落
    * @default false
+   */
+  closeBtn?: boolean | PopoverCloseBtnConfig
+  /**
+   * 旧版关闭按钮开关，保留用于兼容已有调用方
+   * @deprecated 请使用 closeBtn
    */
   showCloseBtn?: boolean
   /**
@@ -93,7 +99,7 @@ export interface PopoverProps {
    */
   clickOutsideToClose?: boolean
   /**
-   * 浮层打开时触发关闭的键盘按键。
+   * 浮层打开时触发关闭的键盘按键
    * @default ['Escape']
    */
   closeKeys?: string[]
@@ -115,13 +121,13 @@ export interface PopoverProps {
   clickOutsideIgnoreSelector?: string
   /**
    * 是否跟随元素滚动：为 true 时 Popover 挂载到触发器的滚动父级内，使用 absolute 定位，
-   * 随容器内滚动一起移动。滚动父级需具备定位上下文（如 position: relative）以保证位置正确。
+   * 随容器内滚动一起移动。滚动父级需具备定位上下文（如 position: relative）以保证位置正确
    * @default false
    */
   followScroll?: boolean
   /**
-   * 打开后是否将焦点恢复到打开前的元素（避免 portal 挂载导致焦点被抢，如选中工具栏场景）。
-   * 为 true 时会在打开后下一帧对「打开前」的 document.activeElement 执行 focus()。
+   * 打开后是否将焦点恢复到打开前的元素（避免 portal 挂载导致焦点被抢，如选中工具栏场景）
+   * 为 true 时会在打开后下一帧对「打开前」的 document.activeElement 执行 focus()
    * @default false
    */
   restoreFocusOnOpen?: boolean
@@ -142,6 +148,11 @@ export interface PopoverProps {
    */
   arrow?: FloatingArrowConfig
 }
+
+/**
+ * 关闭按钮配置，等同 CloseBtn 的属性；mode 与 onClick 由 Popover 固定
+ */
+export type PopoverCloseBtnConfig = Partial<Omit<CloseBtnProps, 'mode' | 'onClick'>>
 
 /**
  * Popover 组件的 Ref

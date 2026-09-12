@@ -1,14 +1,15 @@
 'use client'
 
+import { isObj } from '@jl-org/tool'
 import { useTheme } from 'hooks'
-import { X } from 'lucide-react'
 import { forwardRef, memo, useRef } from 'react'
 import { cn } from 'utils'
 import { KeyboardLayerHostContext } from '../../hooks/useKeyboardLayerHost'
 import { AnimateShow } from '../Animate'
+import { CloseBtn } from '../CloseBtn'
 import { FloatingArrow, useFloatingLayer } from '../FloatingArrow'
 import { SafePortal } from '../SafePortal'
-import type { PopoverProps, PopoverRef } from './types'
+import type { PopoverCloseBtnConfig, PopoverProps, PopoverRef } from './types'
 import { usePopoverInteractions } from './usePopoverInteractions'
 import { useScrollPortal } from './useScrollPortal'
 import { getVariantByPlacement } from './variants'
@@ -41,6 +42,7 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
 
     clickOutsideToClose = true,
     closeKeys = DEFAULT_CLOSE_KEYS,
+    closeBtn,
     showCloseBtn = false,
     onOpen,
     onClose,
@@ -82,6 +84,27 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
     triggerRef,
     followScroll,
     isOpen,
+  )
+
+  const resolvedCloseBtn = closeBtn ?? showCloseBtn
+  const showCloseButton = !!resolvedCloseBtn
+  const {
+    className: closeBtnClassName,
+    size: closeBtnSize,
+    corner: closeBtnCorner = 'top-right',
+    ...closeBtnProps
+  } = isObj(resolvedCloseBtn)
+    ? resolvedCloseBtn
+    : {} as PopoverCloseBtnConfig
+
+  /** 默认偏移跟随 corner，换到左上角时不会残留右侧定位类 */
+  const closeBtnPosClass = cn(
+    closeBtnCorner.startsWith('top')
+      ? 'top-3'
+      : 'bottom-3',
+    closeBtnCorner.endsWith('right')
+      ? 'right-4'
+      : 'left-4',
   )
 
   const {
@@ -142,18 +165,19 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
           exitSetMode={ exitSetMode }
           { ...floatingProps }
         >
-          { showCloseBtn && (
-            <button
-              type="button"
-              className={ `absolute top-1 right-2 z-popover cursor-pointer text-red-400 font-bold
-          duration-300 hover:text-lg hover:text-red-600` }
-              aria-label="Close popover"
+          { showCloseButton && (
+            <CloseBtn
+              { ...closeBtnProps }
               onClick={ () => {
                 setIsOpen(false)
               } }
+              mode="absolute"
+              corner={ closeBtnCorner }
+              className={ cn(closeBtnPosClass, 'z-popover', closeBtnClassName) }
+              size={ closeBtnSize ?? 'md' }
+              aria-label={ closeBtnProps['aria-label'] ?? 'Close popover' }
             >
-              <X aria-hidden="true" />
-            </button>
+            </CloseBtn>
           ) }
 
           { arrowProps && <FloatingArrow { ...arrowProps } /> }
@@ -170,4 +194,4 @@ export const Popover = memo(forwardRef<PopoverRef, PopoverProps>((
 
 Popover.displayName = 'Popover'
 
-export type { PopoverAlign, PopoverPosition, PopoverProps, PopoverRef, PopoverTrigger } from './types'
+export type { PopoverAlign, PopoverCloseBtnConfig, PopoverPosition, PopoverProps, PopoverRef, PopoverTrigger } from './types'

@@ -10,8 +10,7 @@ const DEFAULT_OPTIONS: FloatingArrowOptions = {}
 export function resolveFloatingArrowOptions(
   arrow?: FloatingArrowConfig | null,
 ): FloatingArrowOptions | null {
-  if (!arrow)
-    return null
+  if (!arrow) return null
 
   return arrow === true
     ? DEFAULT_OPTIONS
@@ -21,15 +20,14 @@ export function resolveFloatingArrowOptions(
 /**
  * 箭头尖端超出浮层边缘的可见距离，单位 px
  *
- * 取磨圆后的实际高度，再扣除压入浮层的接缝重叠；关闭箭头时为 0
+ * 取轮廓的实际高度，再扣除压入浮层的接缝重叠；关闭箭头时为 0
  */
 export function getFloatingArrowProtrusion(
   arrow?: FloatingArrowConfig | null,
   seamOverlap = DEFAULT_FLOATING_ARROW_SEAM_OVERLAP,
 ): number {
   const options = resolveFloatingArrowOptions(arrow)
-  if (!options)
-    return 0
+  if (!options) return 0
 
   const { height } = resolveFloatingArrowGeometry(options)
   return Math.max(height - seamOverlap, 0)
@@ -55,18 +53,23 @@ export function resolveFloatingOffset(options: ResolveFloatingOffsetOptions): nu
 /** 提供箭头能力的浮层组件共享配置 */
 export interface FloatingArrowOptions {
   /**
-   * 箭头宽度，单位 px
-   * @default 22
+   * 箭头宽度，单位 px；不传时按 height 与默认宽高比推算
+   * @default 24
    */
   size?: number
   /**
-   * 尖端圆角半径，单位 px
-   * @default size * 0.193
+   * 箭头尖端凸出浮层边缘的高度，单位 px；不传时按 size 与默认宽高比推算
+   * @default 7
+   */
+  height?: number
+  /**
+   * 旧版尖端圆角半径；传入后使用旧版圆弧轮廓
+   * @deprecated 请使用 height 控制箭头高度
    */
   tipRadius?: number
   /**
-   * 根部与浮层边缘衔接处的圆角半径，单位 px
-   * @default size * 0.238
+   * 旧版根部圆角半径；传入后使用旧版圆弧轮廓
+   * @deprecated 请使用 height 控制箭头高度
    */
   baseRadius?: number
   /** 箭头中心到浮层交叉轴起始边的距离，单位 px；不传时自动对齐 reference */

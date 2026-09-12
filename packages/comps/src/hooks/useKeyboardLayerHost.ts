@@ -18,6 +18,12 @@ export const KeyboardLayerHostContext = createContext<number | null>(null)
  *
  * 宿主之间的最小间隔是 1（Modal 栈的 z-index 自增），取一半保证落在「本宿主之上、下一个宿主之下」：
  * 弹窗 A 里的下拉不会压过后开的弹窗 B
+ *
+ * 「间隔至少为 1」是这个取值的成立前提，两种情况下不成立，届时嵌套浮层会压过后开的宿主：
+ * - `Drawer` / `DrawerFramer` 的宿主值固定为 `Z.overlay + 1`，两个抽屉同开时间隔为 0
+ * - `modalStore` 的自增 z-index 有 `Z.popover - 1` 封顶，弹窗栈深到上百层后间隔归 0
+ *
+ * 两者都不是现实场景，真要支持需改成「宿主各自持有唯一递增值」而不是靠常量步进
  */
 export const NESTED_LAYER_STEP = 0.5
 

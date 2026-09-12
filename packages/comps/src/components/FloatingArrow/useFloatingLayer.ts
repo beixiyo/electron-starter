@@ -6,10 +6,10 @@
  * 而不必各自重复接线
  */
 import type { UseFloatingPositionOptions, UseFloatingPositionReturn } from 'hooks'
+import { useFloatingPosition } from 'hooks'
 import type { RefObject } from 'react'
 import type { FloatingArrowProps } from '.'
 import type { FloatingArrowConfig } from './config'
-import { useFloatingPosition } from 'hooks'
 import { resolveFloatingOffset } from './config'
 import { useFloatingArrowState } from './useFloatingArrowState'
 
@@ -49,16 +49,17 @@ export function useFloatingLayer(
 
   const arrowProps: FloatingArrowProps | null = arrowState.options
     ? {
-        placement: position.placement,
-        centerOffset: arrowState.centerOffset,
-        size: arrowState.options.size,
-        tipRadius: arrowState.options.tipRadius,
-        baseRadius: arrowState.options.baseRadius,
-        bordered,
-        fill: arrowState.fill,
-        className: arrowState.options.className,
-        style: arrowState.style,
-      }
+      placement: position.placement,
+      centerOffset: arrowState.centerOffset,
+      size: arrowState.options.size,
+      height: arrowState.options.height,
+      tipRadius: arrowState.options.tipRadius,
+      baseRadius: arrowState.options.baseRadius,
+      bordered,
+      fill: arrowState.fill,
+      className: arrowState.options.className,
+      style: arrowState.style,
+    }
     : null
 
   return {

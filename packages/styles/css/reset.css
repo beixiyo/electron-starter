@@ -57,3 +57,29 @@ svg:focus {
 svg:focus-visible {
   outline: none;
 }
+
+img {
+  user-select: none;
+}
+
+/* 文本选中样式 */
+::selection {
+  background-color: rgb(var(--brand) / 0.2);
+  color: rgb(var(--text));
+}
+
+::-moz-selection {
+  background-color: rgb(var(--brand) / 0.2);
+  color: rgb(var(--text));
+}
+
+/* 输入框光标颜色 */
+input,
+textarea {
+  caret-color: rgb(var(--brand));
+}
+
+/* 内容可编辑区光标颜色 */
+[contenteditable="true"] {
+  caret-color: rgb(var(--brand));
+}

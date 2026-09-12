@@ -5,6 +5,13 @@ import { createPackageExternal } from '../../scripts/vite/packageExternal'
 import pkg from './package.json' with { type: 'json' }
 
 export default defineConfig({
+  /**
+   * 保留 ESM 产物中的 import.meta.env.MODE，让最终消费方的 Vite 构建决定运行模式
+   * CJS 产物仍优先读取 Node 的 process.env.NODE_ENV
+   */
+  define: {
+    'import.meta.env.MODE': 'import.meta.env.MODE',
+  },
   plugins: [
     dts({ tsconfigPath: './tsconfig.json' })
   ],
