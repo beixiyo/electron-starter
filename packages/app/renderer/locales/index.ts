@@ -1,58 +1,81 @@
+/** 界面语言归一化与跨窗口同步；只加载模板已有的资源语言。 */
 import i18n from 'i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
-import { resources } from './lang'
+import { applyDocumentLang } from '@/utils/documentLang'
+import { resources, SupportedLanguages } from './lang'
 
-/**
- * i18next 配置
- * VSCode i18n Ally 插件配置
- * @see https://github.com/lokalise/i18n-ally
- *
- * i18n Ally 配置项可以在项目根目录的 .vscode/settings.json 中设置:
- * {
- *   "i18n-ally.localesPaths": "src/locales",
- *   "i18n-ally.keystyle": "nested",
- *   "i18n-ally.sortKeys": true,
- *   "i18n-ally.namespace": true,
- *   "i18n-ally.enabledParsers": ["json"],
- *   "i18n-ally.sourceLanguage": "en",
- *   "i18n-ally.displayLanguage": "zh-CN",
- *   "i18n-ally.autoDetection": true
- * }
- */
-i18n
-  /**
-   * 检测用户当前使用的语言
-   * @link https://github.com/i18next/i18next-browser-languageDetector
-   */
-  .use(LanguageDetector)
-  /**
-   * 注入 react-i18next 实例
-   */
-  .use(initReactI18next)
-  /**
-   * 初始化 i18next
-   * @link https://www.i18next.com/overview/configuration-options
-   */
-  .init({
-    debug: process.env.NODE_ENV === 'development',
-    lng: localStorage.getItem('i18n:language') || 'zh-CN',
-    fallbackLng: 'en-US',
-    interpolation: {
-      escapeValue: false, // React 已经安全地转义了变量
-    },
-    detection: {
-      /** 设置语言检测的选项 */
-      order: ['localStorage', 'navigator', 'querystring', 'cookie'],
-      lookupLocalStorage: 'i18n:language',
-      caches: ['localStorage'],
-    },
-    resources,
-  })
+/** 与现有语言偏好兼容的存储键。 */
+export const I18N_STORAGE_KEY = 'i18n:language'
 
-/** 导出 i18n 实例以便在应用中使用 */
-export default i18n
+/** 将浏览器语言码归一到实际资源；未知语言回落英文，空值保留模板中文默认值。 */
+export function normalizeLanguage(language?: string | null): SupportedLanguages {
+  const value = language?.trim().replace(/_/g, '-').toLowerCase()
+  if (!value || value === 'zh' || value.startsWith('zh-'))
+    return SupportedLanguages.ZH_CN
+  return SupportedLanguages.EN_US
+}
 
-/** 导出实用函数以便在组件外部使用 */
-export const changeLanguage = (lng: string) => i18n.changeLanguage(lng)
+i18n.use(LanguageDetector).use(initReactI18next).init({
+  debug: false,
+  fallbackLng: SupportedLanguages.EN_US,
+  load: 'currentOnly',
+  supportedLngs: Object.values(SupportedLanguages),
+  interpolation: { escapeValue: false },
+  detection: {
+    order: ['localStorage', 'navigator', 'querystring', 'cookie'],
+    lookupLocalStorage: I18N_STORAGE_KEY,
+    caches: ['localStorage'],
+    convertDetectedLanguage: normalizeLanguage,
+  },
+  resources,
+})
+
+applyDocumentLang(i18n.language)
+const channel = typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('i18n-language')
+  : null
+let incomingLanguage: string | null = null
+const onLanguageChanged = (language: string) => {
+  const normalized = normalizeLanguage(language)
+  if (normalized !== language) {
+    void i18n.changeLanguage(normalized)
+    return
+  }
+  applyDocumentLang(normalized)
+  if (incomingLanguage !== normalized)
+    channel?.postMessage(normalized)
+}
+i18n.on('languageChanged', onLanguageChanged)
+if (channel) {
+  channel.onmessage = (event: MessageEvent<unknown>) => {
+    if (typeof event.data !== 'string')
+      return
+    /** 偏好已由检测器持久化；读取最新值，避免排队的旧广播覆盖后一次选择。 */
+    let latest = event.data
+    try {
+      latest = localStorage.getItem(I18N_STORAGE_KEY) ?? latest
+    }
+    catch {
+      /** 存储不可用时仍可通过广播同步本次选择。 */
+    }
+    const next = normalizeLanguage(latest)
+    if (next !== i18n.language) {
+      incomingLanguage = next
+      void i18n.changeLanguage(next).finally(() => {
+        if (incomingLanguage === next)
+          incomingLanguage = null
+      })
+    }
+  }
+}
+import.meta.hot?.dispose(() => {
+  i18n.off('languageChanged', onLanguageChanged)
+  channel?.close()
+})
+
+/** 切换到受支持的资源语言，并同步文档、偏好和其他窗口。 */
+export const changeLanguage = (language: string) => i18n.changeLanguage(normalizeLanguage(language))
+/** 当前界面语言。 */
 export const getCurrentLanguage = () => i18n.language
+export default i18n

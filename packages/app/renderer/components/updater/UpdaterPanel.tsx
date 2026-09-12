@@ -1,4 +1,5 @@
 import { useUpdater } from '@/hooks'
+import { updateErrorI18nKey } from '@/store/updaterStore'
 import { formatFileSize } from '@jl-org/tool'
 import { Button, Message, ProgressBar } from 'comps'
 import { AlertTriangle, CheckCircle2, DownloadCloud, RefreshCw, RotateCw } from 'lucide-react'
@@ -94,7 +95,7 @@ export const UpdaterPanel = memo<UpdaterPanelProps>((props) => {
           { /* 错误信息 */ }
           { status === 'error' && error && (
             <p className="text-sm text-danger">
-              { t('errorHint', { error }) }
+              { t(updateErrorI18nKey(error)) }
             </p>
           ) }
 

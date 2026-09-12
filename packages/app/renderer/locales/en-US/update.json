@@ -32,5 +32,11 @@
     "later": "Later",
     "background": "Download in background",
     "close": "Close"
+  },
+  "errors": {
+    "network": "The update service could not be reached. Check your connection and try again.",
+    "notFound": "The update feed could not be found. Try again later.",
+    "verification": "The downloaded update could not be verified. Try again.",
+    "unknown": "The update could not be completed. Try again later."
   }
 }

@@ -14,7 +14,7 @@ function ShortcutRuntimeScreenshotApp() {
 }
 
 createRoot(document.getElementById('root')!).render(
-  <AppErrorBoundary className="min-h-screen bg-transparent">
+  <AppErrorBoundary scope="screenshot-window-root" className="min-h-screen bg-transparent">
     <ShortcutRuntimeScreenshotApp />
   </AppErrorBoundary>,
 )

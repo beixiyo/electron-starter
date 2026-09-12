@@ -1,4 +1,5 @@
 import { api } from '@/http/httpInstance'
+import { isElectron } from '@/utils/env'
 import { createUserActions } from './createUserActions'
 
 /**
@@ -6,4 +7,8 @@ import { createUserActions } from './createUserActions'
  */
 export const UserActions = createUserActions({
   api,
+  onLogout: async () => {
+    if (isElectron())
+      await $ipc.session.clearHttpCache()
+  },
 })

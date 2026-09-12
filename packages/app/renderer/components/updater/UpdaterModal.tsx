@@ -6,35 +6,49 @@ import {
   closeUpdaterModal,
   downloadUpdate,
   installUpdate,
+  updateErrorI18nKey,
   updaterAvailable,
   useUpdaterState,
 } from '@/store/updaterStore'
 import { parseReleaseNotes } from './parseReleaseNotes'
 
 /**
- * 全局应用更新弹窗
+ * 全局应用更新弹窗。
  *
- * 受控于 {@link updaterStore}：后台轮询发现新版本会自动打开，也可由入口手动打开。
- * 按状态机展示「检查中 / 已是最新 / 待下载（版本·大小·更新日志）/ 下载进度 / 待安装 / 出错」，
- * 并提供对应动作。仅 Electron 桌面端渲染。在应用根组件挂载一次即可。
+ * 主进程提供下载状态，状态仓负责会话节奏与宿主策略。强制更新命中时，关闭、遮罩和
+ * Escape 都不能绕过弹窗；各状态分支同时隐藏无效的稍后 / 后台按钮。
  */
 export const UpdaterModal = memo(() => {
   const { t, i18n } = useTranslation('update')
-  const { status, info, progress, error, currentVersion, modalOpen } = useUpdaterState()
+  const {
+    status,
+    info,
+    progress,
+    error,
+    currentVersion,
+    modalOpen,
+    forceUpdate,
+    policyTitle,
+    policyNotes,
+  } = useUpdaterState()
 
   if (!updaterAvailable)
     return null
 
-  /** 按当前界面语言从多语言更新日志里取对应段落 */
-  const releaseNotes = parseReleaseNotes(info?.releaseNotes, i18n.language)
+  const releaseNotes = policyNotes || parseReleaseNotes(info?.releaseNotes, i18n.language)
+  const title = policyTitle && (status === 'available' || status === 'downloading' || status === 'downloaded')
+    ? policyTitle
+    : t('modal.title')
 
   return (
     <Modal
       isOpen={ modalOpen }
       onClose={ closeUpdaterModal }
-      titleText={ t('modal.title') }
+      titleText={ title }
       width={ 460 }
+      autoHeight
       clickOutsideClose={ false }
+      escToClose={ !forceUpdate }
       footer={ renderFooter() }
     >
       { renderBody() }
@@ -59,7 +73,7 @@ export const UpdaterModal = memo(() => {
           <CenterHint
             tone="danger"
             title={ t('errorHint') }
-            desc={ error ?? undefined }
+            desc={ t(updateErrorI18nKey(error)) }
           />
         )
 
@@ -67,7 +81,6 @@ export const UpdaterModal = memo(() => {
         return (
           <div className="flex flex-col gap-5 py-1">
             <VersionLine version={ info?.version } />
-
             <div className="flex flex-col gap-2">
               <ProgressBar value={ (progress?.percent ?? 0) / 100 } height={ 8 } />
               <div className="flex items-center justify-between text-xs text-text2">
@@ -99,7 +112,6 @@ export const UpdaterModal = memo(() => {
         return (
           <div className="flex flex-col gap-4 py-1">
             <VersionLine version={ info?.version } />
-
             <div className="flex items-center gap-4 text-xs text-text2">
               { formatBytes(info?.size) && (
                 <Meta label={ t('modal.size') } value={ formatBytes(info?.size) } />
@@ -108,13 +120,11 @@ export const UpdaterModal = memo(() => {
                 <Meta label={ t('modal.releaseDate') } value={ formatDate(info?.releaseDate) } />
               ) }
             </div>
-
             <Changelog notes={ releaseNotes } label={ t('modal.changelog') } />
           </div>
         )
 
       default:
-        /** idle：弹窗打开时通常已触发检查，这里给一条中性提示兜底 */
         return <CenterHint title={ t('modal.checking') } />
     }
   }
@@ -124,15 +134,15 @@ export const UpdaterModal = memo(() => {
       case 'available':
         return (
           <FooterBar>
-            <Button variant="ghost" onClick={ closeUpdaterModal }>{ t('actions.later') }</Button>
-            <Button variant="primary" onClick={ () => downloadUpdate() }>{ t('actions.download') }</Button>
+            { !forceUpdate && <Button onClick={ closeUpdaterModal }>{ t('actions.later') }</Button> }
+            <Button variant="primary" onClick={ downloadUpdate }>{ t('actions.download') }</Button>
           </FooterBar>
         )
 
       case 'downloading':
         return (
           <FooterBar>
-            <Button variant="ghost" onClick={ closeUpdaterModal }>{ t('actions.background') }</Button>
+            { !forceUpdate && <Button onClick={ closeUpdaterModal }>{ t('actions.background') }</Button> }
             <Button variant="primary" loading disabled>{ t('status.downloading') }</Button>
           </FooterBar>
         )
@@ -140,39 +150,43 @@ export const UpdaterModal = memo(() => {
       case 'downloaded':
         return (
           <FooterBar>
-            <Button variant="ghost" onClick={ closeUpdaterModal }>{ t('actions.later') }</Button>
-            <Button variant="primary" onClick={ () => installUpdate() }>{ t('actions.install') }</Button>
+            { !forceUpdate && <Button onClick={ closeUpdaterModal }>{ t('actions.later') }</Button> }
+            <Button variant="primary" onClick={ installUpdate }>{ t('actions.install') }</Button>
           </FooterBar>
         )
 
       case 'error':
         return (
           <FooterBar>
-            <Button variant="ghost" onClick={ closeUpdaterModal }>{ t('actions.close') }</Button>
-            <Button variant="primary" onClick={ () => checkUpdate() }>{ t('actions.retry') }</Button>
+            { !forceUpdate && <Button onClick={ closeUpdaterModal }>{ t('actions.close') }</Button> }
+            <Button variant="primary" onClick={ () => void checkUpdate() }>{ t('actions.retry') }</Button>
           </FooterBar>
         )
 
       case 'checking':
-        return (
-          <FooterBar>
-            <Button variant="ghost" onClick={ closeUpdaterModal }>{ t('actions.close') }</Button>
-          </FooterBar>
-        )
+        return forceUpdate
+          ? null
+          : (
+              <FooterBar>
+                <Button onClick={ closeUpdaterModal }>{ t('actions.close') }</Button>
+              </FooterBar>
+            )
 
       default:
-        return (
-          <FooterBar>
-            <Button variant="primary" onClick={ closeUpdaterModal }>{ t('actions.close') }</Button>
-          </FooterBar>
-        )
+        return forceUpdate
+          ? null
+          : (
+              <FooterBar>
+                <Button variant="primary" onClick={ closeUpdaterModal }>{ t('actions.close') }</Button>
+              </FooterBar>
+            )
     }
   }
 })
 
 UpdaterModal.displayName = 'UpdaterModal'
 
-/** 醒目展示目标版本号 */
+/** 醒目展示目标版本号。 */
 const VersionLine = memo<{ version?: string, badge?: string }>(({ version, badge }) => (
   <div className="flex items-center gap-3">
     <span className="text-2xl font-semibold tracking-tight text-text">{ `v${version ?? ''}` }</span>
@@ -183,7 +197,7 @@ const VersionLine = memo<{ version?: string, badge?: string }>(({ version, badge
 ))
 VersionLine.displayName = 'VersionLine'
 
-/** 元信息小项（大小 / 发布时间） */
+/** 元信息小项（大小 / 发布时间）。 */
 const Meta = memo<{ label: string, value: string }>(({ label, value }) => (
   <span className="flex items-center gap-1">
     <span className="text-text2/60">{ label }</span>
@@ -192,7 +206,7 @@ const Meta = memo<{ label: string, value: string }>(({ label, value }) => (
 ))
 Meta.displayName = 'Meta'
 
-/** 更新日志区块；releaseNotes 为空则不渲染 */
+/** 更新说明区块；空内容不渲染。 */
 const Changelog = memo<{ notes?: string, label: string }>(({ notes, label }) => {
   if (!notes?.trim())
     return null
@@ -208,7 +222,7 @@ const Changelog = memo<{ notes?: string, label: string }>(({ notes, label }) => 
 })
 Changelog.displayName = 'Changelog'
 
-/** 居中提示（检查中 / 已是最新 / 出错） */
+/** 居中提示（检查中 / 已是最新 / 出错）。 */
 const CenterHint = memo<{ title: string, desc?: string, tone?: 'default' | 'danger' }>(({ title, desc, tone = 'default' }) => (
   <div className="flex flex-col items-center gap-2 py-8 text-center">
     <span className={ `text-base font-medium ${tone === 'danger'
@@ -246,7 +260,8 @@ function formatSpeed(bytesPerSecond?: number): string {
 }
 
 function formatDate(iso?: string): string {
-  return iso
-    ? iso.slice(0, 10)
-    : ''
+  if (!iso)
+    return ''
+
+  return iso.slice(0, 10)
 }

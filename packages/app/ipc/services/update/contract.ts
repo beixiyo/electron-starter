@@ -47,6 +47,16 @@ export interface UpdateCheckOutcome {
   info?: UpdateInfoLite
 }
 
+/**
+ * 更新错误分类码（跨 IPC 传给 renderer，由 locale 生成用户可读提示）。
+ *
+ * 主进程不会透传自动更新引擎的原始异常，未知来源统一归为 `unknown`。
+ */
+export const UPDATE_ERROR_CODES = ['network', 'notFound', 'verification', 'unknown'] as const
+
+/** {@link UPDATE_ERROR_CODES} 的联合类型。 */
+export type UpdateErrorCode = typeof UPDATE_ERROR_CODES[number]
+
 /** `status` 事件载荷 */
 export interface UpdateStatusEvent {
   status: UpdateStatus

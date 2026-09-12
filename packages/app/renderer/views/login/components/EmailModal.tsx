@@ -1,9 +1,9 @@
-import { Button, Form, Input, Message, Modal, useForm } from 'comps'
-import { X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import { cn } from 'utils'
 import { api } from '@/http/httpInstance'
 import { UserActions } from '@/store/user'
+import { Button, Form, Input, Message, Modal, useForm } from 'comps'
+import { X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { cn } from 'utils'
 
 interface EmailModalProps {
   open: boolean
@@ -15,11 +15,12 @@ interface EmailModalProps {
  * 邮箱登录弹窗组件
  */
 export function EmailModal({ open, onClose, onSuccess }: EmailModalProps) {
+  const draftRef = useRef<EmailLoginDraft>(createEmptyDraft())
+
   /** 表单校验规则 */
   const validators = {
     email: (value: string) => {
-      if (!value)
-        return '请输入邮箱地址'
+      if (!value) return '请输入邮箱地址'
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       return emailRegex.test(value)
         ? undefined
@@ -40,12 +41,13 @@ export function EmailModal({ open, onClose, onSuccess }: EmailModalProps) {
       header={ null }
       footer={ null }
       clickOutsideClose={ false }
+      enterToConfirm={ false }
     >
       <Form
-        key={ open
-          ? 'open'
-          : 'closed' }
-        initialValues={ { email: '', code: '' } }
+        initialValues={ {
+          email: draftRef.current.email,
+          code: draftRef.current.code,
+        } }
         validators={ validators }
         onSubmit={ async (values, form) => {
           try {
@@ -58,6 +60,7 @@ export function EmailModal({ open, onClose, onSuccess }: EmailModalProps) {
             })
             if (response?.id) {
               UserActions.loggedIn(response)
+              draftRef.current = createEmptyDraft()
               onSuccess?.()
               onClose()
               form.resetForm()
@@ -70,44 +73,46 @@ export function EmailModal({ open, onClose, onSuccess }: EmailModalProps) {
           }
         } }
       >
-        <EmailFormContent onClose={ onClose } />
+        <EmailFormContent onClose={ onClose } draft={ draftRef.current } />
       </Form>
     </Modal>
   )
 }
 
 /** 内部表单内容组件：使用 useForm 获取状态，渲染输入与按钮 */
-function EmailFormContent({ onClose }: { onClose: () => void }) {
+function EmailFormContent({ onClose, draft }: EmailFormContentProps) {
   const {
     state,
     validateField,
     setFieldTouched,
     setFieldError,
   } = useForm()
-  const [countdown, setCountdown] = useState(0)
+  const [countdown, setCountdown] = useState(() => getRemainingSeconds(draft.codeCooldownEndsAt))
   const [isSending, setIsSending] = useState(false)
-
-  /** 打开/关闭变化时，这里不做额外处理，重置由父级传入的 key 触发 */
-  useEffect(() => { }, [])
+  const mountedRef = useRef(true)
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
-    if (!countdown)
-      return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      requestIdRef.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!countdown) return
 
     const timer = window.setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(timer)
-          return 0
-        }
-        return prev - 1
-      })
+      const remaining = getRemainingSeconds(draft.codeCooldownEndsAt)
+      setCountdown(remaining)
+      if (!remaining) window.clearInterval(timer)
     }, 1000)
 
     return () => {
       window.clearInterval(timer)
     }
-  }, [countdown])
+  }, [countdown, draft])
 
   const canSubmit = Boolean(state.values.email) && Boolean(state.values.code) && state.isValid
 
@@ -118,31 +123,40 @@ function EmailFormContent({ onClose }: { onClose: () => void }) {
   const handleSendCode = async () => {
     setFieldTouched('email', true)
     const isEmailValid = validateField('email')
-    if (!isEmailValid)
-      return
+    if (!isEmailValid) return
+
+    const requestId = ++requestIdRef.current
+    const email = state.values.email
 
     try {
       setIsSending(true)
-      await api.user.getVerificationCode({ email: state.values.email })
+      await api.user.getVerificationCode({ email })
+      if (!mountedRef.current || requestId !== requestIdRef.current) return
+
       Message.success('验证码已发送，请查收邮箱')
-      setCountdown(60)
+      draft.codeCooldownEndsAt = Date.now() + CODE_COOLDOWN_SECONDS * 1000
+      setCountdown(getRemainingSeconds(draft.codeCooldownEndsAt))
     }
     catch (error: any) {
+      if (!mountedRef.current || requestId !== requestIdRef.current) return
+
       const message = error?.message || '验证码发送失败'
       setFieldError('email', message)
       Message.danger(message)
     }
     finally {
-      setIsSending(false)
+      if (mountedRef.current && requestId === requestIdRef.current) setIsSending(false)
     }
   }
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 头部 */ }
+      { /* 头部 */ }
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-textPrimary">邮箱登录</h2>
         <button
+          type="button"
+          aria-label="关闭邮箱登录"
           onClick={ onClose }
           className={ cn(
             'flex items-center justify-center w-8 h-8 rounded-full',
@@ -154,19 +168,23 @@ function EmailFormContent({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      {/* 表单 */ }
+      { /* 表单 */ }
       <div className="flex flex-col gap-4">
-        {/* 邮箱输入 */ }
+        { /* 邮箱输入 */ }
         <div className="flex flex-col gap-2">
           <Input
             name="email"
             type="email"
             placeholder="请输入邮箱地址"
             className="flex-1"
+            autoFocus
+            onChange={ (value) => {
+              draft.email = value
+            } }
           />
         </div>
 
-        {/* 验证码输入 */ }
+        { /* 验证码输入 */ }
         <div className="flex flex-col gap-2">
           <div className="flex gap-3">
             <Input
@@ -174,6 +192,9 @@ function EmailFormContent({ onClose }: { onClose: () => void }) {
               type="text"
               placeholder="请输入验证码"
               className="flex-1"
+              onChange={ (value) => {
+                draft.code = value
+              } }
             />
             <Button
               type="button"
@@ -190,7 +211,7 @@ function EmailFormContent({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* 登录按钮 */ }
+        { /* 登录按钮 */ }
         <Button
           type="submit"
           disabled={ !canSubmit }
@@ -205,4 +226,25 @@ function EmailFormContent({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   )
+}
+
+const CODE_COOLDOWN_SECONDS = 60
+
+function createEmptyDraft(): EmailLoginDraft {
+  return { email: '', code: '', codeCooldownEndsAt: 0 }
+}
+
+function getRemainingSeconds(endsAt: number): number {
+  return Math.max(0, Math.ceil((endsAt - Date.now()) / 1000))
+}
+
+type EmailLoginDraft = {
+  email: string
+  code: string
+  codeCooldownEndsAt: number
+}
+
+type EmailFormContentProps = {
+  onClose: () => void
+  draft: EmailLoginDraft
 }

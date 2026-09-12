@@ -15,3 +15,5 @@ export const recorderDB = createStore({
   storeName: 'records',
   description: '录屏数据存储',
 })
+
+export * from './diagnosticLogDB'

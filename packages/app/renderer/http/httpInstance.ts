@@ -1,24 +1,23 @@
 import type { Resp } from '@jl-org/http'
 import type { Resp as MyResp } from 'http-api'
-import { Message } from 'comps'
 import { createApiInstances, createHttpInstance } from 'http-api'
-import { router } from '@/router'
-import { isElectron } from '@/utils/env'
+import { getRuntimeEnv } from '@/config/runtimeEnv'
+import { createRendererFeatureLogger } from '@/logging'
+import { runUnauthorizedHandler } from './unauthorizedGate'
+
+const log = createRendererFeatureLogger('http.client')
 
 const http = createHttpInstance({
-  baseUrl: isElectron()
-    ? import.meta.env.VITE_ELECTRON_API_BASE_URL
-    : import.meta.env.VITE_WEB_API_BASE_URL,
+  getAppHeaders: () => ({ 'x-app-version': __APP_VERSION__ }),
+  onDiagnosticEvent: (event, meta) => log.info(event, 'HTTP authentication lifecycle', meta),
+  authMode: 'session',
+  baseUrl: () => getRuntimeEnv().apiBaseUrl,
   respInterceptor: (response: Resp<MyResp>) => {
     return response.data.data
   },
   onUnauthorized: () => {
-    Message.danger('Login expired, please login again')
-    /** 延迟导入 UserActions 避免循环依赖 */
-    import('@/store/user').then(({ UserActions }) => {
-      UserActions.logout()
-    })
-    router.replace('/login')
+    /** 闸门已经记录失败；HTTP 的同步通知槽不能留下未处理的 Promise。 */
+    void runUnauthorizedHandler().catch(() => {})
   },
 })
 

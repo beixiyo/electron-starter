@@ -14,6 +14,8 @@ export interface UserActionsConfig {
    */
   api: ApiInstances
   storageKey?: string
+  /** 本地凭证移除后执行的会话清理；失败不会阻止本地退出。@default undefined */
+  onLogout?: () => void | Promise<void>
   /**
    * 自定义存储实现（可选，默认使用 localStorage）
    */

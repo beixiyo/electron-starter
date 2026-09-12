@@ -32,5 +32,11 @@
     "later": "稍后",
     "background": "后台下载",
     "close": "关闭"
+  },
+  "errors": {
+    "network": "无法连接更新服务，请检查网络后重试。",
+    "notFound": "找不到更新源，请稍后重试。",
+    "verification": "下载的更新未通过校验，请重试。",
+    "unknown": "更新未能完成，请稍后重试。"
   }
 }

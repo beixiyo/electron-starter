@@ -3,27 +3,30 @@
  */
 import { APPLE_OAUTH_URL, GOOGLE_OAUTH_URL } from '@jl-org/auth'
 import { isElectron } from '@/utils/env'
+import { getRuntimeEnv } from '@/config/runtimeEnv'
 
-export const GOOGLE_CLIENT_ID = isElectron()
-  ? import.meta.env.VITE_ELECTRON_GOOGLE_CLIENT_ID
-  : import.meta.env.VITE_WEB_GOOGLE_CLIENT_ID
-export const GOOGLE_REDIRECT_URI = isElectron()
-  ? import.meta.env.VITE_ELECTRON_GOOGLE_REDIRECT_URI
-  : import.meta.env.VITE_WEB_GOOGLE_REDIRECT_URI
+/** 在授权发起时读取配置，让环境切换影响下一次登录。 */
+export function getOAuthConfig() {
+  const electron = isElectron()
+  const endpoints = getRuntimeEnv()
+  return {
+    googleClientId: electron
+      ? import.meta.env.VITE_ELECTRON_GOOGLE_CLIENT_ID
+      : import.meta.env.VITE_WEB_GOOGLE_CLIENT_ID,
+    googleRedirectUri: endpoints.googleRedirectUri,
+    appleClientId: electron
+      ? import.meta.env.VITE_ELECTRON_APPLE_CLIENT_ID
+      : import.meta.env.VITE_WEB_APPLE_CLIENT_ID,
+    appleRedirectUri: endpoints.appleRedirectUri,
+    appleScope: electron
+      ? import.meta.env.VITE_ELECTRON_APPLE_SCOPE
+      : import.meta.env.VITE_WEB_APPLE_SCOPE,
+    appleState: electron
+      ? import.meta.env.VITE_ELECTRON_APPLE_STATE
+      : import.meta.env.VITE_WEB_APPLE_STATE,
+  }
+}
 
-export const APPLE_CLIENT_ID = isElectron()
-  ? import.meta.env.VITE_ELECTRON_APPLE_CLIENT_ID
-  : import.meta.env.VITE_WEB_APPLE_CLIENT_ID
-export const APPLE_REDIRECT_URI = isElectron()
-  ? import.meta.env.VITE_ELECTRON_APPLE_REDIRECT_URI
-  : import.meta.env.VITE_WEB_APPLE_REDIRECT_URI
-
-export const APPLE_SCOPE = isElectron()
-  ? import.meta.env.VITE_ELECTRON_APPLE_SCOPE
-  : import.meta.env.VITE_WEB_APPLE_SCOPE
-export const APPLE_STATE = isElectron()
-  ? import.meta.env.VITE_ELECTRON_APPLE_STATE
-  : import.meta.env.VITE_WEB_APPLE_STATE
 export const GOOGLE_SCOPE = 'openid email profile'
 
 export function buildClientContext() {
@@ -47,14 +50,15 @@ export function buildClientContext() {
 }
 
 export function buildAppleAuthorizeUrl(state?: string) {
-  if (!APPLE_CLIENT_ID || !APPLE_REDIRECT_URI) {
+  const { appleClientId, appleRedirectUri, appleScope } = getOAuthConfig()
+  if (!appleClientId || !appleRedirectUri) {
     throw new Error('Apple OAuth 配置缺失')
   }
 
   return buildAuthorizeUrl(APPLE_OAUTH_URL, {
-    client_id: APPLE_CLIENT_ID,
-    redirect_uri: APPLE_REDIRECT_URI,
-    scope: APPLE_SCOPE,
+    client_id: appleClientId,
+    redirect_uri: appleRedirectUri,
+    scope: appleScope,
     response_mode: 'form_post',
     ...(state
       ? { state }
@@ -63,13 +67,14 @@ export function buildAppleAuthorizeUrl(state?: string) {
 }
 
 export function buildGoogleAuthorizeUrl(state?: string) {
-  if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
+  const { googleClientId, googleRedirectUri } = getOAuthConfig()
+  if (!googleClientId || !googleRedirectUri) {
     throw new Error('Google OAuth 配置缺失')
   }
 
   return buildAuthorizeUrl(GOOGLE_OAUTH_URL, {
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: GOOGLE_REDIRECT_URI,
+    client_id: googleClientId,
+    redirect_uri: googleRedirectUri,
     scope: GOOGLE_SCOPE,
     ...(state
       ? { state }

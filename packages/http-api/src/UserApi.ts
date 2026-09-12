@@ -1,3 +1,4 @@
+import type { BaseReqMethodConfig } from '@jl-org/http'
 import type { HttpInstance } from './httpInstance'
 
 export class UserApi {
@@ -71,10 +72,14 @@ export class UserApi {
 
   /**
    * 刷新 JWT Token
+   * @param requestConfig 此次刷新请求的可选配置覆盖
    */
-  async refreshToken(refresh: string): Promise<JwtRefreshResponse> {
+  async refreshToken(refresh: string, requestConfig?: BaseReqMethodConfig): Promise<JwtRefreshResponse> {
     const url = '/account/jwt_refresh'
-    return this.http.post(url, { refresh })
+    return this.http.post(url, { refresh }, {
+      ...requestConfig,
+      __isRefreshRequest: true,
+    } as BaseReqMethodConfig)
   }
 
   /**

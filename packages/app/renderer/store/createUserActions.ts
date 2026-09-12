@@ -12,6 +12,7 @@ import { CLIENT_INFO_KEY } from 'http-api'
 export function createUserActions(config: UserActionsConfig) {
   const {
     api,
+    onLogout,
     storageKey = CLIENT_INFO_KEY,
     storage = {
       getItem: (key: string) => getLocalStorage<UserInfoResponse>(key),
@@ -82,6 +83,12 @@ export function createUserActions(config: UserActionsConfig) {
         }
         catch (error) {
           console.warn('Failed to remove user info from storage:', error)
+        }
+        try {
+          await onLogout?.()
+        }
+        catch (error) {
+          console.warn('Session cleanup failed:', error)
         }
       }
     },

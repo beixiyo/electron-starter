@@ -1,16 +1,20 @@
 import type { LogLevel, LogRecordPayload } from '@jl-org/log'
 import { forwardToMain } from '@jl-org/log'
 import { isElectron } from '@/utils/env'
+import { appendWebDiagnosticLog, initWebDiagnosticLogStorage } from './webDiagnosticLogs'
 
 const MAX_DETAIL_LENGTH = 4000
 
 let initialized = false
 
-/** 捕获 renderer 全局异常并转发到主进程 session 日志 */
+/** 捕获 renderer 全局异常；桌面转发主进程，Web 写入本地诊断库 */
 export function initRendererDiagnostics(): void {
-  if (initialized || !isElectron())
+  if (initialized)
     return
   initialized = true
+
+  if (!isElectron())
+    initWebDiagnosticLogStorage()
 
   window.addEventListener('error', (event) => {
     sendRendererLog(
@@ -72,9 +76,6 @@ export function sendRendererLog(
   meta?: DiagnosticMeta,
   detail?: unknown,
 ): void {
-  if (!isElectron())
-    return
-
   if (level === 'debug' && !isRendererDiagnosticDebugEnabled())
     return
 
@@ -95,7 +96,10 @@ export function sendRendererLog(
   if (detail !== undefined)
     record.detail = detail
 
-  forwardToMain(record)
+  if (isElectron())
+    forwardToMain(record)
+  else
+    appendWebDiagnosticLog(record)
 }
 
 function isRendererDiagnosticDebugEnabled(): boolean {
@@ -113,7 +117,7 @@ function normalizeDetail(value: unknown): unknown {
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: value.message,
+      message: truncate(value.message),
       stack: truncate(value.stack ?? ''),
     }
   }

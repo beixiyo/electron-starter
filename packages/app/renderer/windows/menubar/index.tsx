@@ -83,7 +83,7 @@ document.body.style.overflow = 'hidden'
 document.getElementById('root')!.style.background = 'transparent'
 
 createRoot(document.getElementById('root')!).render(
-  <AppErrorBoundary className="min-h-screen bg-transparent">
+  <AppErrorBoundary scope="menubar-window-root" className="min-h-screen bg-transparent">
     <MenuBarApp />
   </AppErrorBoundary>,
 )

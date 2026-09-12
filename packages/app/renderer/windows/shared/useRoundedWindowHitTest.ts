@@ -12,15 +12,22 @@ const RESIZE_EDGE_SIZE = 8
 export function useRoundedWindowHitTest(
   type: WindowType,
   regions: RoundedWindowHitTestRegionInput,
+  options?: RoundedWindowHitTestOptions,
 ): void {
+  const enabled = options?.enabled ?? true
   const ignoredRef = useRef<boolean | null>(null)
   const regionsRef = useRef(regions)
   regionsRef.current = regions
 
   useEffect(() => {
+    if (!enabled) {
+      ignoredRef.current = false
+      void $ipc.window.setIgnoreMouseEvents(type, false)
+      return
+    }
+
     const setIgnored = (ignored: boolean): void => {
-      if (ignoredRef.current === ignored)
-        return
+      if (ignoredRef.current === ignored) return
 
       ignoredRef.current = ignored
       void $ipc.window.setIgnoreMouseEvents(
@@ -41,7 +48,7 @@ export function useRoundedWindowHitTest(
     }
 
     const handleMove = (event: MouseEvent): void => {
-      const inside = getRegions().some(region => isInsideRoundedRegion(event.clientX, event.clientY, region))
+      const inside = getRegions().some((region) => isInsideRoundedRegion(event.clientX, event.clientY, region))
       setIgnored(!inside)
     }
 
@@ -51,14 +58,15 @@ export function useRoundedWindowHitTest(
 
     window.addEventListener('mousemove', handleMove)
     window.addEventListener('mouseleave', handleLeave)
-    setIgnored(false)
+    setIgnored(true)
 
     return () => {
       window.removeEventListener('mousemove', handleMove)
       window.removeEventListener('mouseleave', handleLeave)
+      ignoredRef.current = null
       void $ipc.window.setIgnoreMouseEvents(type, false)
     }
-  }, [type])
+  }, [type, enabled])
 }
 
 export function getInsetWindowHitTestRegion(
@@ -71,6 +79,22 @@ export function getInsetWindowHitTestRegion(
     y: inset,
     width: Math.max(0, size.width - inset * 2),
     height: Math.max(0, size.height - inset * 2),
+    radius,
+  }
+}
+
+/** 将元素当前可见边界转为窗口命中区，供动态布局的 regions 回调使用。 */
+export function getElementWindowHitTestRegion(
+  element: Element,
+  radius: number,
+): RoundedWindowHitTestRegion {
+  const rect = element.getBoundingClientRect()
+
+  return {
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
     radius,
   }
 }
@@ -125,8 +149,7 @@ function isInsideRoundedRegion(
   const right = region.x + region.width
   const bottom = region.y + region.height
 
-  if (x < left || x > right || y < top || y > bottom)
-    return false
+  if (x < left || x > right || y < top || y > bottom) return false
 
   const safeRadius = Math.min(region.radius, region.width / 2, region.height / 2)
   const closestX = Math.min(Math.max(x, left + safeRadius), right - safeRadius)
@@ -137,9 +160,17 @@ function isInsideRoundedRegion(
   return dx * dx + dy * dy <= safeRadius * safeRadius
 }
 
-export type RoundedWindowHitTestRegionInput
-  = | RoundedWindowHitTestRegion[]
-    | (() => RoundedWindowHitTestRegion[])
+export type RoundedWindowHitTestOptions = {
+  /**
+   * 是否启用点击穿透 hit-test
+   * @default true
+   */
+  enabled?: boolean
+}
+
+export type RoundedWindowHitTestRegionInput =
+  | RoundedWindowHitTestRegion[]
+  | (() => RoundedWindowHitTestRegion[])
 
 export type RoundedWindowHitTestRegion = {
   x: number

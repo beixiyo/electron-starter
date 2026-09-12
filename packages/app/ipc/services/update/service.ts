@@ -1,4 +1,5 @@
 import type { UpdateContract, UpdateInfoLite, UpdateStatus, UpdateStatusEvent } from './contract'
+import { classifyUpdateError } from './error'
 import { readdir, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
@@ -58,7 +59,7 @@ export const updateService = createIpcService<UpdateContract>('update', {
 
     async install() {
       if (is.dev) {
-        emitStatus('error', { error: 'dev mode cannot install update' })
+        emitStatus('error', { error: 'unknown' })
         return
       }
 
@@ -163,8 +164,9 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
   })
   autoUpdater.on('error', (error) => {
     stopPendingDownloadPolling()
-    console.error('[update] auto updater error:', error)
-    emitStatus('error', { error: normalizeError(error) })
+    const errorCode = classifyUpdateError(error)
+    console.error('[update] auto updater error:', errorCode)
+    emitStatus('error', { error: errorCode })
   })
 
   /** 静默检查：失败（如离线 / 占位 URL）只忽略，不抛到顶层；结果通过 status 事件驱动 UI（含自动弹窗） */
@@ -370,24 +372,6 @@ function toLite(info: UpdateInfoWithFiles & { version: string, releaseDate?: str
       ? size
       : undefined,
   }
-}
-
-/** 统一错误信息提取，只把安全、短文本传给渲染端 */
-function normalizeError(error: unknown): string {
-  const message = error instanceof Error
-    ? error.message
-    : String(error ?? '')
-
-  if (message.includes('Cannot find channel') || message.includes('404 Not Found'))
-    return 'update feed not found'
-
-  if (message.includes('sha512') || message.includes('checksum'))
-    return 'update package verification failed'
-
-  if (message.includes('net::') || message.includes('ENOTFOUND') || message.includes('ECONNREFUSED'))
-    return 'update server is unreachable'
-
-  return 'update failed'
 }
 
 /** {@link initAutoUpdater} 配置项 */

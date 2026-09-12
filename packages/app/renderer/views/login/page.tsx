@@ -14,17 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import AppleIcon from '../../assets/svg/apple.svg?react'
 import { EmailModal } from './components/EmailModal'
-import {
-  APPLE_CLIENT_ID,
-  APPLE_REDIRECT_URI,
-  APPLE_SCOPE,
-  APPLE_STATE,
-  buildAppleAuthorizeUrl,
-  buildClientContext,
-  buildGoogleAuthorizeUrl,
-  GOOGLE_CLIENT_ID,
-  GOOGLE_REDIRECT_URI,
-} from './constants'
+import { buildAppleAuthorizeUrl, buildClientContext, buildGoogleAuthorizeUrl, getOAuthConfig } from './constants'
 import { consumeElectronOAuthCallback } from './electronOAuthCallback'
 import { clearOAuthState, createOAuthState } from './oauthState'
 
@@ -61,9 +51,10 @@ export default function LoginPage() {
 
     try {
       const clientContext = buildClientContext()
+      const { googleClientId, googleRedirectUri } = getOAuthConfig()
       const data = await googlePopupCodeLogin({
-        client_id: GOOGLE_CLIENT_ID,
-        redirect_uri: GOOGLE_REDIRECT_URI,
+        client_id: googleClientId,
+        redirect_uri: googleRedirectUri,
         response_mode: 'fragment',
       })
 
@@ -104,11 +95,12 @@ export default function LoginPage() {
 
     try {
       setAppleLoading(true)
+      const { appleClientId, appleRedirectUri, appleScope, appleState } = getOAuthConfig()
       const response = await applePopupLogin({
-        client_id: APPLE_CLIENT_ID,
-        redirect_uri: APPLE_REDIRECT_URI,
-        scope: APPLE_SCOPE,
-        state: APPLE_STATE,
+        client_id: appleClientId,
+        redirect_uri: appleRedirectUri,
+        scope: appleScope,
+        state: appleState,
         usePopup: true,
         nonce: 'nonce',
         response_mode: 'fragment',
@@ -161,13 +153,17 @@ export default function LoginPage() {
     }
 
     let active = true
+    let generation = 0
     type OAuthCallbackDelivery = Awaited<ReturnType<typeof $ipc.oauth.registerReceiver>>[number]
     const handleOAuthCallback = async (delivery: OAuthCallbackDelivery) => {
       if (!active) return
 
+      const callbackGeneration = ++generation
       const { id, params } = delivery
       const callback = consumeElectronOAuthCallback(params, localStorage)
       await $ipc.oauth.acknowledgeCallback(id).catch(() => {})
+
+      if (!active || callbackGeneration !== generation) return
 
       if (!callback.ok) {
         if (callback.reason !== 'unsupported_provider' && callback.reason !== 'access_denied') Message.danger(t('messages.loginFailed'))
@@ -187,17 +183,21 @@ export default function LoginPage() {
           username: callback.username,
         })
 
+        if (!active || callbackGeneration !== generation) return
+
         if (userData?.id) {
           UserActions.loggedIn(userData)
           handleLoginSuccess()
         }
       }
       catch (error) {
-        Message.danger(t('messages.loginFailed'))
-        console.error(error)
+        if (active && callbackGeneration === generation) {
+          Message.danger(t('messages.loginFailed'))
+          console.error(error)
+        }
       }
       finally {
-        setAppleLoading(false)
+        if (active && callbackGeneration === generation) setAppleLoading(false)
       }
     }
 
@@ -205,11 +205,12 @@ export default function LoginPage() {
     void $ipc.oauth.registerReceiver().then((pendingCallbacks) => {
       for (const pendingCallback of pendingCallbacks) void handleOAuthCallback(pendingCallback)
     }).catch(() => {
-      Message.danger(t('messages.loginFailed'))
+      if (active && generation === 0) Message.danger(t('messages.loginFailed'))
     })
 
     return () => {
       active = false
+      generation += 1
       cleanup?.()
       void $ipc.oauth.unregisterReceiver().catch(() => {})
     }

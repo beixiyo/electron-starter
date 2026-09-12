@@ -13,7 +13,7 @@ export const router = createHashRouter({
     /** 页面缓存配置 */
     cache: {
       limit: 10,
-      exclude: ['/login', '/', /^\/cards\/[^/]+$/],
+      exclude: ['/login', '/'],
     },
     /** 全局前置守卫 */
     beforeEach: async (ctx, _from, next) => {
