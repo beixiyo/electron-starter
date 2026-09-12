@@ -6,6 +6,9 @@ import { useEffect, useRef } from 'react'
 import { SCREENSHOT_MIME_TYPE } from '@shared'
 import { isElectron } from '@/utils/env'
 
+/** 每个窗口内一个角色只交给一个已挂载的消费方。 */
+const fallbackConsumers = new Set<string>()
+
 /**
  * 区域截图会话（申请制，仅 Electron 可用）
  *
@@ -35,7 +38,7 @@ export function useScreenshotSession<T extends TransferType = 'blob'>(
   options?: UseScreenshotSessionOptions<T>,
 ) {
   const handleCaptured = useLatestCallback(onCaptured)
-  const { onCancelled, onError, requester } = options ?? {}
+  const { onCancelled, onError, requester, fallbackRole } = options ?? {}
   const resType = options?.resType ?? 'blob'
   const handleCancelled = useLatestCallback(() => onCancelled?.())
   const handleError = useLatestCallback((error: unknown) => onError?.(error))
@@ -57,8 +60,18 @@ export function useScreenshotSession<T extends TransferType = 'blob'>(
     if (!isElectron())
       return
 
+    if (fallbackRole) {
+      if (fallbackConsumers.has(fallbackRole))
+        throw new Error(`Screenshot fallback role already registered: ${fallbackRole}`)
+      fallbackConsumers.add(fallbackRole)
+    }
+
+    const accepts = (payload: { captureId: string, fallbackRole?: string }) =>
+      payload.captureId === captureIdRef.current
+      || (!!fallbackRole && payload.fallbackRole === fallbackRole)
+
     const offOk = $ipc.screenshot.on('ok', (payload) => {
-      if (!payload?.captureId || payload.captureId !== captureIdRef.current)
+      if (!payload?.captureId || !accepts(payload))
         return
 
       captureIdRef.current = null
@@ -76,7 +89,7 @@ export function useScreenshotSession<T extends TransferType = 'blob'>(
 
     /** 用户取消 / 新会话作废旧会话：清掉本地持有的会话 id */
     const offCancel = $ipc.screenshot.on('cancel', (payload) => {
-      if (payload?.captureId !== captureIdRef.current)
+      if (!payload?.captureId || !accepts(payload))
         return
 
       captureIdRef.current = null
@@ -86,8 +99,9 @@ export function useScreenshotSession<T extends TransferType = 'blob'>(
     return () => {
       offOk()
       offCancel()
+      if (fallbackRole) fallbackConsumers.delete(fallbackRole)
     }
-  }, [deliverCapture, handleCancelled, handleError])
+  }, [deliverCapture, fallbackRole, handleCancelled, handleError])
 
   const startCapture = useLatestCallback(async (startOptions?: Pick<ScreenshotStartOptions, 'hideWindows'>) => {
     if (!isElectron())
@@ -121,6 +135,12 @@ export type UseScreenshotSessionOptions<T extends TransferType = 'blob'> = {
    * @default 'blob'
    */
   resType?: T
+  /**
+   * 接收主进程无申请方截图时的消费角色；同窗口只允许一个已挂载实例声明该角色。
+   * 调用方负责在宿主不可用时卸载此订阅；普通申请者仍通过 captureId 隔离。
+   * @default undefined
+   */
+  fallbackRole?: string
   /**
    * 发起方调试标识，仅用于主进程日志，不参与路由
    */

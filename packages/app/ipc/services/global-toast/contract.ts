@@ -29,5 +29,7 @@ export type GlobalToastContract = IpcContract<{
   rendererOn: {
     /** 主进程推送当前内容；`null` 表示清空 */
     render: GlobalToastPayload | null
+    /** 前台已登记窗口内承载提示；null 收起上一条。 */
+    notice: GlobalToastPayload | null
   }
 }>

@@ -11,6 +11,7 @@ import {
   SHADOW_INSET,
   WindowType,
 } from '@shared'
+import type { BrowserWindow } from 'electron'
 import { screen } from 'electron'
 import { createMainDiagnosticLogger } from './logging'
 import { logicalWindowManager, windowManager } from './window-manager'
@@ -22,6 +23,35 @@ let currentPayload: GlobalToastPayload | null = null
 let currentPlacement: GlobalToastPlacement = 'voice-ime'
 let currentOffset: number | undefined
 let hideTimer: ReturnType<typeof setTimeout> | null = null
+let currentAnchorWindowType = WindowType.VOICE_IME
+let detachAnchorHide: (() => void) | null = null
+let noticeTarget: BrowserWindow | null = null
+let resolveNoticeTarget: (() => BrowserWindow | null) | null = null
+
+/** 宿主注入可承载窗口内提示的前台窗口查询；只清理当前注册者。 */
+export function setGlobalToastNoticeTargetResolver(resolve: () => BrowserWindow | null): () => void {
+  resolveNoticeTarget = resolve
+  return () => {
+    if (resolveNoticeTarget === resolve) resolveNoticeTarget = null
+  }
+}
+
+function clearAnchorWatch(): void {
+  detachAnchorHide?.()
+  detachAnchorHide = null
+}
+
+function watchAnchorHide(anchor: BrowserWindow | null | undefined): void {
+  clearAnchorWatch()
+  if (!anchor || anchor.isDestroyed() || !anchor.isVisible()) return
+  const onHide = () => hideGlobalToast()
+  anchor.once('hide', onHide)
+  anchor.once('closed', onHide)
+  detachAnchorHide = () => {
+    anchor.removeListener('hide', onHide)
+    anchor.removeListener('closed', onHide)
+  }
+}
 
 function clearHideTimer(): void {
   if (!hideTimer) return
@@ -33,7 +63,7 @@ function clearHideTimer(): void {
 /**
  * 按可见内容计算提示窗口 bounds
  *
- * Toast 与 Voice IME 的透明留白不同：前者使用 10px，后者使用共享的 30px
+ * Toast 与锚定窗口的透明留白不同：各自读取配置，不能共用一份固定值
  * 换算始终基于两者可见边，避免窗口 bounds 对齐但实体卡片发生重叠
  */
 function resolveToastBounds(
@@ -53,11 +83,12 @@ function resolveToastBounds(
   })
 
   if (placement === 'voice-ime') {
-    const anchor = windowManager.get(WindowType.VOICE_IME)
+    const anchor = logicalWindowManager.getTargetWindow(currentAnchorWindowType)
     if (anchor && !anchor.isDestroyed() && anchor.isVisible()) {
       const bounds = anchor.getBounds()
       const gap = offset ?? GLOBAL_TOAST_GAP
-      const anchorVisibleTop = bounds.y + SHADOW_INSET
+      const anchorInset = windowManager.getMetadata(currentAnchorWindowType)?.config.visibleContentInsets?.top ?? SHADOW_INSET
+      const anchorVisibleTop = bounds.y + anchorInset
       const visibleX = bounds.x + (bounds.width - contentWidth) / 2
       const visibleY = anchorVisibleTop - gap - contentHeight
 
@@ -92,9 +123,23 @@ export function showGlobalToast(options: ShowGlobalToastOptions): void {
     placement = 'voice-ime',
     offset,
     text,
+    anchorWindowType = WindowType.VOICE_IME,
   } = options
 
   clearHideTimer()
+  clearAnchorWatch()
+  if (noticeTarget && !noticeTarget.isDestroyed()) globalToastToRenderer.emit('notice', null, noticeTarget)
+  noticeTarget = null
+  currentToken += 1
+  const payload: GlobalToastPayload = { text, duration, token: currentToken }
+  const target = resolveNoticeTarget?.()
+  if (target && !target.isDestroyed() && target.isVisible() && target.isFocused()) {
+    hideGlobalToast()
+    noticeTarget = target
+    globalToastToRenderer.emit('notice', payload, target)
+    watchAnchorHide(target)
+    return
+  }
 
   const win = logicalWindowManager.create(WindowType.GLOBAL_TOAST)
   log.info('toast.show', 'global toast requested', {
@@ -107,14 +152,10 @@ export function showGlobalToast(options: ShowGlobalToastOptions): void {
   /** 纯提示没有交互，鼠标事件必须穿透到用户原本操作的应用 */
   win.setIgnoreMouseEvents(true)
 
-  currentToken += 1
+  currentAnchorWindowType = anchorWindowType
   currentPlacement = placement
   currentOffset = offset
-  currentPayload = {
-    text,
-    duration,
-    token: currentToken,
-  }
+  currentPayload = payload
 
   const bounds = resolveToastBounds(
     GLOBAL_TOAST_CONTENT_SIZE.width,
@@ -126,6 +167,7 @@ export function showGlobalToast(options: ShowGlobalToastOptions): void {
 
   globalToastToRenderer.emit('render', currentPayload, win)
   logicalWindowManager.showInactive(WindowType.GLOBAL_TOAST)
+  if (placement === 'voice-ime') watchAnchorHide(logicalWindowManager.getTargetWindow(anchorWindowType))
 
   log.info('toast.shown', 'global toast presented', {
     bounds,
@@ -143,9 +185,12 @@ export function showGlobalToast(options: ShowGlobalToastOptions): void {
 /** 收起当前提示；当前没有提示时为空操作 */
 export function hideGlobalToast(): void {
   clearHideTimer()
+  clearAnchorWatch()
+  if (noticeTarget && !noticeTarget.isDestroyed()) globalToastToRenderer.emit('notice', null, noticeTarget)
+  noticeTarget = null
 
   const win = windowManager.get(WindowType.GLOBAL_TOAST)
-  if (!win || win.isDestroyed()) {
+  if (!currentPayload || !win || win.isDestroyed()) {
     currentPayload = null
     return
   }
@@ -162,7 +207,7 @@ export function getCurrentGlobalToast(): GlobalToastPayload | null {
 
 /** 使用 renderer 实测尺寸贴合窗口；过期 token 的结果会被丢弃 */
 export function applyGlobalToastMeasurement(token: number, width: number, height: number): void {
-  if (token !== currentToken) return
+  if (!currentPayload || token !== currentToken) return
 
   const win = windowManager.get(WindowType.GLOBAL_TOAST)
   if (!win || win.isDestroyed()) return

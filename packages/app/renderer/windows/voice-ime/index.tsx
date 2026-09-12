@@ -1,12 +1,14 @@
+import { transcribeDemoAudio } from '@/demo/voiceTranscription'
 import { useShortcutRuntime } from '@/shortcuts/useShortcutRuntime'
 import { mountTransparentWindow } from '../shared'
 import { VoiceImeApp } from './VoiceImeApp'
-/** 本窗口渲染 comps 组件，须引 @/tailwind.css 以带上 comps/index.css 的工具类（见 floating-status-pool 说明） */
+/** 本窗口渲染通用语音输入组件，须引 @/tailwind.css 以带上共享样式。 */
 import '@/tailwind.css'
+import '@/locales'
 
 function ShortcutRuntimeVoiceImeApp() {
   useShortcutRuntime()
-  return <VoiceImeApp />
+  return <VoiceImeApp transcribe={ transcribeDemoAudio } />
 }
 
 mountTransparentWindow(<ShortcutRuntimeVoiceImeApp />)

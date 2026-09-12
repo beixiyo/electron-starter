@@ -7,9 +7,8 @@
     "notifyTest": "Notifications",
     "globalToastTest": "Message Window",
     "update": "App Updates",
-    "cards": "Notes",
     "editor": "Editor",
-    "speak": "Ask XXX",
-    "listen": "Listen Together"
+    "listen": "Listen Together",
+    "voiceInputTest": "Voice input"
   }
 }

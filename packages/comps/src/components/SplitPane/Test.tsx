@@ -150,7 +150,7 @@ function FloatingDemo() {
           <div className="h-full flex flex-col p-4">
             <h2 className="text-sm font-semibold mb-4">AI Assistant</h2>
             <div className="flex-1 flex items-center justify-center text-text2">
-              <p className="text-sm">Ask me anything...</p>
+              <p className="text-sm">Enter a prompt...</p>
             </div>
             <div className="mt-auto">
               <div className="flex items-center gap-2 rounded-xl bg-background2/50 px-3 py-2.5">
@@ -167,7 +167,7 @@ function FloatingDemo() {
 
 const DEMOS = [
   { key: 'ide', label: 'IDE Style', component: IDEDemo },
-  { key: 'floating', label: 'Floating Cards', component: FloatingDemo },
+  { key: 'floating', label: 'Floating Panels', component: FloatingDemo },
 ] as const
 
 function Index() {

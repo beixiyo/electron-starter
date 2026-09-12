@@ -6,21 +6,33 @@ export function createVoiceImeHoldStrategy(
 ): VoiceImeShortcutStrategy {
   let activeGeneration = 0
   let nextGeneration = 0
+  let activeSessionId: string | null = null
 
   return {
     handle(event) {
       if (event.phase === 'trigger') {
         const generation = ++nextGeneration
         activeGeneration = generation
-        void options.start(() => activeGeneration === generation)
+        activeSessionId = null
+        void options.start({ mode: 'hold', shouldContinue: () => activeGeneration === generation }).then((sessionId) => {
+          if (activeGeneration !== generation) {
+            /** 松手可能发生在主进程认领之后、Promise 回来之前，只结束那一轮。 */
+            if (sessionId) options.stop(sessionId)
+            return
+          }
+          activeSessionId = sessionId
+        })
         return
       }
 
       activeGeneration = 0
-      options.stop('hold')
+      const sessionId = activeSessionId
+      activeSessionId = null
+      if (sessionId) options.stop(sessionId)
     },
     cancelPendingStart() {
       activeGeneration = 0
+      activeSessionId = null
     },
   }
 }

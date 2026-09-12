@@ -13,7 +13,7 @@ export function createVoiceImeToggleStrategy(
         return
 
       if (options.isRecording()) {
-        options.stop('toggle')
+        options.stop()
         return
       }
 
@@ -24,7 +24,7 @@ export function createVoiceImeToggleStrategy(
 
       const generation = ++nextGeneration
       pendingGeneration = generation
-      void options.start(() => pendingGeneration === generation)
+      void options.start({ mode: 'click', shouldContinue: () => pendingGeneration === generation })
         .finally(() => {
           if (pendingGeneration === generation)
             pendingGeneration = 0

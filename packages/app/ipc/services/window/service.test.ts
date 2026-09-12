@@ -12,7 +12,6 @@ vi.mock('@ipc/core', () => ({
     return {}
   },
 }))
-vi.mock('@main/shortcuts', () => ({ holdStateManager: {} }))
 vi.mock('@main/devtools', () => ({ isDevToolsEnabled: () => false }))
 vi.mock('@main/window-manager', () => ({
   getShortcutTestWindowBounds: vi.fn(),

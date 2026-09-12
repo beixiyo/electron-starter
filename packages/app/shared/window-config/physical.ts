@@ -7,7 +7,7 @@ import {
   PERMISSION_DRAG_GUIDE_WINDOW_SIZE,
   SHADOW_WINDOW_INSETS,
   UTILITY_PANEL_POOL_WINDOW_SIZE,
-  VOICE_IME_WINDOW_SIZE,
+  VOICE_IME_SIZE,
 } from './metrics'
 import type { WindowConfig } from './types'
 
@@ -52,8 +52,8 @@ export const PHYSICAL_WINDOW_CONFIGS = {
   },
 
   [WindowType.VOICE_IME]: {
-    width: VOICE_IME_WINDOW_SIZE.idle.width,
-    height: VOICE_IME_WINDOW_SIZE.idle.height,
+    width: VOICE_IME_SIZE.width,
+    height: VOICE_IME_SIZE.height,
     /**
      * 窗口四边都是给 box-shadow 的透明留白（{@link SHADOW_INSET}），
      * 位置计算与边界收敛都必须认它，否则窗口为压低可见内容而下探的那段留白会被

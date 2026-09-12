@@ -16,9 +16,7 @@ export default defineConfig({
     dts({ tsconfigPath: './tsconfig.json' })
   ],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    tsconfigPaths: true,
   },
 
   build: {

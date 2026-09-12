@@ -13,25 +13,36 @@ const listeners = new Set<(availableBytes: number, context: RecordingStorageChec
 export async function ensureRecordingStorageAvailable(
   context: RecordingStorageCheckContext = 'start',
 ): Promise<boolean> {
+  const availableBytes = await readAvailableStorageBytes()
+  if (availableBytes === null) return true
+
+  const available = availableBytes >= MIN_RECORDING_AVAILABLE_SPACE_BYTES
+  if (!available) {
+    log.warn('recorder.startBlocked.storage', 'recording blocked by insufficient storage', {
+      availableBytes,
+      thresholdBytes: MIN_RECORDING_AVAILABLE_SPACE_BYTES,
+      context,
+    })
+    listeners.forEach(listener => listener(availableBytes, context))
+  }
+  return available
+}
+
+/** 语音输入共用磁盘安全余量，但不触发录音页面的空间不足通知。 */
+export async function ensureVoiceImeStorageAvailable(): Promise<boolean> {
+  const availableBytes = await readAvailableStorageBytes()
+  return availableBytes === null || availableBytes >= MIN_RECORDING_AVAILABLE_SPACE_BYTES
+}
+
+/** 检查失败保留现有放行策略，由实际写入错误处理最终失败。 */
+async function readAvailableStorageBytes(): Promise<number | null> {
   try {
     const stats = await statfs(homedir())
-    const availableBytes = Number(stats.bavail) * Number(stats.bsize)
-    const available = availableBytes >= MIN_RECORDING_AVAILABLE_SPACE_BYTES
-
-    if (!available) {
-      log.warn('recorder.startBlocked.storage', 'recording blocked by insufficient storage', {
-        availableBytes,
-        thresholdBytes: MIN_RECORDING_AVAILABLE_SPACE_BYTES,
-        context,
-      })
-      listeners.forEach(listener => listener(availableBytes, context))
-    }
-
-    return available
+    return Number(stats.bavail) * Number(stats.bsize)
   }
   catch (error) {
     log.error('recorder.storageCheck.failed', 'failed to inspect recording storage', error)
-    return true
+    return null
   }
 }
 
@@ -42,7 +53,7 @@ export function onRecordingStorageInsufficient(
   return () => listeners.delete(listener)
 }
 
-/** Native writer 已明确返回 ENOSPC 时，强制走同一个产品承接面 */
+/** Native writer 已明确返回 ENOSPC 时，强制走同一个录音通知入口 */
 export function reportRecordingStorageInsufficient(context: RecordingStorageCheckContext = 'write'): void {
   listeners.forEach(listener => listener(0, context))
 }

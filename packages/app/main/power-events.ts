@@ -1,11 +1,10 @@
-import type { VoiceImeCancelPayload } from '@ipc/services/voice-ime/contract'
+import type { PowerEventType } from '@ipc/services/power/contract'
 import { emitPowerEvent } from '@ipc/services/power/service'
-import { voiceImeToRenderer } from '@ipc/services/voice-ime/toRenderer'
-import { WindowType } from '@shared'
+import { cancelVoiceImeSession } from '@ipc/services/voice-ime/service'
 import { powerMonitor } from 'electron'
 import { createMainDiagnosticLogger } from './logging'
-import { holdStateManager, requestShortcutRuntimeSync } from './shortcuts'
-import { windowManager } from './window-manager'
+import { requestShortcutRuntimeSync } from './shortcuts'
+import { cancelPendingVoiceImeShortcut } from './shortcut-actions'
 
 const log = createMainDiagnosticLogger('app.lifecycle')
 
@@ -19,29 +18,23 @@ export function initPowerEventCleanup(): void {
   initialized = true
 
   powerMonitor.on('suspend', () => {
-    cancelVoiceImeSession('suspend')
+    handlePowerEvent('suspend')
   })
   powerMonitor.on('resume', () => {
-    cancelVoiceImeSession('resume')
+    handlePowerEvent('resume')
   })
   powerMonitor.on('lock-screen', () => {
-    cancelVoiceImeSession('lock-screen')
+    handlePowerEvent('lock-screen')
   })
   powerMonitor.on('unlock-screen', () => {
-    cancelVoiceImeSession('unlock-screen')
+    handlePowerEvent('unlock-screen')
   })
 }
 
-function cancelVoiceImeSession(reason: VoiceImeCancelPayload['reason']): void {
+function handlePowerEvent(reason: PowerEventType): void {
   const at = new Date().toISOString()
-  const win = windowManager.get(WindowType.VOICE_IME)
-
-  holdStateManager.discardHold(WindowType.VOICE_IME)
-
-  if (win && !win.isDestroyed()) {
-    voiceImeToRenderer.emit('cancel', { reason }, win)
-    windowManager.hide(WindowType.VOICE_IME)
-  }
+  cancelPendingVoiceImeShortcut()
+  cancelVoiceImeSession(reason)
 
   if (reason === 'resume' || reason === 'unlock-screen') requestShortcutRuntimeSync()
 

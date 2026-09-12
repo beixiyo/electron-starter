@@ -1,6 +1,6 @@
 # macOS SwiftPM helpers
 
-七个原生 helper 按最低系统版本拆成五个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
+八个原生 helper 按最低系统版本拆成五个独立 SwiftPM package，构建脚本只负责选择 package、分别构建两个架构并合并产物
 
 | package | products | minimum macOS |
 | --- | --- | --- |

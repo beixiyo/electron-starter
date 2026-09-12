@@ -1,142 +1,147 @@
-import { WindowType } from '@shared'
-import { SHADOW_INSET, VOICE_IME_CONTENT_SIZE, VOICE_IME_WINDOW_SIZE } from '@shared/window-config/metrics'
-import type { VoiceRecorderStatus } from 'comps'
-import { LiveWaveAudio } from 'comps'
-import { useTheme, useUpdateEffect } from 'hooks'
-import { Mic } from 'lucide-react'
-import { AnimatePresence, motion } from 'motion/react'
-import { memo } from 'react'
+/** 浮层装配只负责展示，会话和采集复用窗口及输入宿主的公共管线。 */
+import { createMediaRecorderCapture, useGlobalToastNotice } from '@/components/voiceInput'
+import type { VoiceCaptureAdapter, VoiceTranscribeAdapter } from '@/components/voiceInput'
+import { getVoiceInputPromptMessage } from '@/components/voiceInput/messages'
+import { useVoiceSession } from '@/components/voiceInput/useVoiceSession'
+import { useVoiceImeEscapeShield } from '@/hooks/useVoiceImeEscapeShield'
+import { isElectron } from '@/utils/env'
+import { VOICE_IME_RESULT_AUTO_HIDE_MS, WindowType } from '@shared'
+import { useLatestCallback, useTheme } from 'hooks'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
-import { getInsetWindowHitTestRegion, useRoundedWindowHitTest, WINDOW_SURFACE_SHADOW } from '../shared'
-import { useVoiceIme } from './useVoiceIme'
+import { VoiceImeSurface } from './VoiceImeApp/components'
+import type { VoiceImeViewMode } from './VoiceImeApp/constants'
+import { useVoiceImeViewport } from './VoiceImeApp/hooks'
 
-type DisplayState = 'idle' | 'recording' | 'processing'
-
-function toDisplayState(status: VoiceRecorderStatus): DisplayState {
-  if (status === 'recording') return 'recording'
-  if (status === 'processing') return 'processing'
-  return 'idle'
-}
-
-export function VoiceImeApp(): React.JSX.Element {
+export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
+  const { capture: injectedCapture, transcribe, className, style } = props
   useTheme()
-  const { status, error, durationLabel, liveWaveRef, liveWaveState, handleWaveformError, handleRecordingFinish } = useVoiceIme()
+  useGlobalToastNotice()
+  useVoiceImeEscapeShield()
+  const capture = useMemo(() => injectedCapture ?? createMediaRecorderCapture(), [injectedCapture])
+  const showReason = useLatestCallback((text: string) => {
+    if (isElectron()) $ipc.globalToast.send('show', { text: getVoiceInputPromptMessage(text), duration: 5000, anchorWindowType: WindowType.VOICE_IME })
+  })
+  const session = useVoiceSession({
+    capture,
+    transcribe,
+    onError: (error) => showReason(error.message),
+    onPrompt: showReason,
+    onUndoExpire: () => void dismiss(),
+  })
+  const showFailureDetail = useLatestCallback(() => {
+    if (session.error) showReason(session.error)
+  })
+  const viewMode: VoiceImeViewMode = session.text
+    ? 'result'
+    : session.phase === 'idle' || session.phase === 'result'
+      ? 'prompt'
+      : session.phase === 'processing'
+        ? 'recording'
+        : session.phase
+  const { viewMode: displayedMode, switchView, reportContentWidth, hideAndReset } = useVoiceImeViewport()
+  const closingRef = useRef(false)
+  const restoreAfterCloseRef = useRef(false)
+  const [isClosing, setIsClosing] = useState(false)
+  useEffect(() => {
+    if (isClosing) return
+    if (displayedMode === viewMode) {
+      restoreAfterCloseRef.current = false
+      return
+    }
+    switchView(viewMode)
+    if (restoreAfterCloseRef.current && isElectron()) {
+      restoreAfterCloseRef.current = false
+      void $ipc.window.show(WindowType.VOICE_IME)
+    }
+  }, [displayedMode, isClosing, viewMode, switchView])
 
-  const displayState = toDisplayState(status)
-  const contentSize = displayState === 'recording'
-    ? VOICE_IME_CONTENT_SIZE.recording
-    : VOICE_IME_CONTENT_SIZE.idle
-  const windowSize = displayState === 'recording'
-    ? VOICE_IME_WINDOW_SIZE.recording
-    : VOICE_IME_WINDOW_SIZE.idle
+  const copyResult = useLatestCallback(async (value: string) => {
+    const revision = session.getResultRevision()
+    if (isElectron()) await $ipc.clipboard.writeText(value)
+    else await navigator.clipboard.writeText(value)
+    if (session.getResultRevision() === revision) await dismiss()
+  })
+  const dismiss = useLatestCallback(async () => {
+    if (closingRef.current) return
+    closingRef.current = true
+    setIsClosing(true)
+    const revision = session.getResultRevision()
+    try {
+      await hideAndReset()
+      if (session.getResultRevision() === revision) session.reset()
+    }
+    finally {
+      closingRef.current = false
+      restoreAfterCloseRef.current = true
+      setIsClosing(false)
+    }
+  })
+  useEffect(() => {
+    if (!session.text || import.meta.env.DEV) return
+    const timer = setTimeout(() => void dismiss(), VOICE_IME_RESULT_AUTO_HIDE_MS)
+    return () => clearTimeout(timer)
+  }, [session.text, dismiss])
 
-  useRoundedWindowHitTest(WindowType.VOICE_IME, () => [
-    getInsetWindowHitTestRegion(SHADOW_INSET, 16, windowSize),
-  ])
-
-  useUpdateEffect(() => {
-    $ipc.window.resizeTo(WindowType.VOICE_IME, windowSize.width, windowSize.height, true)
-  }, [displayState])
+  useEffect(() => {
+    if (!isElectron()) return
+    const offDismiss = $ipc.voiceIme.on('dismiss', () => void dismiss())
+    let lastSessionId: string | null = null
+    const offRound = $ipc.voiceIme.on('activeChanged', (snapshot) => {
+      if (snapshot.phase === 'recording' && snapshot.sessionId !== lastSessionId) {
+        lastSessionId = snapshot.sessionId
+        $ipc.globalToast.send('dismiss')
+      }
+    })
+    const offStatus = $ipc.voiceIme.on('status', (payload) => {
+      if (payload.error) showReason(payload.error)
+    })
+    return () => {
+      offDismiss()
+      offStatus()
+      offRound()
+    }
+  }, [dismiss, showReason])
+  useEffect(() => {
+    if (session.completed && !session.text) void dismiss()
+  }, [session.completed, session.text, dismiss])
 
   return (
-    <div style={ { padding: SHADOW_INSET } }>
-      <motion.div
-        className={ cn('relative overflow-hidden bg-background rounded-2xl', WINDOW_SURFACE_SHADOW) }
-        animate={ { width: contentSize.width, height: contentSize.height } }
-        transition={ { type: 'spring', stiffness: 400, damping: 35 } }
-      >
-        {
-          /*
-          LiveWaveAudio 必须始终挂载——liveWaveRef 在 hold 事件触发前就需要就绪
-          仅通过 opacity 控制可见性，不能用条件渲染
-        */
-        }
-        <div
-          className={ cn(
-            'absolute inset-0 flex flex-col items-center justify-center gap-3 px-4 py-3',
-            'transition-opacity duration-150',
-            displayState !== 'recording' && 'opacity-0 pointer-events-none',
-          ) }
-        >
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse shrink-0" />
-            <span className="text-xs tabular-nums font-medium text-textPrimary">{ durationLabel }</span>
-          </div>
-
-          <LiveWaveAudio
-            ref={ liveWaveRef }
-            state={ liveWaveState }
-            onError={ handleWaveformError }
-            onRecordingFinish={ handleRecordingFinish }
-            preferredMimeTypes={ ['audio/webm;codecs=opus'] }
-          />
-        </div>
-
-        { /* idle / processing 覆盖层，覆盖在波形上方；recording 时退出，波形层透出 */ }
-        <AnimatePresence>
-          { displayState === 'idle' && (
-            <motion.div
-              key="idle"
-              className="absolute inset-0 bg-background flex flex-col items-center justify-center gap-1.5"
-              initial={ { opacity: 0 } }
-              animate={ { opacity: 1 } }
-              exit={ { opacity: 0 } }
-              transition={ { duration: 0.15 } }
-            >
-              <IdleContent />
-            </motion.div>
-          ) }
-
-          { displayState === 'processing' && (
-            <motion.div
-              key="processing"
-              className="absolute inset-0 bg-background flex flex-col items-center justify-center gap-2"
-              initial={ { opacity: 0 } }
-              animate={ { opacity: 1 } }
-              exit={ { opacity: 0 } }
-              transition={ { duration: 0.15 } }
-            >
-              <ProcessingContent />
-            </motion.div>
-          ) }
-        </AnimatePresence>
-
-        { error && (
-          <motion.div
-            className="absolute inset-0 z-10 flex items-center justify-center px-4 bg-background rounded-2xl"
-            initial={ { opacity: 0 } }
-            animate={ { opacity: 1 } }
-            transition={ { duration: 0.15 } }
-          >
-            <span className="text-xs text-red-300 text-center leading-relaxed">{ error }</span>
-          </motion.div>
-        ) }
-      </motion.div>
+    <div className={ cn('h-full p-7.5', className) } style={ style }>
+      <VoiceImeSurface
+        viewMode={ displayedMode }
+        durationLabel={ session.phase === 'processing'
+          ? 'Processing'
+          : 'Listening' }
+        remainingSeconds={ session.remainingSeconds }
+        audioLevel={ session.audioLevel }
+        isProcessing={ session.phase === 'processing' }
+        text={ session.text }
+        onCopy={ copyResult }
+        message="Transcription failed"
+        detail={ session.error ?? undefined }
+        onShowDetail={ showFailureDetail }
+        expiresAt={ session.undoExpiresAt }
+        onMeasure={ reportContentWidth }
+        onStart={ session.requestStart }
+        onUndo={ session.undo }
+        onDismiss={ dismiss }
+        onRetry={ session.canRetry
+          ? session.retry
+          : undefined }
+        onStop={ session.stop }
+        onCancel={ session.cancel }
+      />
     </div>
   )
+})
+VoiceImeApp.displayName = 'VoiceImeApp'
+
+export type VoiceImeAppProps = {
+  /** @default 浏览器 MediaRecorder 采集 */
+  capture?: VoiceCaptureAdapter
+  /** 所有转写均由调用方注入，可使用明确标识的演示适配器。 */
+  transcribe: VoiceTranscribeAdapter
+  className?: string
+  style?: React.CSSProperties
 }
-
-const IdleContent = memo(() => (
-  <>
-    <Mic size={ 16 } className="text-muted-foreground/50" strokeWidth={ 1.5 } />
-    <span className="text-[11px] text-muted-foreground/60 tracking-wide">按住 Ctrl/Cmd E 说话</span>
-  </>
-))
-IdleContent.displayName = 'IdleContent'
-
-const ProcessingContent = memo(() => (
-  <div className="flex items-center gap-2.5">
-    <div className="flex gap-1">
-      { [0, 1, 2].map((i) => (
-        <motion.span
-          key={ i }
-          className="w-1.5 h-1.5 rounded-full bg-sky-400"
-          animate={ { opacity: [0.25, 1, 0.25], scale: [0.75, 1, 0.75] } }
-          transition={ { duration: 1.1, repeat: Infinity, delay: i * 0.18, ease: 'easeInOut' } }
-        />
-      )) }
-    </div>
-    <span className="text-[11px] text-muted-foreground/70 tracking-wide">识别中…</span>
-  </div>
-))
-ProcessingContent.displayName = 'ProcessingContent'

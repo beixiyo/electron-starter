@@ -2,7 +2,6 @@ import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
 import { isDevToolsEnabled } from '@main/devtools'
-import { holdStateManager } from '@main/shortcuts'
 import { getShortcutTestWindowBounds, logicalWindowManager, windowManager } from '@main/window-manager'
 import { resolveAlwaysOnTopLevel, WindowType } from '@shared'
 import { BrowserWindow, shell } from 'electron'
@@ -184,24 +183,6 @@ export const windowService = createIpcService<WindowContract>('window', {
     getAllTypes: async () => {
       const types = windowManager.getAllTypes()
       return { types }
-    },
-
-    release: async (_event, type: WindowType | undefined, result?: unknown) => {
-      const holdState = holdStateManager.getHoldState(type)
-      if (holdState && holdState.isHolding) {
-        holdStateManager.completeHold(type, result)
-      }
-      return { success: true }
-    },
-
-    isHolding: async (_event, type: WindowType | undefined) => {
-      const isHolding = holdStateManager.isHolding(type)
-      return { isHolding }
-    },
-
-    getState: async (_event, type: WindowType | undefined) => {
-      const state = holdStateManager.getSerializableHoldState(type)
-      return { state }
     },
 
     resizeTo: async (_event, type: WindowType, width: number, height: number, animate?: boolean) => {

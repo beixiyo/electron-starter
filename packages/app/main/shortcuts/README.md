@@ -25,7 +25,6 @@ shortcuts/
     index.ts                 plutil 读取、缓存与解码
     mac-keycodes.ts          macOS 虚拟键码表副本 + NSEvent 修饰键掩码
 
-  hold/                      通用长按状态槽位（按窗口类型记录 isHolding / startTime / onRelease）
     state-manager.ts         长按状态追踪，供业务按自己的会话语义消费
     types.ts                 hold manager 内部状态与回调配置（main-only）
 
@@ -78,4 +77,3 @@ shortcuts/
 - **录制校验规则是声明式的**：禁用键、键数上限、双击白名单全部写在 `shared/shortcuts/validation-policy.ts`，按数组顺序命中即返回；`validation.ts` 只是不含具体按键的执行引擎。新增禁用组合往 `patterns` 里加模式，新增失败原因要同步补 i18n 文案
 - **系统快捷键只认写死在 plist 里的**：`system/` 读 `com.apple.symbolichotkeys`，但 macOS 对「从未被用户改过的系统默认快捷键」只落 `{ enabled: true }` 不落按键，那部分读不到。宁可漏报也不猜默认值——猜错会把一个完全可用的组合判成保留键，用户永远设不上。录制开始时读取本模块的实时结果并交给 shared 校验；本模块仍只负责读取与解码
 - **Swift 只归一物理输入**：helper 输出每个键的 down/up/reset 与 `fn` 归属，不判断 chord、press、doublePress、hold、scope 或 action
-- **hold 槽位与输入层无关**：`hold/` 只是按窗口类型记录「谁正在长按、何时开始、松开时回调谁」的通用状态槽位，由业务在收到 runtime 的 `trigger` / `release` 时自行写入；它不订阅输入流，也不该被用来替代手势状态机

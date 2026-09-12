@@ -48,6 +48,8 @@ export type ScreenshotOkPayload = {
    */
   bytes: ArrayBuffer
   bounds: ScreenshotBounds
+  /** 无申请方会话的消费角色；由主进程装配层自行命名和消费 */
+  fallbackRole?: string
 }
 
 /**
@@ -55,6 +57,8 @@ export type ScreenshotOkPayload = {
  */
 export type ScreenshotCancelPayload = {
   captureId: string
+  /** 无申请方会话的消费角色；由主进程装配层自行命名和消费 */
+  fallbackRole?: string
 }
 
 /**
@@ -67,6 +71,17 @@ export type ScreenshotStartOptions = {
    * 发起方调试标识，仅用于主进程日志，不参与事件路由
    */
   requester?: string
+}
+
+/**
+ * 截图选区操作参数
+ *
+ * 确认与保存必须携带发起该选区的会话 id，主进程据此拒绝迟到的旧窗口指令
+ */
+export type ScreenshotSelectionOptions = {
+  captureId: string
+  displayId: number
+  rect: ScreenshotBounds
 }
 
 /**

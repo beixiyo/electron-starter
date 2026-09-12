@@ -59,17 +59,27 @@ export function useScreenshot() {
   const handleConfirm = useLatestCallback(() => {
     if (!selection || !initData)
       return
-    $ipc.screenshot.confirmCapture(initData.displayId, selection)
+    $ipc.screenshot.confirmCapture({
+      captureId: initData.captureId,
+      displayId: initData.displayId,
+      rect: selection,
+    })
   })
 
   const handleSave = useLatestCallback(() => {
     if (!selection || !initData)
       return
-    $ipc.screenshot.saveCapture(initData.displayId, selection)
+    $ipc.screenshot.saveCapture({
+      captureId: initData.captureId,
+      displayId: initData.displayId,
+      rect: selection,
+    })
   })
 
   const handleCancel = useLatestCallback(() => {
-    $ipc.screenshot.cancelCapture()
+    if (!initData)
+      return
+    $ipc.screenshot.cancelCapture(initData.captureId)
   })
 
   useScreenshotKeyboard({

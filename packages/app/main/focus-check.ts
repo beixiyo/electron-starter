@@ -1,6 +1,23 @@
 import { execFile } from 'node:child_process'
 import { getNativeBinaryPath } from './native-bridge'
 
+/** 辅助程序不可用时的兜底：不把不确定的焦点当成可投递目标 */
+const UNKNOWN_FOCUS: FocusCheckResult = {
+  focused: false,
+  tier: 'none',
+  role: null,
+  app: null,
+  bundleId: null,
+  pid: -1,
+  pasteMenuEnabled: null,
+}
+
+function parseFocusTier(value: unknown): FocusTier {
+  return value === 'editable' || value === 'pasteable'
+    ? value
+    : 'none'
+}
+
 export function checkFocusedTextInput(): Promise<FocusCheckResult> {
   if (process.platform !== 'darwin')
     throw new Error('[focus-check] macOS only')
@@ -8,22 +25,29 @@ export function checkFocusedTextInput(): Promise<FocusCheckResult> {
   return new Promise((resolve) => {
     execFile(getNativeBinaryPath('focus-check'), [], { timeout: 500 }, (error, stdout) => {
       if (error) {
-        resolve({ focused: false, role: null, app: null, bundleId: null, pid: -1 })
+        console.warn('[focus-check] failed:', error.message)
+        resolve(UNKNOWN_FOCUS)
         return
       }
 
       try {
         const result = JSON.parse(stdout.trim())
+        const tier = parseFocusTier(result.tier)
         resolve({
-          focused: Boolean(result.focused),
+          focused: tier !== 'none',
+          tier,
           role: result.role ?? null,
           app: result.app ?? null,
           bundleId: result.bundleId ?? null,
           pid: Number(result.pid) || -1,
+          pasteMenuEnabled: typeof result.pasteMenuEnabled === 'boolean'
+            ? result.pasteMenuEnabled
+            : null,
         })
       }
       catch {
-        resolve({ focused: false, role: null, app: null, bundleId: null, pid: -1 })
+        console.warn('[focus-check] parse error:', stdout)
+        resolve(UNKNOWN_FOCUS)
       }
     })
   })
@@ -46,4 +70,11 @@ export type FocusCheckResult = {
   bundleId: string | null
   /** 前台应用 PID，与 process.pid 对比可可靠判断是否为自身（开发/生产均适用） */
   pid: number
+  /** AX 判定档位；`none` 表示没有可靠的外部投递目标 */
+  tier: FocusTier
+  /** 标准粘贴菜单项是否存在且当前启用；仅供诊断，判定只看是否存在 */
+  pasteMenuEnabled: boolean | null
 }
+
+/** 外部焦点的投递能力档位 */
+export type FocusTier = 'editable' | 'pasteable' | 'none'

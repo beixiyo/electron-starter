@@ -2,7 +2,7 @@
  * BottomGlow 光场的设计常量
  *
  * 色彩与动画轨道来自同一份设计稿（Figma SVG payload）。
- * 几何只有 {@link GLOW_LAYERS} 与 Android 端 AskVoiceGlow 逐值对齐；
+ * 几何只有 {@link GLOW_LAYERS} 与设计参考实现逐值对齐；
  * {@link CAPSULE_GLOW_LAYERS} 是按扁宿主重新标定的，两者不要互相套用。
  * 改动前先确认设计侧已同步。
  */

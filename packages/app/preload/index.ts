@@ -1,3 +1,4 @@
+import { featureFlagClient } from '@ipc/services/feature-flag/client'
 import { diagnosticLogsClient } from '@ipc/services/diagnostic-logs/client'
 import { navigationClient } from '@ipc/services/navigation/client'
 import { sessionClient } from '@ipc/services/session/client'
@@ -8,7 +9,6 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { audioLabClient } from '@ipc/services/audio-lab/client'
 import { focusClient } from '@ipc/services/focus/client'
 import { globalToastClient } from '@ipc/services/global-toast/client'
-import { holdClient } from '@ipc/services/hold/client'
 import { logicalWindowClient } from '@ipc/services/logical-window/client'
 import { mediaClient } from '@ipc/services/media/client'
 import { meetingDetectionClient } from '@ipc/services/meeting-detection/client'
@@ -28,6 +28,7 @@ import { exposeLogBridge, JL_LOG_BRIDGE_KEY, JL_LOG_IPC_CHANNEL } from '@jl-org/
 import { contextBridge, ipcRenderer } from 'electron'
 
 export const ipc = {
+  featureFlag: featureFlagClient,
   diagnosticLogs: diagnosticLogsClient,
   clipboard: clipboardClient,
   clientEnv: clientEnvClient,
@@ -40,7 +41,6 @@ export const ipc = {
   window: windowClient,
   focus: focusClient,
   globalToast: globalToastClient,
-  hold: holdClient,
   logicalWindow: logicalWindowClient,
   voiceIme: voiceImeClient,
   selection: selectionClient,

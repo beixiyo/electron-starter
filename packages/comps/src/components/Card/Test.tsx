@@ -530,9 +530,9 @@ function TestCard() {
               : (
                   <div className="w-full max-w-5xl flex flex-col gap-10">
                     <div className="space-y-2">
-                      <p className="text-xs text-text2">Stacked Cards</p>
+                      <p className="text-xs text-text2">Stacked Panels</p>
                       <h2 className="text-2xl font-semibold text-text">
-                        多层堆叠卡片预览
+                        多层堆叠预览
                       </h2>
                       <p className="text-sm text-text2">
                         可调节层数、偏移、缩放与透明度，最大支持 3 层

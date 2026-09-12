@@ -58,7 +58,7 @@ function App() {
               leftIcon={ <Plus size={ 18 } strokeWidth={ 2.2 } /> }
               className="bg-white text-black border-transparent hover:bg-white"
             >
-              Ask Acme
+              Example action
             </Button>
 
             {/* 自定义辉光参数（更强更大更快） */ }

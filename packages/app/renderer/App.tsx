@@ -1,3 +1,5 @@
+import { VoiceImeWindowHost } from '@/components/voiceInput'
+import { transcribeDemoAudio } from '@/demo/voiceTranscription'
 import { EnvSwitchHotspot } from '@/components/EnvSwitcher'
 import { ENABLE_REQUEST_MOCKS, ENABLE_RUNTIME_TOOLS } from '@/featureFlags'
 import { UpdaterModal } from '@/components/updater'
@@ -25,14 +27,16 @@ function App() {
   return (
     <AnimatePresence>
       <div className="min-h-full bg-background3 text-text">
-        <RouterProvider router={ router }>
-          <GlobalDebugRouter />
-          <Outlet />
+        <VoiceImeWindowHost transcribe={ transcribeDemoAudio } className="min-h-full">
+          <RouterProvider router={ router }>
+            <GlobalDebugRouter />
+            <Outlet />
 
-          <UpdaterModal />
-          { ENABLE_RUNTIME_TOOLS && <EnvSwitchHotspot /> }
-          { MockDebugPanel && <Suspense fallback={ null }><MockDebugPanel /></Suspense> }
-        </RouterProvider>
+            <UpdaterModal />
+            { ENABLE_RUNTIME_TOOLS && <EnvSwitchHotspot /> }
+            { MockDebugPanel && <Suspense fallback={ null }><MockDebugPanel /></Suspense> }
+          </RouterProvider>
+        </VoiceImeWindowHost>
       </div>
     </AnimatePresence>
   )

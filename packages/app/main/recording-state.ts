@@ -19,7 +19,7 @@ export class RecordingStateManager {
   private phaseListeners = new Set<(prev: RecordingPhase, next: RecordingPhase) => void>()
   private _nativeSource: NativeRecordingSource | null = null
   /** 上次实际广播出去的快照摘要（null = 尚未广播过，首帧必发） */
-  private lastSentDigest: string | null = null
+  private lastSentSnapshotKey: string | null = null
 
   get snapshot(): RecordingSnapshot {
     return {
@@ -292,11 +292,11 @@ export class RecordingStateManager {
       return
 
     const snap = this.snapshot
-    const digest = `${snap.phase}|${snap.elapsed}|${snap.nativeSource ?? ''}`
-    if (digest === this.lastSentDigest)
+    const snapshotKey = `${snap.phase}|${snap.elapsed}|${snap.nativeSource ?? ''}`
+    if (snapshotKey === this.lastSentSnapshotKey)
       return
 
-    this.lastSentDigest = digest
+    this.lastSentSnapshotKey = snapshotKey
     this.broadcastFn(snap)
   }
 }

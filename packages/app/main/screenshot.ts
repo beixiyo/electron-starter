@@ -16,7 +16,6 @@ import {
   dialog,
   nativeImage,
   screen,
-  webContents,
 } from 'electron'
 import { createMainDiagnosticLogger } from './logging'
 import { ensureScreenPermissionOrExplain } from './permission-required'
@@ -49,13 +48,13 @@ type OverlayInitMeta = {
 /**
  * 截图会话（申请制）：同一时刻仅一个活跃会话
  *
- * 记录发起方 webContents id，完成/取消事件只定向发回该 webContents
+ * 冻结发起方或调用方裁决的具体 webContents，完成/取消事件只定向投递
  */
 type CaptureSession = {
   /** 主进程生成的会话 id，事件 payload 携带，消费方校验 */
   captureId: string
-  /** 发起方 webContents id；owner 已销毁或缺失时为 null */
-  ownerWebContentsId: number | null
+  /** 启动瞬间冻结的投递目标；目标销毁后只丢弃事件，不重新裁决 */
+  deliveryTarget: ScreenshotTarget | null
   /** 会话被取消或顶替时终止仍在运行的原生捕获 */
   captureAbortController: AbortController
   /** 调试标识，仅用于日志，不参与路由 */
@@ -76,6 +75,12 @@ app.once('before-quit', () => {
 
 /** 由 IPC service 注入，避免 screenshot.ts 与 service.ts 静态循环依赖 */
 let emitter: MainToRendererEmitter<ScreenshotContract> | null = null
+let screenshotTargetResolver: ScreenshotTargetResolver | null = null
+
+/** 注入无申请方截图的同步目标裁决；传 null 可恢复为无目标行为。 */
+export function setScreenshotTargetResolver(next: ScreenshotTargetResolver | null): void {
+  screenshotTargetResolver = next
+}
 
 export function setScreenshotEmitter(next: MainToRendererEmitter<ScreenshotContract>): void {
   emitter = next
@@ -119,9 +124,15 @@ export function getOverlayInitPayload(webContentsId: number): ScreenshotInitPayl
 /** 当前活跃截图会话，新申请作废旧会话 */
 let currentSession: CaptureSession | null = null
 
-export async function handleConfirmCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
-  const result = await cropCaptureForSession(displayId, rect)
-  if (!result)
+/** 截图启动、选区或保存期间阻止另一条采集流程抢占焦点。 */
+export function isCaptureOverlayOpen(): boolean {
+  return currentSession !== null || activeOverlayDisplayIds.size > 0
+}
+
+/** 确认当前选区；IPC 必须传入会话身份，主进程内部可省略。 */
+export async function handleConfirmCapture(displayId: number, rect: ScreenshotBounds, expectedCaptureId?: string): Promise<void> {
+  const result = await cropCaptureForSession(displayId, rect, expectedCaptureId)
+  if (!result || currentSession !== result.session)
     return
 
   clipboard.writeImage(nativeImage.createFromBuffer(result.cropped))
@@ -129,9 +140,10 @@ export async function handleConfirmCapture(displayId: number, rect: ScreenshotBo
   releaseSession(result.session)
 }
 
-export async function handleSaveCapture(displayId: number, rect: ScreenshotBounds): Promise<void> {
-  const result = await cropCaptureForSession(displayId, rect)
-  if (!result)
+/** 保存当前选区；会话被替换后不再弹出旧选区的保存对话框。 */
+export async function handleSaveCapture(displayId: number, rect: ScreenshotBounds, expectedCaptureId?: string): Promise<void> {
+  const result = await cropCaptureForSession(displayId, rect, expectedCaptureId)
+  if (!result || currentSession !== result.session)
     return
 
   const { canceled, filePath } = await dialog.showSaveDialog({
@@ -147,7 +159,11 @@ export async function handleSaveCapture(displayId: number, rect: ScreenshotBound
   cancelSession(result.session)
 }
 
-export function handleCancelCapture(): void {
+/** 取消指定会话；省略身份仅供主进程内部清理当前会话。 */
+export function handleCancelCapture(expectedCaptureId?: string): void {
+  if (expectedCaptureId !== undefined && currentSession?.captureId !== expectedCaptureId)
+    return
+
   closeAllOverlays()
   cancelCurrentSession()
 }
@@ -161,8 +177,11 @@ export function handleCancelCapture(): void {
 async function cropCaptureForSession(
   displayId: number,
   rect: ScreenshotBounds,
+  expectedCaptureId?: string,
 ): Promise<{ session: CaptureSession, cropped: Buffer } | null> {
   const session = currentSession
+  if (expectedCaptureId !== undefined && session?.captureId !== expectedCaptureId)
+    return null
   const capture = captures.get(displayId)
   if (!capture || !session)
     return null
@@ -179,7 +198,7 @@ async function cropCaptureForSession(
 }
 
 /**
- * 渲染端申请截图会话
+ * 申请截图会话；无渲染端 owner 时使用已注入的目标裁决
  *
  * @param options 截图选项（hideWindows / requester 调试标识）
  * @param owner 发起方 webContents，完成/取消事件只定向发回它
@@ -191,7 +210,7 @@ export async function startCapture(
 ): Promise<string> {
   return beginCaptureSession({
     captureId: randomUUID(),
-    ownerWebContentsId: owner?.id ?? null,
+    deliveryTarget: freezeScreenshotTarget(owner),
     captureAbortController: new AbortController(),
     requester: options?.requester,
   }, options)
@@ -336,16 +355,23 @@ async function beginCaptureSession(
   return session.captureId
 }
 
-/** 解析截图申请方，owner 已销毁时不再投递结果 */
+/** 解析冻结的投递目标；目标销毁后不重新裁决或投递给新窗口 */
 function resolveSessionWebContents(session: CaptureSession): Electron.WebContents | null {
-  if (session.ownerWebContentsId !== null) {
-    const wc = webContents.fromId(session.ownerWebContentsId)
-    return wc && !wc.isDestroyed()
-      ? wc
-      : null
-  }
+  const target = session.deliveryTarget
+  return target && !target.webContents.isDestroyed()
+    ? target.webContents
+    : null
+}
 
-  return null
+function freezeScreenshotTarget(owner?: Electron.WebContents): ScreenshotTarget | null {
+  const target = owner
+    ? { webContents: owner }
+    : screenshotTargetResolver?.()
+
+  if (!target)
+    return null
+
+  return { ...target }
 }
 
 /** 完成事件：携带 captureId 定向发给会话发起方（彻底废除广播） */
@@ -364,6 +390,9 @@ function emitCaptureResult(
     captureId: session.captureId,
     bytes: toIpcArrayBuffer(cropped),
     bounds: rect,
+    ...(session.deliveryTarget?.fallbackRole === undefined
+      ? {}
+      : { fallbackRole: session.deliveryTarget.fallbackRole }),
   }, target)
 }
 
@@ -386,6 +415,9 @@ function cancelSession(session: CaptureSession): void {
 
   emitTo('cancel', {
     captureId: session.captureId,
+    ...(session.deliveryTarget?.fallbackRole === undefined
+      ? {}
+      : { fallbackRole: session.deliveryTarget.fallbackRole }),
   }, target)
 }
 
@@ -671,3 +703,13 @@ function closeAllOverlays(): void {
   }
   dimmedWindows.splice(0)
 }
+
+/** 无渲染端申请方时的截图投递目标。 */
+export type ScreenshotTarget = {
+  webContents: Electron.WebContents
+  /** 消费方自行命名的角色；未提供时不启用兜底消费。 @default undefined */
+  fallbackRole?: string
+}
+
+/** 调用方在截图触发瞬间同步选择投递目标；未设置时保持无目标行为。 */
+export type ScreenshotTargetResolver = () => ScreenshotTarget | null

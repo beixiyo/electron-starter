@@ -3,17 +3,27 @@ import type { OAuthCallbackParams } from '@shared'
 import { resolve } from 'node:path'
 import { sendOAuthCallback } from '@ipc/services/oauth/service'
 import { APP_PROTOCOL, WindowType } from '@shared'
-import { app } from 'electron'
+import { app, dialog } from 'electron'
 import { ensureMainWindowReady } from './main-window-opener'
+import { isMacOSAtLeast } from './utils/macos-version'
 import { windowManager } from './window-manager'
 
 let reopenMainWindow: () => void = () => {}
+let startupReadyPromise: Promise<boolean> | null = null
 
 /**
  * 自定义 URL Scheme / 深链（用于 Apple 登录等回调）
+ *
+ * @param options 启动平台门禁；未传入最低版本时不限制 macOS 版本
+ * @default {}
  */
-export function initDeeplink(whenReady: () => void, openMainWindow: () => void): void {
+export function initDeeplink(
+  whenReady: () => void,
+  openMainWindow: () => void,
+  options: DeeplinkOptions = {},
+): void {
   reopenMainWindow = openMainWindow
+  startupReadyPromise = null
   /** Windows/Linux 冷启动时协议 URL 位于首个实例的 argv，而非 second-instance */
   const initialDeepLink = process.platform === 'darwin'
     ? undefined
@@ -45,15 +55,24 @@ export function initDeeplink(whenReady: () => void, openMainWindow: () => void):
       void handleDeepLinkUrl(findDeepLink(commandLine) ?? '')
     })
 
-    /** 创建主窗口，加载应用程序的其他部分，等等... */
-    app.whenReady().then(() => {
+    /** 先完成平台门禁，再创建主窗口和初始化其余应用服务 */
+    startupReadyPromise = app.whenReady().then(() => {
+      const minimumMacOS = options.minimumMacOS
+      if (minimumMacOS && !isMacOSSupported(minimumMacOS)) {
+        showUnsupportedMacOS(minimumMacOS)
+        return false
+      }
+
       whenReady()
-      if (initialDeepLink)
+      return true
+    })
+    void startupReadyPromise.then((isReady) => {
+      if (isReady && initialDeepLink)
         void handleDeepLinkUrl(initialDeepLink)
     })
   }
 
-  // Mac
+  /** macOS */
   app.on('open-url', (event, url) => {
     event.preventDefault()
     void handleDeepLinkUrl(url)
@@ -68,7 +87,10 @@ export function initDeeplink(whenReady: () => void, openMainWindow: () => void):
 async function handleDeepLinkUrl(url: string): Promise<void> {
   const callback = parseOAuthCallback(url)
 
-  await app.whenReady()
+  const isReady = await (startupReadyPromise ?? Promise.resolve(false))
+  if (!isReady)
+    return
+
   if (!windowManager.get(WindowType.MAIN))
     reopenMainWindow()
   const mainWindow = await ensureMainWindowReady()
@@ -149,4 +171,32 @@ async function navigateToLogin(mainWindow: Electron.BrowserWindow): Promise<void
 
   loginUrl.hash = '/login'
   await mainWindow.loadURL(loginUrl.toString())
+}
+
+/** 非 macOS 或未配置门槛时放行；版本判断只在 macOS 且配置了门槛时执行。 */
+function isMacOSSupported(minimumMacOS: MacOSVersion): boolean {
+  return process.platform !== 'darwin' || isMacOSAtLeast(minimumMacOS.major, minimumMacOS.minor)
+}
+
+function showUnsupportedMacOS(minimumMacOS: MacOSVersion): void {
+  dialog.showErrorBox(
+    'macOS Version Not Supported',
+    `This app requires macOS ${minimumMacOS.major}.${minimumMacOS.minor} or later.\n\nYour version: macOS ${process.getSystemVersion()}`,
+  )
+  app.quit()
+}
+
+export interface DeeplinkOptions {
+  /**
+   * macOS 启动最低版本；未配置时不限制启动版本
+   *
+   * @default undefined
+   */
+  minimumMacOS?: MacOSVersion
+}
+
+/** 可配置的 macOS 版本号，不绑定具体原生能力或业务功能。 */
+export interface MacOSVersion {
+  major: number
+  minor: number
 }

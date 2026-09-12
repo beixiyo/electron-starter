@@ -1,39 +1,40 @@
 import type { FocusPayload } from '@ipc/services/focus/contract'
-import type { VoiceImeReleaseResult, VoiceImeRendererStatusPayload } from '@shared'
-import type { ShortcutActionDefinition, ShortcutRuntimeEvent } from '@shared/shortcuts'
-import type { ShortcutRuntimeHandlers } from './shortcuts'
 
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { setIpcServiceErrorLogger } from '@ipc/core/service'
 import { focusToRenderer } from '@ipc/services/focus/toRenderer'
-import { sendHoldEndEvent, sendHoldStartEvent } from '@ipc/services/hold/toRenderer'
-import { createShortcutConfigService, notifyShortcutRuntimeChanged } from '@ipc/services/shortcut-config/service'
+import { createShortcutConfigService } from '@ipc/services/shortcut-config/service'
 import { startSystemPreferencesListener } from '@ipc/services/system-preferences/service'
 import { initAutoUpdater } from '@ipc/services/update/service'
+import { cancelVoiceImeSession, registerVoiceImeStartGuard, setVoiceImeTranscriptionDispatcher } from '@ipc/services/voice-ime/service'
+import { getVoiceImeForegroundWindowHost } from '@ipc/services/voice-ime/state'
 import { voiceImeToRenderer } from '@ipc/services/voice-ime/toRenderer'
-import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, HOLD_MIN_DURATION_MS, HOLD_SHORT_ERROR_MESSAGE, SHORTCUT_ACTIONS, WindowType } from '@shared'
+import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, WindowType } from '@shared'
 import { app, ipcMain, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
+import { hideGlobalToast, setGlobalToastNoticeTargetResolver } from './global-toast'
+import { bindGlobalEscapeConsumerToVisibility } from './escape-dismiss'
+import { GLOBAL_ESCAPE_PRIORITY } from './global-escape'
+import { voiceImeState } from './voice-ime-state'
 import { registerMainWindowOpener } from './main-window-opener'
 import { attachMainWindowCloseBehavior, initWindowQuitCleanup } from './window-lifecycle'
-import { injectTextToExternalInput } from './external-text-inject'
 import { checkFocusedTextInput } from './focus-check'
 import { createMainDiagnosticLogger, initAppLogging } from './logging'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
-import { ensureMicrophonePermissionOrExplain } from './permission-required'
 import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
-import { warmScreenshotOverlays } from './screenshot'
+import { isCaptureOverlayOpen, warmScreenshotOverlays } from './screenshot'
+import { recordingState } from './recording-state'
 import { initSelectionHook } from './selection'
-import { attachFnComboSuppression, holdStateManager, onShortcutRuntimeSyncRequested, reapplyShortcutRuntime, requestShortcutRuntimeSync } from './shortcuts'
-import { readShortcutBindings } from './store/shortcut-bindings'
+import { attachFnComboSuppression, onShortcutRuntimeSyncRequested, requestShortcutRuntimeSync } from './shortcuts'
 import { initTray } from './tray'
-import { createVoiceImeShortcutController } from './voice-ime-shortcut'
-import { createWindowsSequentially, getShortcutTestWindowBounds, logicalWindowManager, windowManager } from './window-manager'
+import { dispatchTranscription } from './voice-ime-inject'
+import { cancelPendingVoiceImeShortcut, handleShortcutAction, reapplyAppShortcutRuntime } from './shortcut-actions'
+import { createWindowsSequentially, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
 /** Linux: 自动检测 Wayland/X11，避免纯 Wayland 环境（如 Niri）下启动崩溃 */
@@ -56,6 +57,34 @@ registerMainWindowOpener(showOrCreateMainWindow)
 
 initDeeplink(() => {
   initAppLogging(ipcMain)
+  registerVoiceImeStartGuard(() => {
+    if (recordingState.isBusy && recordingState.snapshot.phase !== 'paused') return 'recording'
+    if (isCaptureOverlayOpen()) return 'capture'
+    return null
+  })
+  setGlobalToastNoticeTargetResolver(getVoiceImeForegroundWindowHost)
+  setVoiceImeTranscriptionDispatcher((payload, context) => dispatchTranscription(payload.text, {
+    sourceHost: payload.sourceHost,
+    sessionId: context.sessionId ?? undefined,
+  }))
+  const unbindVoiceImeDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.VOICE_IME, {
+    id: 'voice-ime-surface',
+    priority: GLOBAL_ESCAPE_PRIORITY.surface,
+    isActive: () => !voiceImeState.hasSession,
+    onEscape: () => {
+      const target = windowManager.get(WindowType.VOICE_IME)
+      if (target && !target.isDestroyed()) voiceImeToRenderer.emit('dismiss', { reason: 'escape' }, target)
+    },
+  })
+  const unbindToastDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.GLOBAL_TOAST, {
+    id: 'global-toast',
+    priority: GLOBAL_ESCAPE_PRIORITY.toast,
+    onEscape: hideGlobalToast,
+  })
+  app.once('before-quit', () => {
+    unbindVoiceImeDismissal()
+    unbindToastDismissal()
+  })
   initPowerEventCleanup()
   initPowerSaveBlockers()
   const ipcLog = createMainDiagnosticLogger('ipc.service')
@@ -92,7 +121,10 @@ initDeeplink(() => {
     /** 手动 native tap 录音管线（macOS 14.2+ 混入系统音频）：与会议录音共用 audio-recorder 子进程 */
     initNativeRecordingPipeline()
   }
-}, showOrCreateMainWindow)
+}, showOrCreateMainWindow, {
+  /** 自动启动的音频监测与系统时间格式 helper 最低支持 macOS 14.2。 */
+  minimumMacOS: { major: 14, minor: 2 },
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -167,79 +199,6 @@ function setupDevParentExitCleanup(): void {
 }
 
 // ─────────────────────────────────────────────
-/** Voice IME 共用逻辑 */
-// ─────────────────────────────────────────────
-
-function sendVoiceImeStatus(payload: VoiceImeRendererStatusPayload): void {
-  const win = windowManager.get(WindowType.VOICE_IME)
-  if (win && !win.isDestroyed()) {
-    voiceImeToRenderer.emit('status', payload, win)
-  }
-}
-
-/** 延迟隐藏 Voice IME 的定时器句柄，防止旧定时器把下一轮正在录音的窗口藏掉 */
-let voiceImeHideTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearVoiceImeHideTimer(): void {
-  if (voiceImeHideTimer) {
-    clearTimeout(voiceImeHideTimer)
-    voiceImeHideTimer = null
-  }
-}
-
-function hideVoiceImeLater(delayMs: number): void {
-  clearVoiceImeHideTimer()
-  voiceImeHideTimer = setTimeout(() => {
-    voiceImeHideTimer = null
-    /** 延迟期间用户可能再次长按开始了新录音，此时不能隐藏 */
-    if (!holdStateManager.isHolding(WindowType.VOICE_IME)) {
-      windowManager.hide(WindowType.VOICE_IME)
-    }
-  }, delayMs)
-}
-
-async function handleVoiceImeRelease(raw: unknown): Promise<void> {
-  const result = raw as VoiceImeReleaseResult
-  clearVoiceImeHideTimer()
-
-  if ('error' in result) {
-    const isShortHold = result.error === HOLD_SHORT_ERROR_MESSAGE
-    sendVoiceImeStatus({
-      status: 'idle',
-      error: isShortHold
-        ? HOLD_SHORT_ERROR_MESSAGE
-        : result.error,
-    })
-
-    if (isShortHold) {
-      /** 短按错误提示停留 1s 再隐藏 */
-      hideVoiceImeLater(1000)
-    }
-    else {
-      windowManager.hide(WindowType.VOICE_IME)
-    }
-    return
-  }
-
-  sendVoiceImeStatus({ status: 'processing', error: null })
-  windowManager.hide(WindowType.VOICE_IME)
-
-  const mockText = '[Test] Voice IME — 这是模拟语音识别结果'
-  const outcome = await injectTextToExternalInput(mockText)
-  if (outcome.method === 'clipboard') {
-    createMainDiagnosticLogger('voice-ime').warn(
-      'external-text.fallback',
-      'external text insertion fell back to clipboard paste',
-      { reason: outcome.fallbackReason },
-    )
-  }
-}
-
-// ─────────────────────────────────────────────
-/** Focus Demo / Shortcut Test — 通过 contract service 发送事件 */
-// ─────────────────────────────────────────────
-
-// ─────────────────────────────────────────────
 /** 窗口生命周期 */
 // ─────────────────────────────────────────────
 
@@ -267,6 +226,10 @@ function setupBrowserWindowLifecycle(): void {
     })
   })
 
+  app.on('before-quit', () => {
+    cancelPendingVoiceImeShortcut()
+    cancelVoiceImeSession('window-closed')
+  })
   initWindowQuitCleanup()
 }
 
@@ -344,136 +307,14 @@ function createMainWindow(): Electron.BrowserWindow {
   return mainWindow
 }
 
-/**
- * 快捷键 runtime
- */
-
-function reapplyAppShortcutRuntime(): void {
-  reapplyShortcutRuntime(readShortcutBindings(), SHORTCUT_ACTION_HANDLERS)
-  notifyShortcutRuntimeChanged()
-}
-
-function showShortcutTestWindow(
-  label: string,
-  triggerType: 'combo' | 'doublePress' | 'hold' | 'hotkey',
-): void {
-  logicalWindowManager.show(WindowType.SHORTCUT_TEST, {
-    payload: { triggerType, label },
-    bounds: getShortcutTestWindowBounds(),
-  })
-}
-
-/** hotkey 绑定的触发处理器，按 action id 索引 */
-const SHORTCUT_ACTION_HANDLERS: ShortcutRuntimeHandlers = {
-  recording: handleShortcutAction,
-  assistant: handleShortcutAction,
-  voiceDictation: handleShortcutAction,
-  bookmark: handleShortcutAction,
-}
-
-function handleShortcutAction(event: ShortcutRuntimeEvent): void {
-  switch (event.id) {
-    case 'recording':
-      showShortcutActionTestWindow('Recording', event)
-      return
-    case 'assistant':
-      showShortcutActionTestWindow('Assistant', event)
-      return
-    case 'voiceDictation':
-      handleVoiceDictationShortcut(event)
-      return
-    case 'bookmark':
-      showShortcutActionTestWindow('Bookmark', event)
-      return
-  }
-}
-
-function showShortcutActionTestWindow(label: string, event: ShortcutRuntimeEvent): void {
-  if (event.phase !== 'trigger') return
-
-  const { gesture } = event
-  showShortcutTestWindow(
-    `${label} (${formatKeyboardGestureLabel(gesture)})`,
-    getShortcutTestTriggerType(event),
-  )
-}
-
-function formatKeyboardGestureLabel(gesture: ShortcutRuntimeEvent['gesture']): string {
-  switch (gesture) {
-    case 'press':
-      return 'hotkey'
-    case 'doublePress':
-      return 'double hotkey'
-    case 'hold':
-      return 'hold hotkey'
-  }
-}
-
-function getShortcutTestTriggerType(event: ShortcutRuntimeEvent): 'combo' | 'doublePress' | 'hold' | 'hotkey' {
-  if (event.gesture === 'doublePress') return 'doublePress'
-  if (event.gesture === 'hold') return 'hold'
-  if (event.binding.chord.source === 'fn' && event.binding.chord.key !== 'Fn') return 'combo'
-  return 'hotkey'
-}
-
-function handleVoiceDictationShortcut(event: ShortcutRuntimeEvent): void {
-  const action: ShortcutActionDefinition | undefined = SHORTCUT_ACTIONS.find((item) => item.id === 'voiceDictation')
-  if (action?.activation === 'hold' || action?.activation === 'toggle') voiceImeShortcutController.handle(event, action.activation)
-}
-
-async function startVoiceImeFromShortcut(shouldContinue: () => boolean): Promise<void> {
-  if (holdStateManager.isHolding(WindowType.VOICE_IME)) return
-
-  if (!ensureMicrophonePermissionOrExplain('voice-ime')) return
-
-  if (!shouldContinue() || holdStateManager.isHolding(WindowType.VOICE_IME)) return
-
-  holdStateManager.startHold({
-    type: WindowType.VOICE_IME,
-    onRelease: handleVoiceImeRelease,
-  })
-
-  const win = windowManager.get(WindowType.VOICE_IME) || windowManager.create(WindowType.VOICE_IME)
-  if (win && !win.isVisible()) {
-    const config = windowManager.getMetadata(WindowType.VOICE_IME)?.config
-    if (config?.focusable) {
-      windowManager.show(WindowType.VOICE_IME)
-    }
-    else {
-      windowManager.showInactive(WindowType.VOICE_IME)
-    }
-  }
-
-  sendHoldStartEvent(WindowType.VOICE_IME)
-}
-
-function stopVoiceImeFromShortcut(activation: 'hold' | 'toggle'): void {
-  const holdState = holdStateManager.getHoldState(WindowType.VOICE_IME)
-  if (!holdState || !holdState.isHolding) return
-
-  if (activation === 'hold') {
-    const holdDuration = Date.now() - holdState.startTime
-    if (holdDuration < HOLD_MIN_DURATION_MS) {
-      holdStateManager.completeHold(WindowType.VOICE_IME, {
-        error: HOLD_SHORT_ERROR_MESSAGE,
-        duration: Math.max(holdDuration, 0),
-      })
-    }
-  }
-
-  sendHoldEndEvent(WindowType.VOICE_IME)
-}
-
-const voiceImeShortcutController = createVoiceImeShortcutController({
-  start: startVoiceImeFromShortcut,
-  stop: stopVoiceImeFromShortcut,
-  isRecording: () => holdStateManager.isHolding(WindowType.VOICE_IME),
-})
-
 function startFocusCheckPolling(): void {
   let prevKey = ''
 
   setInterval(async () => {
+    if (!logicalWindowManager.isActive(WindowType.FOCUS_NATIVE)) return
+    const demo = logicalWindowManager.getTargetWindow(WindowType.FOCUS_NATIVE)
+    if (!demo || demo.isDestroyed() || !demo.isVisible()) return
+
     const result = await checkFocusedTextInput()
     const isSelf = result.pid === process.pid
 

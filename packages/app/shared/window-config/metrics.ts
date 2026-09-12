@@ -41,18 +41,13 @@ export const SHADOW_WINDOW_INSETS = {
  */
 export const BOTTOM_FLOATING_CLEARANCE = 8
 
-/** VOICE_IME 各状态内容尺寸（不含 shadow inset） */
-export const VOICE_IME_CONTENT_SIZE = {
-  idle: { width: 280, height: 72 },
-  recording: { width: 280, height: 144 },
-  processing: { width: 280, height: 72 },
-} as const
+/** 语音浮层的阴影留白，主进程落位与渲染层测量共用。 */
+export const VOICE_IME_SHADOW_INSET = SHADOW_INSET
 
-/** VOICE_IME 各状态窗口尺寸（内容 + 2×SHADOW_INSET） */
-export const VOICE_IME_WINDOW_SIZE = {
-  idle: { width: VOICE_IME_CONTENT_SIZE.idle.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.idle.height + SHADOW_INSET * 2 },
-  recording: { width: VOICE_IME_CONTENT_SIZE.recording.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.recording.height + SHADOW_INSET * 2 },
-  processing: { width: VOICE_IME_CONTENT_SIZE.processing.width + SHADOW_INSET * 2, height: VOICE_IME_CONTENT_SIZE.processing.height + SHADOW_INSET * 2 },
+/** 语音浮层首次创建的兜底尺寸；挂载后按当前形态的实际内容调整。 */
+export const VOICE_IME_SIZE = {
+  width: 200 + VOICE_IME_SHADOW_INSET * 2,
+  height: 44 + VOICE_IME_SHADOW_INSET * 2,
 } as const
 
 /** 全局提示窗口为自身视觉留白预留的单侧边距 */

@@ -1,8 +1,8 @@
 /**
- * 主窗口的轻量导航栏，承载全局入口并保持 Flowtica 的 64px 导航节奏
+ * 主窗口的轻量导航栏，承载全局入口并保持 64px 导航宽度
  */
 import { NavLink, useLocation } from '@jl-org/react-router'
-import { Bell, Camera, DownloadCloud, Keyboard, Layers3, MessageSquareText, ScanLine } from 'lucide-react'
+import { Bell, Camera, DownloadCloud, Keyboard, Layers3, MessageSquareText, Mic, ScanLine } from 'lucide-react'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from 'utils'
@@ -10,6 +10,7 @@ import { cn } from 'utils'
 const NAV_ITEMS = [
   { key: 'recorder', path: '/recorder', Icon: Camera },
   { key: 'screenshotTest', path: '/screenshot-test', Icon: ScanLine },
+  { key: 'voiceInputTest', path: '/voice-input-test', Icon: Mic },
   { key: 'shortcuts', path: '/shortcuts', Icon: Keyboard },
   { key: 'notifyTest', path: '/notify-test', Icon: Bell },
   { key: 'globalToastTest', path: '/global-toast-test', Icon: MessageSquareText },
@@ -17,7 +18,7 @@ const NAV_ITEMS = [
 ] as const
 
 /**
- * Flowtica 风格的固定窄侧栏
+ * 固定宽度的窄侧栏
  *
  * 导航项本身只描述路由策略，窗口尺寸与页面内容仍由各自模块负责
  */

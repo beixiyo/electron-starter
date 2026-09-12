@@ -2,11 +2,16 @@ import type { PermissionRequiredPayload, PermissionRequiredReason } from '@ipc/s
 import { permissionService } from '@ipc/services/permission/service'
 import { WindowType } from '@shared'
 import { ensureMainWindowReady } from './main-window-opener'
-import { getPermissionStatus } from './permissions'
+import { getPermissionStatus, requestPermission } from './permissions'
 import { windowManager } from './window-manager'
 
-export function ensureMicrophonePermissionOrExplain(reason: PermissionRequiredReason): boolean {
-  if (getPermissionStatus('microphone') === 'granted') {
+/** 首次使用时请求系统麦克风权限；已经拒绝时转交应用内说明。 */
+export async function ensureMicrophonePermissionOrExplain(reason: PermissionRequiredReason): Promise<boolean> {
+  const currentStatus = getPermissionStatus('microphone')
+  const status = currentStatus === 'not-determined'
+    ? await requestPermission('microphone')
+    : currentStatus
+  if (status === 'granted') {
     return true
   }
 

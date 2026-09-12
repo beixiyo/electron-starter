@@ -1,5 +1,4 @@
 import { app } from 'electron'
-import { holdStateManager } from './hold'
 import { keyboardInputBackend } from './input'
 import { systemInputShortcutRuntimeBackend } from './input-runtime-backend'
 
@@ -10,9 +9,6 @@ app.on('will-quit', () => {
   if (!app.isReady()) {
     return
   }
-
-  /** 清理所有长按状态 */
-  holdStateManager.clearAll()
 
   /** 释放已触发的 hold 并摘掉输入订阅 */
   systemInputShortcutRuntimeBackend.reset()

@@ -21,8 +21,10 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
   const envDir = resolve(__dirname, './env')
   const env = loadEnv(mode, envDir, 'VITE_CSP_')
   const connectSources = (env.VITE_CSP_CONNECT_SRC ?? '').split(/[,\s]+/).filter(Boolean)
+  const dropConsole = !['development', 'test'].includes(mode)
 
   return {
+    base: '/',
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
     envDir,
     root: resolve(__dirname, './renderer'),
@@ -30,6 +32,7 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
     server: {
       port: 6580,
       host: '::',
+      strictPort: true,
       proxy: {
         /**
          * 与 packages/old_version 保持一致的代理配置
@@ -55,9 +58,10 @@ export const getRenderConfig: UserConfigFnObject = ({ mode }) => {
       target: 'esnext',
       sourcemap: mode === 'development',
       outDir: resolve(__dirname, './out/renderer'),
+      emptyOutDir: true,
       rolldownOptions: {
         output: {
-          minify: mode === 'production'
+          minify: dropConsole
             ? { compress: { dropConsole: true, dropDebugger: true } }
             : undefined,
         },

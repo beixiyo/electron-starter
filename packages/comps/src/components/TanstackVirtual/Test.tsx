@@ -545,7 +545,7 @@ function StickyHeaderDemo() {
       </div>
 
       <div className="flex w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-background3 bg-linear-to-b from-systemPurple/5 to-background3 to-50%">
-        <div className="flex h-11 shrink-0 items-center px-3 text-sm font-medium text-text">Ask 面板</div>
+        <div className="flex h-11 shrink-0 items-center px-3 text-sm font-medium text-text">Example panel</div>
 
         <TanstackVirtualList
           scrollRef={ bindScroller }

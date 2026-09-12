@@ -1,5 +1,7 @@
 /** 全局提示的定位、替换计时与过期测量保护 */
 
+import { EventEmitter } from 'node:events'
+import type { BrowserWindow } from 'electron'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setBounds = vi.fn()
@@ -12,11 +14,11 @@ const toastWindow = {
   setBounds,
   setIgnoreMouseEvents,
 }
-const voiceImeWindow = {
+const voiceImeWindow = Object.assign(new EventEmitter(), {
   isDestroyed: () => false,
   isVisible: () => true,
   getBounds,
-}
+})
 
 let voiceImeVisible = true
 
@@ -44,8 +46,14 @@ vi.mock('./window-manager', () => ({
     create: () => toastWindow,
     showInactive: vi.fn(),
     hide: vi.fn(),
+    getTargetWindow: (type: string) => type === 'voice-ime'
+      ? voiceImeVisible
+    ? voiceImeWindow
+    : undefined
+      : toastWindow,
   },
   windowManager: {
+    getMetadata: () => ({ config: { visibleContentInsets: { top: 30 } } }),
     get: (type: string) => {
       if (type === 'voice-ime') {
         return voiceImeVisible
@@ -69,6 +77,7 @@ const {
   getCurrentGlobalToast,
   hideGlobalToast,
   showGlobalToast,
+  setGlobalToastNoticeTargetResolver,
 } = await import('./global-toast')
 
 const emit = globalToastToRenderer.emit as unknown as ReturnType<typeof vi.fn>
@@ -93,6 +102,8 @@ describe('全局提示', () => {
     setIgnoreMouseEvents.mockClear()
     voiceImeVisible = true
     hideGlobalToast()
+    setGlobalToastNoticeTargetResolver(() => null)
+    voiceImeWindow.removeAllListeners()
     emit.mockClear()
   })
 
@@ -170,4 +181,35 @@ describe('全局提示', () => {
     applyGlobalToastMeasurement(staleToken, 460, 40)
     expect(lastBounds()).toEqual(currentBounds)
   })
+
+  it('锚定窗隐藏会收起常驻提示，替换到屏幕落点后旧锚不再拥有关闭权', () => {
+    showGlobalToast({ text: '处理失败', duration: 0 })
+    voiceImeWindow.emit('hide')
+    expect(getCurrentGlobalToast()).toBeNull()
+    expect(dismissCount()).toBe(1)
+
+    showGlobalToast({ text: '锚定提示', duration: 0 })
+    showGlobalToast({ text: '屏幕提示', duration: 0, placement: 'top' })
+    voiceImeWindow.emit('hide')
+    expect(getCurrentGlobalToast()?.text).toBe('屏幕提示')
+  })
+
+  it('前台登记窗口承载提示，并清除独立浮窗及后续过期测量', () => {
+    showGlobalToast({ text: '上一条独立提示', duration: 0 })
+    const oldToken = currentToken()
+    const host = Object.assign(new EventEmitter(), { isDestroyed: () => false, isVisible: () => true, isFocused: () => true }) as unknown as BrowserWindow
+    const detach = setGlobalToastNoticeTargetResolver(() => host)
+    setBounds.mockClear()
+
+    showGlobalToast({ text: '窗口内提示', duration: 0 })
+    expect(emit).toHaveBeenLastCalledWith('notice', expect.objectContaining({ text: '窗口内提示' }), host)
+    expect(getCurrentGlobalToast()).toBeNull()
+    applyGlobalToastMeasurement(oldToken, 999, 999)
+    expect(setBounds).not.toHaveBeenCalled()
+
+    hideGlobalToast()
+    expect(emit).toHaveBeenLastCalledWith('notice', null, host)
+    detach()
+  })
+
 })

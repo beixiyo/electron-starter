@@ -1,5 +1,7 @@
 import { SHADOW_INSET, WindowType } from '@shared'
 import { useTheme } from 'hooks'
+import { useEffect, useSyncExternalStore } from 'react'
+import { initVoiceImeStore, voiceImeStore } from '@/store/voiceImeStore'
 import { createRoot } from 'react-dom/client'
 import { cn } from 'utils'
 import { AppErrorBoundary } from '@/components/AppErrorBoundary'
@@ -14,6 +16,8 @@ initRendererDiagnostics()
 function MenuBarApp() {
   useTheme()
   useShortcutRuntime()
+  useEffect(() => initVoiceImeStore(), [])
+  const voiceState = useSyncExternalStore(voiceImeStore.subscribe, voiceImeStore.getSnapshot)
   useRoundedWindowHitTest(WindowType.MENUBAR, () => [
     getInsetWindowHitTestRegion(SHADOW_INSET, 16),
   ])
@@ -23,6 +27,19 @@ function MenuBarApp() {
     if (!exists)
       await window.$ipc.window.create(type)
     window.$ipc.window.show(type)
+  }
+
+  const startVoiceInput = async () => {
+    try {
+      const state = await window.$ipc.voiceIme.getActiveState()
+      if (state.phase === 'recording' && state.sessionId) await window.$ipc.voiceIme.stopSession(state.sessionId)
+      else if (state.phase === 'idle') await window.$ipc.voiceIme.startClickMode()
+      else return
+      await window.$ipc.window.hide(WindowType.MENUBAR)
+    }
+    catch (error) {
+      console.error('[voice-ime] failed to start from menu', error)
+    }
   }
 
   return (
@@ -51,13 +68,18 @@ function MenuBarApp() {
 
           <button
             type="button"
-            onClick={ () => showWindow(WindowType.VOICE_IME) }
+            onClick={ startVoiceInput }
+            disabled={ voiceState.phase === 'processing' }
             className={ cn(
               'text-left px-3 py-1.5 rounded-lg text-sm',
               'hover:bg-background2 transition-colors cursor-pointer',
             ) }
           >
-            Voice IME
+            { voiceState.phase === 'recording'
+              ? 'Finish Voice Input'
+              : voiceState.phase === 'processing'
+                ? 'Processing Voice Input'
+                : 'Start Voice Input' }
           </button>
 
           <button

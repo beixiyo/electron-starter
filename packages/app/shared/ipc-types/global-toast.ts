@@ -1,3 +1,5 @@
+import type { WindowType } from '../types/window'
+
 /**
  * 全局提示条的落点
  *
@@ -32,6 +34,8 @@ export type ShowGlobalToastOptions = {
    * `voice-ime` 下表示与语音输入窗的间距，其余位置表示与屏幕工作区边缘的距离
    */
   offset?: number
+  /** `voice-ime` 落点使用的锚定窗口；隐藏或销毁时同步收起提示。@default WindowType.VOICE_IME */
+  anchorWindowType?: WindowType
 }
 
 /** 主进程推给提示窗口的当前内容 */
