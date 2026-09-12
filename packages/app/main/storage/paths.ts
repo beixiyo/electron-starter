@@ -65,3 +65,20 @@ function splitStorageBasePath(basePath: string): string[] {
     ? basePath.split('/').filter(Boolean)
     : []
 }
+
+/**
+ * 清洗会进入文件名或目录名的业务 id，避免路径穿越和平台非法字符。
+ */
+export function sanitizeStorageSegment(
+  value: string,
+  options: {
+    /** 是否允许 ownerId 这类 key 保留冒号。 */
+    allowColon?: boolean
+  } = {},
+): string {
+  const unsafeChars = options.allowColon
+    ? /[^a-zA-Z0-9_:-]/g
+    : /[^a-zA-Z0-9_-]/g
+
+  return value.replace(unsafeChars, '_')
+}

@@ -15,6 +15,8 @@ import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, HOLD_MIN_DURATION_MS, HOLD_SHOR
 import { app, ipcMain, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
+import { registerMainWindowOpener } from './main-window-opener'
+import { attachMainWindowCloseBehavior, initWindowQuitCleanup } from './window-lifecycle'
 import { injectTextToExternalInput } from './external-text-inject'
 import { checkFocusedTextInput } from './focus-check'
 import { createMainDiagnosticLogger, initAppLogging } from './logging'
@@ -50,6 +52,7 @@ if (process.platform === 'darwin') {
 
 setupHttpCachePolicy()
 setupDevParentExitCleanup()
+registerMainWindowOpener(showOrCreateMainWindow)
 
 initDeeplink(() => {
   initAppLogging(ipcMain)
@@ -264,14 +267,7 @@ function setupBrowserWindowLifecycle(): void {
     })
   })
 
-  app.on('before-quit', () => {
-    const windows = windowManager.getAll()
-    windows.forEach((window) => {
-      if (!window.isDestroyed()) {
-        window.destroy()
-      }
-    })
-  })
+  initWindowQuitCleanup()
 }
 
 /**
@@ -288,17 +284,17 @@ function setupAppActivation(): void {
 }
 
 /** 主窗口存活则前置显示，已销毁（如 macOS 关闭主窗后）则重建——tray 与 Dock activate 共用 */
-function showOrCreateMainWindow(): void {
+function showOrCreateMainWindow(): Electron.BrowserWindow | null {
   const mainWindow = windowManager.get(WindowType.MAIN)
   if (mainWindow && !mainWindow.isDestroyed()) {
     windowManager.show(WindowType.MAIN)
-    return
+    return mainWindow
   }
 
-  createMainWindow()
+  return createMainWindow()
 }
 
-function createMainWindow(): void {
+function createMainWindow(): Electron.BrowserWindow {
   const mainWindow = windowManager.create(WindowType.MAIN, {
     ...(process.platform === 'darwin'
       ? {
@@ -310,6 +306,8 @@ function createMainWindow(): void {
       ? { icon }
       : {}),
   })!
+
+  attachMainWindowCloseBehavior(mainWindow)
 
   /**
    * 主窗创建即显示（见 PHYSICAL_WINDOW_CONFIGS[MAIN]），首帧由 index.html 内的静态 splash 提供；
@@ -342,6 +340,8 @@ function createMainWindow(): void {
       return { action: 'deny' }
     }
   })
+
+  return mainWindow
 }
 
 /**

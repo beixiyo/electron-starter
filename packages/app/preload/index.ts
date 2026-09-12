@@ -1,3 +1,9 @@
+import { diagnosticLogsClient } from '@ipc/services/diagnostic-logs/client'
+import { navigationClient } from '@ipc/services/navigation/client'
+import { sessionClient } from '@ipc/services/session/client'
+import { powerClient } from '@ipc/services/power/client'
+import { clientEnvClient } from '@ipc/services/client-env/client'
+import { clipboardClient } from '@ipc/services/clipboard/client'
 import { electronAPI } from '@electron-toolkit/preload'
 import { audioLabClient } from '@ipc/services/audio-lab/client'
 import { focusClient } from '@ipc/services/focus/client'
@@ -22,6 +28,13 @@ import { exposeLogBridge, JL_LOG_BRIDGE_KEY, JL_LOG_IPC_CHANNEL } from '@jl-org/
 import { contextBridge, ipcRenderer } from 'electron'
 
 export const ipc = {
+  diagnosticLogs: diagnosticLogsClient,
+  clipboard: clipboardClient,
+  clientEnv: clientEnvClient,
+  power: powerClient,
+  session: sessionClient,
+  navigation: navigationClient,
+
   audioLab: audioLabClient,
   media: mediaClient,
   window: windowClient,

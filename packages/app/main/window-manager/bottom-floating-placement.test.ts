@@ -20,6 +20,7 @@ const display = vi.hoisted(() => ({
 const harness = vi.hoisted(() => ({
   /** 每次 `new BrowserWindow` 收到的构造参数 */
   constructorOptions: [] as Record<string, unknown>[],
+  cursor: { x: 0, y: 0 },
 }))
 
 vi.mock('electron', () => {
@@ -29,8 +30,18 @@ vi.mock('electron', () => {
     }
 
     static getFocusedWindow = () => null
-    webContents = { on: vi.fn(), isDestroyed: () => false, insertCSS: vi.fn(() => Promise.resolve()) }
+    webContents = {
+      on: vi.fn(),
+      once: vi.fn(),
+      off: vi.fn(),
+      removeListener: vi.fn(),
+      isDestroyed: () => false,
+      insertCSS: vi.fn(() => Promise.resolve()),
+    }
     on = vi.fn()
+    once = vi.fn()
+    off = vi.fn()
+    removeListener = vi.fn()
     isDestroyed = () => false
     setAlwaysOnTop = vi.fn()
     setMenuBarVisibility = vi.fn()
@@ -46,8 +57,10 @@ vi.mock('electron', () => {
     screen: {
       getPrimaryDisplay: () => display,
       getAllDisplays: () => [display],
-      getCursorScreenPoint: () => ({ x: 0, y: 0 }),
-      getDisplayNearestPoint: () => display,
+      getCursorScreenPoint: () => harness.cursor,
+      getDisplayNearestPoint: (point: { x: number }) => point.x < 0
+        ? { ...display, id: 2, workArea: { x: -800, y: 0, width: 800, height: 600 }, workAreaSize: { width: 800, height: 600 } }
+        : display,
     },
   }
 })
@@ -135,4 +148,15 @@ describe('可见内容留白与系统边界收敛的接线', () => {
 
     expect(harness.constructorOptions.at(-1)?.enableLargerThanScreen).toBeFalsy()
   })
+})
+
+it('恢复大屏上的绝对位置时，不按光标所在小屏缩小保存尺寸', () => {
+  harness.cursor = { x: -400, y: 200 }
+  try {
+    createBrowserWindow({ ...PHYSICAL_WINDOW_CONFIGS[WindowType.MAIN], width: 1400, height: 900, position: { x: 200, y: 100 } }, undefined, WindowType.MAIN)
+    expect(harness.constructorOptions.at(-1)).toMatchObject({ x: 200, y: 100, width: 1400, height: 900 })
+  }
+  finally {
+    harness.cursor = { x: 0, y: 0 }
+  }
 })

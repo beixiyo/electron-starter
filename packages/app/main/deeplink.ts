@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { sendOAuthCallback } from '@ipc/services/oauth/service'
 import { APP_PROTOCOL, WindowType } from '@shared'
 import { app } from 'electron'
+import { ensureMainWindowReady } from './main-window-opener'
 import { windowManager } from './window-manager'
 
 let reopenMainWindow: () => void = () => {}
@@ -68,11 +69,9 @@ async function handleDeepLinkUrl(url: string): Promise<void> {
   const callback = parseOAuthCallback(url)
 
   await app.whenReady()
-  let mainWindow = windowManager.get(WindowType.MAIN)
-  if (!mainWindow || mainWindow.isDestroyed()) {
+  if (!windowManager.get(WindowType.MAIN))
     reopenMainWindow()
-    mainWindow = windowManager.get(WindowType.MAIN)
-  }
+  const mainWindow = await ensureMainWindowReady()
 
   if (!mainWindow || mainWindow.isDestroyed()) {
     console.warn('[deeplink] main window is unavailable')
@@ -136,11 +135,6 @@ function readQueryParam(url: URL, name: string): string | undefined {
  * 回调先进入 pending；loadURL 重建 renderer 后由登录页重新注册并领取
  */
 async function navigateToLogin(mainWindow: Electron.BrowserWindow): Promise<void> {
-  if (mainWindow.webContents.isLoadingMainFrame()) {
-    await new Promise<void>((resolve) => {
-      mainWindow.webContents.once('did-finish-load', () => resolve())
-    })
-  }
 
   if (mainWindow.isDestroyed())
     return

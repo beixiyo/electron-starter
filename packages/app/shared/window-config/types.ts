@@ -15,10 +15,37 @@ export type WindowPosition =
   | { x: number; y: number } // 自定义坐标
 
 /**
+ * 窗口落在哪块屏
+ *
+ * Electron 没有直接表示当前焦点屏的 API，`cursor` 用光标所在屏作为通用代理。
+ * 指定屏已拔掉，或没有可用的聚焦窗口时，解析层会回落到光标所在屏
+ */
+export type WindowDisplayTarget =
+  | 'cursor'
+  | 'primary'
+  | 'focused-window'
+  | { displayId: number }
+
+/**
  * 窗口配置接口
  */
 export interface WindowConfig extends BrowserWindowConstructorOptions {
   position?: WindowPosition
+  /**
+   * 创建窗口以及按配置重新落位时使用的目标屏
+   *
+   * @default 'cursor'
+   */
+  targetDisplay?: WindowDisplayTarget
+  /**
+   * 每次展示时是否按 `targetDisplay` 重新计算预设位置
+   *
+   * 对不可拖动且位置完全由预设决定的窗口应设为 true；可拖动窗口应保持 false，
+   * 避免展示时覆盖用户上次摆放的位置
+   *
+   * @default false
+   */
+  repositionOnShow?: boolean
   /**
    * 透明窗口中，可见内容相对 BrowserWindow 四边的留白
    *

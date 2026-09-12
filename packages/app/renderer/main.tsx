@@ -5,12 +5,14 @@ import { initRendererDiagnostics } from '@/logging'
 import { installWebIpcShim } from '@/utils/ipcWebShim'
 
 import App from './App'
+import { initMainNavigation } from './main-navigation'
 import '@/tailwind.css'
 import '@/locales'
 
 /** 必须在任何业务模块访问 $ipc 之前执行：web 下给 window.$ipc 挂 no-op 代理，避免裸 $ipc 抛 ReferenceError */
 installWebIpcShim()
 initRendererDiagnostics()
+initMainNavigation()
 
 const queryClient = new QueryClient({
   defaultOptions: {

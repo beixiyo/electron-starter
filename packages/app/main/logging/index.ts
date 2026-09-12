@@ -9,6 +9,15 @@ import { join } from 'node:path'
 /** 日志根目录保留的最近 session 目录数（含当前 session） */
 const MAX_SESSION_LOG_DIRS = 100
 
+/** 错误对象上允许写入日志的自有属性白名单 */
+const ERROR_DETAIL_KEYS = ['code', 'status', 'statusCode', 'errno', 'syscall'] as const
+
+/** `cause` 链最大展开层数 */
+const MAX_ERROR_CAUSE_DEPTH = 3
+
+/** 单条错误文本写入日志的长度上限 */
+const MAX_DETAIL_LENGTH = 4000
+
 let logger: NodeLogger | null = null
 let sessionId: string | null = null
 let stopRendererLogListener: (() => void) | null = null
@@ -176,7 +185,7 @@ function writeDiagnosticLog(
       getAppLogger().warn(message, config)
       return
     case 'error':
-      getAppLogger().error(message, error, config)
+      getAppLogger().error(message, toErrorDetail(error), config)
       return
     case 'debug':
       getAppLogger().debug(message, config)
@@ -184,6 +193,87 @@ function writeDiagnosticLog(
     case 'log':
       getAppLogger().log(message)
   }
+}
+
+/**
+ * 把任意抛出物转成可 JSON 序列化的诊断对象
+ *
+ * Error 的 name、message、stack 都是不可枚举属性，且错误对象可能附带响应体、请求头等
+ * 用户数据。这里只保留定位错误所需字段，并限制 cause 链深度，避免日志泄露或失控膨胀
+ */
+export function toErrorDetail(error: unknown): unknown {
+  return toErrorDetailAtDepth(error, 0)
+}
+
+function toErrorDetailAtDepth(error: unknown, depth: number): unknown {
+  if (error == null)
+    return error
+
+  if (typeof error !== 'object') {
+    if (typeof error === 'string')
+      return truncate(error)
+
+    return String(error)
+  }
+
+  const source = error as Record<string, unknown>
+  const detail: Record<string, unknown> = { name: readString(source, 'name') ?? getDefaultErrorName(error) }
+
+  const message = readString(source, 'message')
+  if (message !== undefined)
+    detail.message = message
+
+  const stack = readString(source, 'stack')
+  if (stack !== undefined)
+    detail.stack = stack
+
+  for (const key of ERROR_DETAIL_KEYS) {
+    const value = readSafeProperty(source, key)
+    if (value === undefined)
+      continue
+
+    if (typeof value === 'string')
+      detail[key] = truncate(value)
+    else if (typeof value === 'number' || typeof value === 'boolean')
+      detail[key] = value
+  }
+
+  const cause = readSafeProperty(source, 'cause')
+  if (cause !== undefined && depth < MAX_ERROR_CAUSE_DEPTH)
+    detail.cause = toErrorDetailAtDepth(cause, depth + 1)
+
+  return detail
+}
+
+function readString(source: Record<string, unknown>, key: string): string | undefined {
+  const value = readSafeProperty(source, key)
+  if (typeof value === 'string')
+    return truncate(value)
+
+  return undefined
+}
+
+function getDefaultErrorName(error: object): string {
+  if (error instanceof Error)
+    return 'Error'
+
+  return 'ThrownValue'
+}
+
+function readSafeProperty(source: Record<string, unknown>, key: string): unknown {
+  try {
+    return source[key]
+  }
+  catch {
+    return undefined
+  }
+}
+
+function truncate(value: string): string {
+  if (value.length <= MAX_DETAIL_LENGTH)
+    return value
+
+  return `${value.slice(0, MAX_DETAIL_LENGTH)}...`
 }
 
 function getSessionId(): string {

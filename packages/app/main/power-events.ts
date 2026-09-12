@@ -1,4 +1,5 @@
 import type { VoiceImeCancelPayload } from '@ipc/services/voice-ime/contract'
+import { emitPowerEvent } from '@ipc/services/power/service'
 import { voiceImeToRenderer } from '@ipc/services/voice-ime/toRenderer'
 import { WindowType } from '@shared'
 import { powerMonitor } from 'electron'
@@ -32,6 +33,7 @@ export function initPowerEventCleanup(): void {
 }
 
 function cancelVoiceImeSession(reason: VoiceImeCancelPayload['reason']): void {
+  const at = new Date().toISOString()
   const win = windowManager.get(WindowType.VOICE_IME)
 
   holdStateManager.discardHold(WindowType.VOICE_IME)
@@ -44,4 +46,5 @@ function cancelVoiceImeSession(reason: VoiceImeCancelPayload['reason']): void {
   if (reason === 'resume' || reason === 'unlock-screen') requestShortcutRuntimeSync()
 
   log.info('voice-ime.cancelled', 'voice IME cancelled for power event', { reason })
+  emitPowerEvent(reason, at)
 }

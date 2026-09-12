@@ -4,6 +4,7 @@ import { logicalWindowService } from '@ipc/services/logical-window/service'
 import { LOGICAL_WINDOW_REGISTRY } from '@shared'
 import { clearCurrentLogicalWindowRoute, getCurrentLogicalWindowRoute, nextLogicalWindowRouteToken, setCurrentLogicalWindowRoute } from './logical-window-state'
 import { windowManager } from './window-manager'
+import type { WindowShowOptions } from './window-manager'
 
 /**
  * 逻辑窗口管理器
@@ -49,7 +50,9 @@ class LogicalWindowManager {
   show(type: WindowType, options: LogicalWindowShowOptions = {}): BrowserWindow | null {
     if (!this.isPooled(type)) {
       const win = windowManager.create(type)
-      windowManager.show(type, options.autoFocus ?? true)
+      if (options.bounds)
+        windowManager.setBounds(type, options.bounds, options.animateBounds ?? false)
+      windowManager.show(type, this.resolveShowOptions(options))
       return win
     }
 
@@ -254,10 +257,22 @@ class LogicalWindowManager {
     this.emitRoute(win, route)
 
     if (options.show) {
-      windowManager.show(entry.pool, options.autoFocus ?? true)
+      windowManager.show(entry.pool, this.resolveShowOptions(options))
     }
 
     return win
+  }
+
+  /** 将逻辑窗口展示参数传给物理窗口，保留调用方的显式落位 */
+  private resolveShowOptions(options: LogicalWindowShowOptions): WindowShowOptions {
+    return {
+      autoFocus: options.autoFocus,
+      presentWhenLoaded: options.presentWhenLoaded,
+      /** 显式 bounds 属于调用方落位策略，不再用管理器预设覆盖 */
+      reposition: options.bounds
+        ? false
+        : options.reposition,
+    }
   }
 
   /**
@@ -350,7 +365,7 @@ export const logicalWindowManager = new LogicalWindowManager()
  * bounds / animateBounds 会作用到真实 BrowserWindow；池化窗口场景下，
  * 这意味着改变的是承载它的池窗口
  */
-export type LogicalWindowShowOptions = {
+export type LogicalWindowShowOptions = Pick<WindowShowOptions, 'reposition' | 'presentWhenLoaded'> & {
   bounds?: Partial<WindowBounds>
   /**
    * 发送给池窗口 renderer 的业务数据

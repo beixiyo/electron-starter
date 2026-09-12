@@ -5,6 +5,8 @@ import type { BrowserWindowConstructorOptions } from 'electron'
 import { app, BrowserWindow, screen } from 'electron'
 import { join, resolve } from 'node:path'
 import { attachWindowDiagnostics } from '../logging/window-diagnostics'
+import { trackWindowReadiness } from '../window-readiness'
+import { resolveTargetDisplay } from './display-target'
 import { DEFAULT_WINDOW_SIZE, WINDOW_POSITION_MARGINS } from './window-position-constants'
 
 export function createBrowserWindow(
@@ -22,16 +24,26 @@ export function createBrowserWindow(
     macFullscreenAuxiliary,
     alwaysOnTopLevel: _alwaysOnTopLevel,
     visibleContentInsets: _visibleContentInsets,
+    targetDisplay,
+    repositionOnShow: _repositionOnShow,
     ...browserWindowConfig
   } = config
 
   const alwaysOnTopLevel = resolveAlwaysOnTopLevel(config)
-  const { width, height } = clampWindowSize(rawWidth, rawHeight)
+  /** 绝对位置（包括持久化恢复）以落点屏限制尺寸，不能被光标所在小屏缩小 */
+  const display = typeof position === 'object'
+    ? screen.getDisplayNearestPoint({
+        x: position.x + (rawWidth ?? DEFAULT_WINDOW_SIZE.width) / 2,
+        y: position.y + (rawHeight ?? DEFAULT_WINDOW_SIZE.height) / 2,
+      })
+    : resolveTargetDisplay(targetDisplay)
+  const { width, height } = clampWindowSize(rawWidth, rawHeight, display)
   const { x, y } = calculateWindowPosition({
     position,
     width,
     height,
     visibleContentInsets: resolveVisibleContentInsets(config),
+    display,
   })
 
   const browserWindowOptions: BrowserWindowConstructorOptions = {
@@ -89,6 +101,7 @@ export function createBrowserWindow(
   }
 
   const window = new BrowserWindow(browserWindowOptions)
+  trackWindowReadiness(window)
   attachWindowDiagnostics(window, windowType)
   applyMacFullscreenAuxiliary(window, macFullscreenAuxiliary)
 
@@ -183,9 +196,9 @@ function applyMacFullscreenAuxiliary(window: BrowserWindow, enabled?: boolean): 
 function clampWindowSize(
   width = DEFAULT_WINDOW_SIZE.width,
   height = DEFAULT_WINDOW_SIZE.height,
+  display: Electron.Display = screen.getPrimaryDisplay(),
 ): { width: number; height: number } {
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
 
   const horizontalMargin = WINDOW_POSITION_MARGINS.standard * 2
   const verticalMargin = WINDOW_POSITION_MARGINS.standard * 2
@@ -228,11 +241,11 @@ export function calculateWindowPosition(
     width = DEFAULT_WINDOW_SIZE.width,
     height = DEFAULT_WINDOW_SIZE.height,
     visibleContentInsets = {},
+    display = screen.getPrimaryDisplay(),
   } = options
 
-  const primaryDisplay = screen.getPrimaryDisplay()
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize
-  const { x: screenX, y: screenY } = primaryDisplay.workArea
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
+  const { x: screenX, y: screenY } = display.workArea
   const {
     top: insetTop = 0,
     right: insetRight = 0,
@@ -309,4 +322,10 @@ export type CalculateWindowPositionOptions = {
    * @default 四边皆 0
    */
   visibleContentInsets?: Partial<WindowInsets>
+  /**
+   * 预设位相对哪块屏计算
+   *
+   * @default 系统主屏
+   */
+  display?: Electron.Display
 }

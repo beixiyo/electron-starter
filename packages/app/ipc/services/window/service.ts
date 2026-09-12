@@ -1,10 +1,14 @@
 import type { WindowBounds, WindowConfig } from '@shared'
 import type { WindowContract } from './contract'
 import { createIpcService } from '@ipc/core'
+import { isDevToolsEnabled } from '@main/devtools'
 import { holdStateManager } from '@main/shortcuts'
 import { getShortcutTestWindowBounds, logicalWindowManager, windowManager } from '@main/window-manager'
-import { WindowType } from '@shared'
-import { shell } from 'electron'
+import { resolveAlwaysOnTopLevel, WindowType } from '@shared'
+import { BrowserWindow, shell } from 'electron'
+
+/** 只还原本服务确实降低过层级的窗口，销毁后自动释放记录 */
+const imeReleasedWindows = new WeakMap<BrowserWindow, () => void>()
 
 export const windowService = createIpcService<WindowContract>('window', {
   mainHandle: {
@@ -116,6 +120,52 @@ export const windowService = createIpcService<WindowContract>('window', {
       return { success }
     },
 
+    /** 池化逻辑窗口只能释放自己的占用，不能关闭供其他角色复用的物理窗口 */
+    close: async (_event, type) => ({
+      success: logicalWindowManager.isPooled(type)
+        ? logicalWindowManager.hide(type)
+        : windowManager.close(type),
+    }),
+
+    minimize: async (_event, type) => ({ success: !!logicalWindowManager.getTargetWindow(type) && windowManager.minimize(logicalWindowManager.resolvePhysicalType(type)) }),
+
+    toggleFullScreen: async (_event, type) => ({ success: !!logicalWindowManager.getTargetWindow(type) && windowManager.toggleFullScreen(logicalWindowManager.resolvePhysicalType(type)) }),
+
+    whenReady: async (_event, type) => ({ success: await windowManager.whenReady(logicalWindowManager.resolvePhysicalType(type)) }),
+
+    setWindowButtonVisibility: async (event, visible) => {
+      const win = BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender)
+      if (process.platform !== 'darwin' || !win || win.isDestroyed())
+        return { success: false }
+      win.setWindowButtonVisibility(visible)
+      return { success: true }
+    },
+
+    setImeComposing: async (event, composing) => {
+      const win = BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender)
+      if (process.platform !== 'darwin' || !win || win.isDestroyed())
+        return { success: false }
+      if (composing && win.isAlwaysOnTop() && !imeReleasedWindows.has(win)) {
+        win.setAlwaysOnTop(false)
+        const restore = () => restoreImeWindowLevel(win)
+        imeReleasedWindows.set(win, restore)
+        win.once('blur', restore)
+        win.once('closed', restore)
+      }
+      else if (!composing) {
+        restoreImeWindowLevel(win)
+      }
+      return { success: true }
+    },
+
+    openDevTools: async (event) => {
+      const sender = (event as Electron.IpcMainInvokeEvent).sender
+      if (!isDevToolsEnabled() || sender.isDestroyed())
+        return { success: false }
+      sender.openDevTools({ mode: 'detach' })
+      return { success: true }
+    },
+
     isVisible: async (_event, type: WindowType) => {
       const visible = logicalWindowManager.isVisible(type)
       return { visible }
@@ -216,4 +266,23 @@ function assertMainWindowSender(event: unknown): void {
 
   if (!mainWindow || mainWindow.isDestroyed() || senderId !== mainWindow.webContents.id)
     throw new Error('External OAuth URL must be opened by the main window')
+}
+
+/** 合成结束或窗口失焦时，恢复该窗口声明的置顶层级 */
+function restoreImeWindowLevel(win: BrowserWindow): void {
+  const restore = imeReleasedWindows.get(win)
+  if (!restore)
+    return
+  imeReleasedWindows.delete(win)
+  win.off('blur', restore)
+  win.off('closed', restore)
+  if (win.isDestroyed())
+    return
+  const type = windowManager.getAllTypes().find(type => windowManager.get(type) === win)
+  const config = type
+    ? windowManager.getMetadata(type)?.config
+    : undefined
+  if (!win.isVisible() && config?.setAlwaysOnTopOnShow)
+    return
+  win.setAlwaysOnTop(true, resolveAlwaysOnTopLevel(config ?? {}))
 }

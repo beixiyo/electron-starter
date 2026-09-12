@@ -10,6 +10,21 @@ export type WindowContract = IpcContract<{
     hide: (type: WindowType) => { success: boolean }
     toggle: (type: WindowType) => { success: boolean, visible: boolean }
     destroy: (type: WindowType) => { success: boolean }
+    /** 关闭窗口，遵守该窗口的 close 拦截策略 */
+    close: (type: WindowType) => { success: boolean }
+    /** 最小化窗口 */
+    minimize: (type: WindowType) => { success: boolean }
+    /** 切换原生全屏 */
+    toggleFullScreen: (type: WindowType) => { success: boolean }
+    /** 等待现有窗口首屏加载完成 */
+    whenReady: (type: WindowType) => { success: boolean }
+    /** 调整调用方窗口的系统按钮可见性 */
+    setWindowButtonVisibility: (visible: boolean) => { success: boolean }
+    /** 输入法组字期间临时降低调用方窗口层级 */
+    setImeComposing: (composing: boolean) => { success: boolean }
+    /** 按统一开发工具门禁打开调用方窗口的调试器 */
+    openDevTools: () => { success: boolean }
+
     isVisible: (type: WindowType) => { visible: boolean }
     exists: (type: WindowType) => { exists: boolean }
     getMetadata: (type: WindowType) => { metadata: WindowMetadata | undefined }

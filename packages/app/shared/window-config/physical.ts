@@ -72,6 +72,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: false,
     htmlPath: 'windows/voice-ime/index.html',
     show: false,
+    repositionOnShow: true,
     macFullscreenAuxiliary: true,
     openDevTools: false,
   },
@@ -96,6 +97,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     show: true,
     initialUrl: 'about:blank',
     useAppPreload: false,
+    targetDisplay: 'focused-window',
   },
 
   [WindowType.MENUBAR]: {
@@ -115,6 +117,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: false,
     htmlPath: 'windows/menubar/index.html',
     show: false,
+    repositionOnShow: false,
     openDevTools: false,
   },
 
@@ -145,6 +148,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: false,
     htmlPath: 'windows/global-toast/index.html',
     show: false,
+    repositionOnShow: false,
     macFullscreenAuxiliary: true,
     openDevTools: false,
   },
@@ -164,6 +168,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: false,
     htmlPath: 'windows/floating-status-pool/index.html',
     show: false,
+    repositionOnShow: true,
     openDevTools: false,
   },
 
@@ -244,6 +249,7 @@ export const PHYSICAL_WINDOW_CONFIGS = {
     hasShadow: true,
     htmlPath: 'windows/permission-drag-guide/index.html',
     show: false,
+    repositionOnShow: false,
     /** 用户可能在全屏 App 里操作系统设置；同时带来 canJoinAllSpaces，Stage Manager 下不会被收走 */
     macFullscreenAuxiliary: true,
     openDevTools: false,

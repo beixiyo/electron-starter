@@ -1,10 +1,12 @@
 import { isObj } from '@jl-org/tool'
-import type { WindowBounds, WindowConfig, WindowInsets, WindowMetadata } from '@shared'
+import type { WindowBounds, WindowConfig, WindowDisplayTarget, WindowInsets, WindowMetadata, WindowPosition } from '@shared'
 import { clampWindowBounds, PHYSICAL_WINDOW_CONFIGS, resolveAlwaysOnTopLevel, resolveVisibleContentInsets, WindowType } from '@shared'
 import type { BrowserWindow } from 'electron'
 import { screen } from 'electron'
+import { waitForWindowReady } from '../window-readiness'
 import { getSavedBounds, saveBounds } from './bounds-store'
-import { createBrowserWindow } from './window-factory'
+import { clampWindowBoundsToDisplay, getDisplayOfWindow, moveWindowToBounds, resolveTargetDisplay } from './display-target'
+import { calculateWindowPosition, createBrowserWindow } from './window-factory'
 
 /**
  * 空闲销毁目标：仅「冷」窗口（MENUBAR / 会议浮窗池）
@@ -20,10 +22,17 @@ const IDLE_DESTROY_WINDOW_TYPES: ReadonlySet<WindowType> = new Set([
 /** 隐藏后驻留超过该时长即销毁，释放常驻渲染进程 */
 const IDLE_DESTROY_DELAY_MS = 20 * 60 * 1000
 
+/** 页面加载异常或卡住时的展示兜底时长 */
+const PRESENT_FALLBACK_MS = 3000
+
 class WindowManager {
   private windows: Map<WindowType, BrowserWindow> = new Map()
   private metadata: Map<WindowType, WindowMetadata> = new Map()
   private idleDestroyTimers: Map<WindowType, ReturnType<typeof setTimeout>> = new Map()
+  /** 正在等待首屏加载的展示，按窗口实例保存以避免旧窗口回调影响新窗口 */
+  private pendingPresent: Map<WindowType, PendingPresentation> = new Map()
+  /** 按窗口类型登记的可见性订阅者 */
+  private visibilityListeners: Map<WindowType, Set<WindowVisibilityListener>> = new Map()
 
   create(type: WindowType, configOverride?: Partial<WindowConfig>, parent?: BrowserWindow): BrowserWindow | null {
     this.clearIdleDestroy(type)
@@ -81,12 +90,16 @@ class WindowManager {
     this.windows.set(type, window)
     this.metadata.set(type, { type, config, createdAt: Date.now() })
 
+    window.on('show', () => this.emitVisibility(type, true))
+    window.on('hide', () => this.emitVisibility(type, false))
     window.on('closed', () => {
+      this.cancelPendingPresent(type, window)
       /** 身份校验：destroy 后立即 create 同类型窗口时，旧窗口延迟触发的 closed 不能误删新窗口的槽位 */
       if (this.windows.get(type) === window) {
         this.windows.delete(type)
         this.metadata.delete(type)
         this.clearIdleDestroy(type)
+        this.emitVisibility(type, false)
       }
     })
 
@@ -106,12 +119,54 @@ class WindowManager {
     return this.windows.get(type)
   }
 
-  /** show 时动态设置置顶，hide 时取消——覆盖了构造时的 alwaysOnTop 配置 */
-  show(type: WindowType, autoFocus = true): boolean {
+  /**
+   * 订阅某类窗口的显示、隐藏和销毁事件；订阅时不回放当前状态
+   *
+   * 监听 BrowserWindow 自身事件可以覆盖绕过本管理器的 `showInactive()` 调用，
+   * 也能让同类型窗口销毁后重建时继续使用原订阅
+   */
+  onVisibilityChange(type: WindowType, listener: WindowVisibilityListener): () => void {
+    let listeners = this.visibilityListeners.get(type)
+    if (!listeners) {
+      listeners = new Set()
+      this.visibilityListeners.set(type, listeners)
+    }
+    listeners.add(listener)
+
+    return () => {
+      listeners?.delete(listener)
+    }
+  }
+
+  private emitVisibility(type: WindowType, visible: boolean): void {
+    const listeners = this.visibilityListeners.get(type)
+    if (!listeners) return
+
+    for (const listener of listeners) listener(visible)
+  }
+
+  /**
+   * 展示窗口；第二个参数接受旧版布尔值与 options 对象
+   *
+   * `presentWhenLoaded` 默认开启，避免懒建透明窗口在首屏完成前露出空白层；
+   * `hide` / `destroy` 会撤销尚未执行的展示
+   */
+  show(type: WindowType, optionsOrAutoFocus: boolean | WindowShowOptions = {}): boolean {
     const window = this.windows.get(type)
     if (!window) {
       return false
     }
+
+    this.cancelPendingPresent(type)
+
+    const options = typeof optionsOrAutoFocus === 'boolean'
+      ? { autoFocus: optionsOrAutoFocus }
+      : optionsOrAutoFocus
+    const {
+      autoFocus = true,
+      reposition,
+      presentWhenLoaded = true,
+    } = options
 
     this.clearIdleDestroy(type)
 
@@ -122,40 +177,43 @@ class WindowManager {
 
     this.restoreIfMinimized(window)
 
-    if (!autoFocus) {
-      window.showInactive()
-      return true
+    const shouldReposition = reposition ?? meta?.config.repositionOnShow
+    if (shouldReposition) {
+      this.applyPresetBounds(window, meta?.config)
     }
 
-    if (window.isVisible()) {
-      window.focus()
-    }
-    else {
+    const present = (): void => {
+      if (!autoFocus) {
+        window.showInactive()
+        return
+      }
+
+      if (window.isVisible()) {
+        window.focus()
+        return
+      }
+
       window.show()
       window.focus()
     }
+
+    if (presentWhenLoaded) {
+      this.presentWhenLoaded(type, window, present)
+    }
+    else {
+      present()
+    }
+
     return true
   }
 
-  showInactive(type: WindowType): boolean {
-    const window = this.windows.get(type)
-    if (!window) {
-      return false
-    }
-
-    this.clearIdleDestroy(type)
-
-    const meta = this.metadata.get(type)
-    if (meta?.config.setAlwaysOnTopOnShow) {
-      window.setAlwaysOnTop(true, resolveAlwaysOnTopLevel(meta.config))
-    }
-
-    this.restoreIfMinimized(window)
-    window.showInactive()
-    return true
+  showInactive(type: WindowType, options: Omit<WindowShowOptions, 'autoFocus'> = {}): boolean {
+    return this.show(type, { ...options, autoFocus: false })
   }
 
   hide(type: WindowType): boolean {
+    this.cancelPendingPresent(type)
+
     const window = this.windows.get(type)
     if (!window) {
       return false
@@ -189,6 +247,7 @@ class WindowManager {
 
   destroy(type: WindowType): boolean {
     this.clearIdleDestroy(type)
+    this.cancelPendingPresent(type)
 
     const window = this.windows.get(type)
     if (!window) {
@@ -197,6 +256,46 @@ class WindowManager {
 
     window.destroy()
     return true
+  }
+
+  close(type: WindowType): boolean {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return false
+    }
+
+    window.close()
+    return true
+  }
+
+  minimize(type: WindowType): boolean {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return false
+    }
+
+    window.minimize()
+    return true
+  }
+
+  toggleFullScreen(type: WindowType): boolean {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return false
+    }
+
+    window.setFullScreen(!window.isFullScreen())
+    return true
+  }
+
+  /** 等待窗口完成当前文档加载；窗口关闭、加载失败或超时均返回 false */
+  whenReady(type: WindowType, options: WindowReadyOptions = {}): Promise<boolean> {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return Promise.resolve(false)
+    }
+
+    return waitForWindowReady(window, options)
   }
 
   isVisible(type: WindowType): boolean {
@@ -280,7 +379,7 @@ class WindowManager {
     const insets = config
       ? resolveVisibleContentInsets(config)
       : undefined
-    win.setBounds(clampWindowBounds(nextBounds, display.workArea, insets), animate)
+    win.setBounds(clampWindowBoundsToDisplay(nextBounds, display, insets), animate)
     return true
   }
 
@@ -302,6 +401,50 @@ class WindowManager {
     if (!win || win.isDestroyed()) return null
 
     return win.getBounds()
+  }
+
+  /** 按指定预设位重新定位窗口，并使用窗口配置的目标屏 */
+  moveToPreset(type: WindowType, position: WindowPosition): boolean {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return false
+    }
+
+    const config = this.metadata.get(type)?.config
+    const { width, height } = window.getBounds()
+    const display = resolveTargetDisplay(config?.targetDisplay, { exclude: window })
+    const { x, y } = calculateWindowPosition({
+      position,
+      width,
+      height,
+      visibleContentInsets: config
+        ? resolveVisibleContentInsets(config)
+        : undefined,
+      display,
+    })
+
+    moveWindowToBounds(
+      window,
+      clampWindowBoundsToDisplay(
+        { x, y, width, height },
+        display,
+        config
+          ? resolveVisibleContentInsets(config)
+          : undefined,
+      ),
+    )
+    return true
+  }
+
+  /** 按配置的目标屏重新落位；传入 target 时只覆盖本次目标屏 */
+  moveToDisplay(type: WindowType, target?: WindowDisplayTarget): boolean {
+    const window = this.windows.get(type)
+    if (!window || window.isDestroyed()) {
+      return false
+    }
+
+    this.moveToTargetDisplay(window, this.metadata.get(type)?.config, target)
+    return true
   }
 
   /**
@@ -326,6 +469,84 @@ class WindowManager {
       area,
       insets,
     )
+  }
+
+  /** 把窗口按配置的目标屏和预设位落定，不判断窗口当前是否已经在目标屏 */
+  private applyPresetBounds(window: BrowserWindow, config?: WindowConfig, target?: WindowDisplayTarget): void {
+    const display = resolveTargetDisplay(target ?? config?.targetDisplay, { exclude: window })
+    const { width, height } = window.getBounds()
+    const { x, y } = calculateWindowPosition({
+      position: config?.position,
+      width,
+      height,
+      visibleContentInsets: config
+        ? resolveVisibleContentInsets(config)
+        : undefined,
+      display,
+    })
+
+    moveWindowToBounds(
+      window,
+      clampWindowBoundsToDisplay(
+        { x, y, width, height },
+        display,
+        config
+          ? resolveVisibleContentInsets(config)
+          : undefined,
+      ),
+    )
+  }
+
+  /** 仅在目标屏变化时搬家，避免覆盖用户自行摆放的窗口位置 */
+  private moveToTargetDisplay(window: BrowserWindow, config?: WindowConfig, target?: WindowDisplayTarget): void {
+    const display = resolveTargetDisplay(target ?? config?.targetDisplay, { exclude: window })
+    if (getDisplayOfWindow(window).id === display.id) return
+
+    this.applyPresetBounds(window, config, target)
+  }
+
+  /** 首屏未加载完时推迟展示，超时则兜底展示；调用方可通过 hide / destroy 撤销 */
+  private presentWhenLoaded(type: WindowType, window: BrowserWindow, present: () => void): void {
+    this.cancelPendingPresent(type)
+
+    if (!window.webContents.isLoading()) {
+      present()
+      return
+    }
+
+    let pending: PendingPresentation
+    const presentOnce = (): void => {
+      if (this.pendingPresent.get(type) !== pending) return
+
+      this.pendingPresent.delete(type)
+      clearTimeout(pending.timer)
+      if (!window.webContents.isDestroyed()) {
+        window.webContents.off('did-finish-load', presentOnce)
+      }
+
+      if (!window.isDestroyed() && this.windows.get(type) === window) {
+        present()
+      }
+    }
+
+    pending = {
+      window,
+      timer: setTimeout(presentOnce, PRESENT_FALLBACK_MS),
+      onFinish: presentOnce,
+    }
+    this.pendingPresent.set(type, pending)
+    window.webContents.once('did-finish-load', presentOnce)
+  }
+
+  private cancelPendingPresent(type: WindowType, window?: BrowserWindow): void {
+    const pending = this.pendingPresent.get(type)
+    if (!pending || (window && pending.window !== window)) return
+
+    clearTimeout(pending.timer)
+    if (!pending.window.webContents.isDestroyed()) {
+      pending.window.webContents.off('did-finish-load', pending.onFinish)
+    }
+    this.pendingPresent.delete(type)
   }
 
   private restoreIfMinimized(window: BrowserWindow): void {
@@ -371,3 +592,28 @@ class WindowManager {
 }
 
 export const windowManager = new WindowManager()
+
+/** 窗口可见性订阅回调；visible 为 false 也涵盖窗口被销毁 */
+export type WindowVisibilityListener = (visible: boolean) => void
+
+/** 展示窗口的参数 */
+export type WindowShowOptions = {
+  /** 展示时是否抢焦点 @default true */
+  autoFocus?: boolean
+  /** 本次展示是否按目标屏重新落位；缺省使用窗口配置 */
+  reposition?: boolean
+  /** 首屏加载中是否等 did-finish-load 后再展示 @default true */
+  presentWhenLoaded?: boolean
+}
+
+/** 等待窗口加载完成的参数 */
+export type WindowReadyOptions = {
+  /** 最长等待时间，单位毫秒 @default 5000 */
+  timeoutMs?: number
+}
+
+type PendingPresentation = {
+  window: BrowserWindow
+  timer: ReturnType<typeof setTimeout>
+  onFinish: () => void
+}
