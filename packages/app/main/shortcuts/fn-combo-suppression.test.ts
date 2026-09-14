@@ -106,6 +106,14 @@ describe('Fn 组合抑制', () => {
     expect(send({ code: 'Home', key: 'Home' })).toBe(true)
   })
 
+  it('Return 被 macOS 翻译成 NumpadEnter 后仍然吞得掉', () => {
+    const send = attachWindow()
+    register(fnBinding('Enter'))
+    harness.listener?.({ phase: 'down', key: 'Fn' })
+
+    expect(send({ code: 'NumpadEnter', key: 'Enter' })).toBe(true)
+  })
+
   it('门禁不通过的绑定不吞键', () => {
     const send = attachWindow()
     register(fnBinding('Space'), false)

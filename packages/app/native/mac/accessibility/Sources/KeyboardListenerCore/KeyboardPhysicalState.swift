@@ -4,7 +4,11 @@ public struct KeyboardPhysicalState: Sendable {
   /// 兼容部分键盘 fn flag 晚于 keyDown 到达的情况
   public static let fnComboWindowMilliseconds: UInt64 = 600
 
-  private var pressedKeyCodes: Set<Int64> = []
+  /// 按住中的键码 → down 时上报的键名
+  ///
+  /// 存键名而不是集合：Fn 组合里还原过的键（fn+Return 上报 `Enter`）在先松 Fn 再松键时，
+  /// up 事件已经不带 Fn 归属，靠这里沿用 down 时的键名，否则会上报一条没有 down 的 `NumpadEnter` up
+  private var pressedKeys: [Int64: String] = [:]
   private var fnClassifier = FnPhysicalInputClassifier()
   private var fnDown = false
   private var fnDownAt: UInt64 = 0
@@ -29,6 +33,8 @@ public struct KeyboardPhysicalState: Sendable {
   }
 
   /// 普通键 keyDown；系统自动重复与重复按下返回 nil
+  ///
+  /// Fn 组合里被驱动改写过的键码（见 `macFnRemappedKeyCodes`）还原成物理键上报
   public mutating func handleKeyDown(
     keyCode: Int64,
     modifiers: [KeyboardModifier],
@@ -36,26 +42,31 @@ public struct KeyboardPhysicalState: Sendable {
     isAutorepeat: Bool,
     timestamp: UInt64
   ) -> KeyboardListenerEvent? {
-    guard !isAutorepeat, let key = macKeyboardCodes[keyCode] else { return nil }
-    guard pressedKeyCodes.insert(keyCode).inserted else { return nil }
+    guard !isAutorepeat, let reportedKey = macKeyboardCodes[keyCode], pressedKeys[keyCode] == nil else { return nil }
+
+    let fn = belongsToFnChord(hasFnFlag: hasFnFlag, timestamp: timestamp)
+    let key = fn
+      ? physicalKey(keyCode: keyCode) ?? reportedKey
+      : reportedKey
+    pressedKeys[keyCode] = key
 
     return .input(KeyboardListenerInputEvent(
       phase: .down,
       key: key,
       modifiers: modifiers,
-      fn: belongsToFnChord(hasFnFlag: hasFnFlag, timestamp: timestamp),
+      fn: fn,
       timestamp: timestamp
     ))
   }
 
-  /// 普通键 keyUp；没有对应 down 的 up 返回 nil
+  /// 普通键 keyUp；没有对应 down 的 up 返回 nil，键名沿用 down 时上报的
   public mutating func handleKeyUp(
     keyCode: Int64,
     modifiers: [KeyboardModifier],
     hasFnFlag: Bool,
     timestamp: UInt64
   ) -> KeyboardListenerEvent? {
-    guard pressedKeyCodes.remove(keyCode) != nil, let key = macKeyboardCodes[keyCode] else { return nil }
+    guard let key = pressedKeys.removeValue(forKey: keyCode) else { return nil }
 
     return .input(KeyboardListenerInputEvent(
       phase: .up,
@@ -78,12 +89,12 @@ public struct KeyboardPhysicalState: Sendable {
     guard let key = macKeyboardCodes[keyCode] else { return nil }
 
     let phase: KeyboardInputPhase
-    if pressedKeyCodes.contains(keyCode) {
-      pressedKeyCodes.remove(keyCode)
+    if pressedKeys[keyCode] != nil {
+      pressedKeys.removeValue(forKey: keyCode)
       phase = .up
     }
     else if familyFlagSet {
-      pressedKeyCodes.insert(keyCode)
+      pressedKeys[keyCode] = key
       phase = .down
     }
     else {
@@ -101,7 +112,7 @@ public struct KeyboardPhysicalState: Sendable {
 
   /// tap 被系统禁用或 helper 重启：清空全部物理状态并通知消费方
   public mutating func reset(timestamp: UInt64) -> KeyboardListenerEvent {
-    pressedKeyCodes.removeAll()
+    pressedKeys.removeAll()
     fnDown = false
     fnDownAt = 0
     return .reset(timestamp: timestamp)
@@ -110,5 +121,10 @@ public struct KeyboardPhysicalState: Sendable {
   private func belongsToFnChord(hasFnFlag: Bool, timestamp: UInt64) -> Bool {
     guard fnDown else { return false }
     return hasFnFlag || timestamp &- fnDownAt < Self.fnComboWindowMilliseconds
+  }
+
+  private func physicalKey(keyCode: Int64) -> String? {
+    guard let physicalKeyCode = macFnRemappedKeyCodes[keyCode] else { return nil }
+    return macKeyboardCodes[physicalKeyCode]
   }
 }

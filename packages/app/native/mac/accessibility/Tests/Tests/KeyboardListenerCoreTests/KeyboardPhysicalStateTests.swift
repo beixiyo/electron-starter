@@ -38,6 +38,32 @@ func fn按下后窗口内没带Flag的按键仍视为Fn组合() {
   #expect(late == .input(input(.down, "S", timestamp: 800)))
 }
 
+@Test("Fn 组合里被驱动改写的键码还原成物理键，up 沿用 down 时的键名")
+func fn组合里被驱动改写的键码还原成物理键() {
+  var state = KeyboardPhysicalState()
+  _ = state.handleFnFlag(hasFnFlag: true, timestamp: 10)
+
+  // fn+Return：驱动已把 Return 改写成 Keypad Enter（0x4C），设置页此前显示成 fn + NumpadEnter
+  let down = state.handleKeyDown(keyCode: 0x4C, modifiers: [], hasFnFlag: true, isAutorepeat: false, timestamp: 11)
+  #expect(down == .input(input(.down, "Enter", fn: true, timestamp: 11)))
+
+  // 先松 Fn 再松 Return：up 已不属于 Fn 组合，键名仍要与 down 配对，不能变成没有 down 的 NumpadEnter
+  _ = state.handleFnFlag(hasFnFlag: false, timestamp: 12)
+  let up = state.handleKeyUp(keyCode: 0x4C, modifiers: [], hasFnFlag: false, timestamp: 13)
+  #expect(up == .input(input(.up, "Enter", timestamp: 13)))
+
+  // fn+Delete 同理：Forward Delete（0x75）还原成 Backspace
+  _ = state.handleFnFlag(hasFnFlag: true, timestamp: 20)
+  let forwardDelete = state.handleKeyDown(keyCode: 0x75, modifiers: [], hasFnFlag: true, isAutorepeat: false, timestamp: 21)
+  #expect(forwardDelete == .input(input(.down, "Backspace", fn: true, timestamp: 21)))
+  _ = state.handleKeyUp(keyCode: 0x75, modifiers: [], hasFnFlag: true, timestamp: 22)
+  _ = state.handleFnFlag(hasFnFlag: false, timestamp: 23)
+
+  // 没有 Fn 时同一键码就是实体小键盘 Enter，不还原
+  let plain = state.handleKeyDown(keyCode: 0x4C, modifiers: [], hasFnFlag: false, isAutorepeat: false, timestamp: 2_000)
+  #expect(plain == .input(input(.down, "NumpadEnter", timestamp: 2_000)))
+}
+
 @Test("自动重复与重复按下被丢弃，没有 down 的 up 也被丢弃")
 func 自动重复与重复按下被丢弃() {
   var state = KeyboardPhysicalState()

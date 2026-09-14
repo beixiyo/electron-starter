@@ -24,6 +24,23 @@ public let macKeyboardCodes: [Int64: String] = [
   0x7D: "ArrowDown", 0x7E: "ArrowUp",
 ]
 
+/// Fn 组合里被系统改写过的虚拟键码 → 用户实际按下的物理键码
+///
+/// Apple 键盘驱动在 HID 层就按 `FnKeyboardUsageMap`（`ioreg -l | grep FnKeyboardUsageMap` 可查）
+/// 把 fn+Return 改写成 Keypad Enter、fn+Delete 改写成 Forward Delete、fn+方向键改写成
+/// Home / End / PageUp / PageDown，tap 收到的 CGEvent 只剩改写后的键码，没有任何字段保留原键。
+/// Fn 已按住时按这张表还原：helper 上报的是物理事实，设置页才能显示 `fn + Enter ↩` 而不是 `fn + NumpadEnter`
+/// 边界：带独立 Home / End / ⌦ / 小键盘 Enter 的扩展键盘上，按住 Fn 再按这些实体键会被当成 fn+方向键等上报；
+/// 录制与运行时走同一个 helper，判定仍然一致，只是显示成还原后的键名
+public let macFnRemappedKeyCodes: [Int64: Int64] = [
+  0x4C: 0x24, // Keypad Enter → Return
+  0x75: 0x33, // Forward Delete → Delete (Backspace)
+  0x73: 0x7B, // Home → ArrowLeft
+  0x77: 0x7C, // End → ArrowRight
+  0x74: 0x7E, // PageUp → ArrowUp
+  0x79: 0x7D, // PageDown → ArrowDown
+]
+
 /// Fn/Globe 键的虚拟键码
 public let fnKeyCode: Int64 = 0x3F
 

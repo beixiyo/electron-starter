@@ -9,9 +9,11 @@ import { keyboardInputBackend } from './input'
 /**
  * Fn 按住时 macOS 自己会翻译掉的键：绑定写的是物理键，窗口里收到的是翻译结果
  *
- * helper 在 HID 层拿到的是未翻译的物理键（所以运行时匹配的是 `ArrowLeft`），
- * 而 `before-input-event` 只看得到翻译后的 `Home`。不把别名算进来，`Fn+方向键`
- * 这类绑定就会「动作触发了、字符也照样生效」，正是本模块要修的那个 bug
+ * Apple 键盘驱动在 HID 层就按 `FnKeyboardUsageMap` 改写了这些键，CGEvent 与 Chromium 的 `code`
+ * 拿到的都是翻译结果；helper 在 Fn 已按住时按 Swift 侧 `macFnRemappedKeyCodes` 还原成物理键上报
+ * （所以绑定与运行时匹配的是 `ArrowLeft` / `Enter`），而 `before-input-event` 只看得到翻译后的
+ * `Home` / `NumpadEnter`。不把别名算进来，`Fn+方向键` 这类绑定就会「动作触发了、字符也照样生效」，
+ * 正是本模块要修的那个 bug
  *
  * 只做「物理键 → 翻译结果」的单向别名：反过来把 `Home` 也当成 `ArrowLeft` 会让
  * 一个 `Fn+Home` 绑定吞掉 `Fn+ArrowLeft`，而那个组合在运行时并不会触发
@@ -22,6 +24,7 @@ const FN_TRANSLATED_KEYS: Readonly<Partial<Record<KeyboardCode, KeyboardCode>>> 
   ArrowUp: 'PageUp',
   ArrowDown: 'PageDown',
   Backspace: 'Delete',
+  Enter: 'NumpadEnter',
 }
 
 let fnDown = false

@@ -55,6 +55,7 @@ SwiftPM 编译缓存保留在各 package 的 `.build/` 中，同一 package 的 
 - `key` 用 W3C `KeyboardEvent.code` 命名（字母数字去掉前缀），映射表见 `Sources/KeyboardListenerCore/MacKeyCodes.swift`；表外键码（国际键、Lang 键等）直接丢弃
 - `modifiers` 是事件发生瞬间的逻辑修饰键快照：`Control` / `Alt` / `Shift` / `Meta`
 - `fn` 标记该键属于 Fn 组合：Fn 按住期间带 `maskSecondaryFn` 的键，或 Fn 按下 600ms 内到达的键（兼容 fn flag 晚于 keyDown 的键盘）
+- Fn 组合里的键按**物理键**上报：Apple 键盘驱动在 HID 层就按 `FnKeyboardUsageMap` 把 fn+Return 改成 Keypad Enter、fn+Delete 改成 Forward Delete、fn+方向键改成 Home / End / PageUp / PageDown，tap 拿到的 CGEvent 只剩改写后的键码；helper 在 Fn 已按住时按 `macFnRemappedKeyCodes` 还原，上报 `Enter` / `Backspace` / `ArrowLeft` 等。up 沿用 down 时的键名，先松 Fn 再松键也不会出现没有 down 的 `NumpadEnter` up。没有 Fn 时同一键码就是实体小键盘 Enter / ⌦ / Home，不还原
 - `timestamp` 是 helper generation 内可比较的 monotonic milliseconds
 - 系统自动重复、重复 down、没有对应 down 的 up 在 Swift 侧直接丢弃
 - 左右修饰键按各自键码配对 down/up，家族 flag 只用来拒绝没有对应 down 的陈旧 release

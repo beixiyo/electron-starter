@@ -83,7 +83,7 @@ const MODIFIER_DISPLAY: Readonly<Record<FnModifier, string>> = isApplePlatform()
   ? { Control: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘' }
   : { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win' }
 
-/** 特殊键显示名称保留足够的文字，避免单个符号难以辨认。 */
+/** 特殊键显示名称保留足够的文字，避免单个符号难以辨认；小键盘键写成 `Num 1` / `Num Enter ↩`，与主键盘同名键区分。 */
 const KEY_DISPLAY: Record<string, string> = {
   Space: 'Space',
   Backquote: '`',
@@ -110,6 +110,22 @@ const KEY_DISPLAY: Record<string, string> = {
   ArrowRight: 'Right →',
   ArrowUp: 'Up ↑',
   ArrowDown: 'Down ↓',
+  Numpad0: 'Num 0',
+  Numpad1: 'Num 1',
+  Numpad2: 'Num 2',
+  Numpad3: 'Num 3',
+  Numpad4: 'Num 4',
+  Numpad5: 'Num 5',
+  Numpad6: 'Num 6',
+  Numpad7: 'Num 7',
+  Numpad8: 'Num 8',
+  Numpad9: 'Num 9',
+  NumpadAdd: 'Num +',
+  NumpadSubtract: 'Num -',
+  NumpadMultiply: 'Num *',
+  NumpadDivide: 'Num /',
+  NumpadDecimal: 'Num .',
+  NumpadEnter: 'Num Enter ↩',
 }
 
 export type FormatBindingOptions = {
