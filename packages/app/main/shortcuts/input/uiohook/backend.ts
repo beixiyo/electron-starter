@@ -30,6 +30,8 @@ export const uiohookKeyboardInputBackend: KeyboardInputBackend = {
   release,
   sync,
   subscribe: listeners.add,
+  /** Windows / Linux 没有 Globe 键，无需抑制 */
+  setGlobeKeySuppressed() {},
   /** Worker 已 `unref()` 且随进程退出；native stop 会 abort 整个进程，退出时什么都不做 */
   shutdown() {},
 }

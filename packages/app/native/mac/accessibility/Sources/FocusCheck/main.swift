@@ -5,8 +5,8 @@ import ApplicationServices
 ///
 /// 分三档，与 `insert-text` 的两条注入路径一一对应：
 /// - `editable`：AX 拿到了明确的可写焦点元素，直插与粘贴都能走
-/// - `pasteable`：AX 看不见焦点元素，但有焦点窗口且菜单栏挂着标准 Cmd+V，只能走粘贴
-/// - `none`：两者都没有，文本没地方去，交回调用方
+/// - `pasteable`：AX 看不见焦点元素（或只报出一个藏得住光标的容器），但有焦点窗口且菜单栏挂着标准 Cmd+V，只能走粘贴
+/// - `none`：两者都没有，或 AX 明确报出焦点落在列表、按钮这类没有文本插入点的控件上，文本没地方去，交回调用方
 ///
 /// 曾经的判定是「焦点元素的 AXRole 必须是 AXTextField / AXTextArea / AXComboBox」，一档定生死。
 /// 实测症状：光标停在 VS Code 集成终端里时，文本**有时**投不进终端而被判成没有落点。
@@ -18,7 +18,19 @@ import ApplicationServices
 /// 它与焦点窗口一样稳定、非前台也查得到。判别力也正好对得上：VS Code / kitty 菜单栏有 Cmd+V
 /// （确实能粘），Moonlight 这类串流客户端没有（确实不该粘）
 ///
-/// 治本方向是不再让「AX 能否命名一个可编辑角色」当投递闸门——AX 只用来决定走直插还是粘贴
+/// 但 `pasteable` 不能只看窗口与菜单。实测症状：前台是访达桌面时按下投递，文本不知去向。
+/// 判定结果是 `pasteable role=AXOutline`：访达随时有焦点窗口、菜单栏也挂着 Cmd+V，于是文本被
+/// Cmd+V「粘」进桌面——Finder 对文本粘贴无动作，投递却判成功，剪贴板随后还原，整段文本就此丢失。
+/// 这比误判成没有落点严重得多，后者调用方至少还能把文本留给用户。
+/// 桌面 / 图标视图 / 分栏视图报 `AXList`，列表 / 画廊视图报 `AXOutline`，系统设置侧栏同样是 `AXOutline`
+///
+/// 所以第二档的边界改为：AX **明确**报出焦点落在列表、表格、按钮这类不可能有插入点的控件上时，
+/// 相信它，判 `none`；只有焦点元素拿不到，或落在 `AXWindow` / `AXGroup` / `AXWebArea` 这类
+/// Chromium 会把光标藏在里面的容器时，才留给粘贴路径——VS Code 那条修复只依赖后者。
+/// 访达整体不进第二档：它唯一的文本落点（重命名、搜索框）都会被第一档直接命中，而侧栏 / 预览等
+/// 区域实测还会报出 `AXGroup`，单靠角色表挡不住
+///
+/// 治本方向仍是不再让「AX 能否命名一个可编辑角色」当投递闸门——AX 只用来决定走直插还是粘贴
 ///
 /// stdout 输出 JSON：{"focused":true,"tier":"pasteable","role":"AXWindow","app":"Code",…}
 /// `focused` 恒等于 `tier != none`，保留给只关心「投不投」的调用方
@@ -91,7 +103,12 @@ func checkFocusTarget(target: pid_t? = nil) -> FocusResult {
     return FocusResult(tier: .editable, role: role, app: appName, bundleId: bundleId, pid: pid, pasteMenuEnabled: nil)
   }
 
-  /// 焦点元素不可用或不可写时，只要窗口还在、菜单栏挂着标准 Cmd+V，粘贴路径就有落点
+  /// AX 已经说清了焦点在哪、且那里放不下光标，或这个 App 根本没有粘贴落点：不再赌粘贴
+  if !canHideCaretFromAccessibility(role: role) || isPasteTargetExcluded(bundleId: bundleId) {
+    return FocusResult(tier: .none, role: role, app: appName, bundleId: bundleId, pid: pid, pasteMenuEnabled: nil)
+  }
+
+  /// 焦点元素不可用或藏在容器里时，只要窗口还在、菜单栏挂着标准 Cmd+V，粘贴路径就有落点
   let pasteMenuEnabled = standardPasteMenuState(appElement)
   let hasWindow = copyElement(appElement, kAXFocusedWindowAttribute) != nil
   if hasWindow, pasteMenuEnabled != nil {
@@ -99,6 +116,61 @@ func checkFocusTarget(target: pid_t? = nil) -> FocusResult {
   }
 
   return FocusResult(tier: .none, role: role, app: appName, bundleId: bundleId, pid: pid, pasteMenuEnabled: pasteMenuEnabled)
+}
+
+/// 焦点元素的角色是否还可能藏着一个 AX 看不见的光标
+///
+/// `nil`（`kAXErrorNoValue`）与 `AXWindow` / `AXGroup` / `AXWebArea` 一类容器是 Chromium 系
+/// 应用在 AX 树没建全时报出的形态，光标可能就在里面，这些交给粘贴路径去赌
+/// 列表、表格、按钮、图片这类控件则不可能有插入点：AX 既然点了名，就照它说的办
+/// 只列**确定**没有插入点的角色——列错一个就会把某类 App 的粘贴投递变回没有落点，
+/// 所以 `AXStaticText` 这种在 Chromium 里可能顶替可编辑节点出现的角色不进表
+func canHideCaretFromAccessibility(role: String?) -> Bool {
+  guard let role else { return true }
+  let nonTextRoles: Set<String> = [
+    kAXListRole as String,
+    kAXOutlineRole as String,
+    kAXTableRole as String,
+    kAXBrowserRole as String,
+    kAXGridRole as String,
+    kAXRowRole as String,
+    kAXCellRole as String,
+    kAXColumnRole as String,
+    kAXImageRole as String,
+    kAXButtonRole as String,
+    kAXCheckBoxRole as String,
+    kAXRadioButtonRole as String,
+    kAXRadioGroupRole as String,
+    kAXPopUpButtonRole as String,
+    kAXMenuButtonRole as String,
+    kAXMenuBarRole as String,
+    kAXMenuRole as String,
+    kAXMenuItemRole as String,
+    kAXSliderRole as String,
+    kAXIncrementorRole as String,
+    kAXScrollBarRole as String,
+    kAXTabGroupRole as String,
+    kAXToolbarRole as String,
+    "AXLink",
+    kAXDisclosureTriangleRole as String,
+    kAXColorWellRole as String,
+    kAXProgressIndicatorRole as String,
+    kAXBusyIndicatorRole as String,
+    kAXLevelIndicatorRole as String,
+    kAXValueIndicatorRole as String,
+    kAXRelevanceIndicatorRole as String,
+    kAXHandleRole as String,
+    kAXDockItemRole as String,
+  ]
+  return !nonTextRoles.contains(role)
+}
+
+/// 没有任何文本落点的 App，不进粘贴档
+///
+/// 访达：桌面就是它的窗口，Cmd+V 只认文件，文本粘进去无声无息；重命名 / 搜索这些真正的
+/// 文本框会被 `editable` 档直接命中，不需要粘贴档兜底
+func isPasteTargetExcluded(bundleId: String?) -> Bool {
+  bundleId == "com.apple.finder"
 }
 
 /// 打开 Chromium / Electron 的完整 AX 树；已经开着就不再写

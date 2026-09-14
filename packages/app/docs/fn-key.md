@@ -49,6 +49,14 @@ helper 当前输出 v2（无 `sequence`，新增 `fn` 组合归属标记）：
 
 协议 decoder fail closed：未知版本、字段集合不精确匹配、未知键名、非法 modifier、负数或非整数 timestamp 都会被整行丢弃，不进 tracker
 
+主进程反向经 helper stdin 下发命令，同一协议版本：
+
+```json
+{"v":2,"type":"config","suppressGlobeKey":true}
+```
+
+`suppressGlobeKey` 让 helper 在 tap 层吞掉 🌐 键动作事件（Fn 单击松开后系统合成的 keyCode 0xB3 keyDown / keyUp），表情面板 / 输入法切换不再随裸 Fn 触发；只在绑定表里有裸 Fn 动作时为 true，由 `input-runtime-backend` 决定、`native-mac/backend.ts` 保留状态并在 helper 换代后补发。Swift 侧 `KeyboardListenerCommandDecoder` 同样按字段集合精确匹配
+
 **线格式的黄金样本由两处逐字共同持有**：`Tests/.../KeyboardListenerEventEncoderTests.swift` 与 `main/shortcuts/input/native-mac/protocol.test.ts` 的 `GOLDEN_*`。改字段名必须同时改这两个文件，否则两侧会各自漂移而测试全绿
 
 ## 代码位置

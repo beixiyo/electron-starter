@@ -114,6 +114,7 @@ CGEvent.tapCreate(
 ## 六、坑与注意事项
 
 - **「按🌐键时」设置**：存在 `com.apple.HIToolbox` 域的 `AppleFnUsageType`（`0`=不执行 `1`=切换输入法 `2`=Emoji `3`=听写），**不是** `-g` 全局域。多输入法时默认 `1`，会在 session 层吃掉 Globe —— 但 **HID 层不受它影响，所以无需改这个设置**（用户可继续用 Globe 切输入法）
+- **系统动作由一对合成事件触发**：Fn 单独按下再松开，HID 层的序列是 `flagsChanged(63, fn)` → `flagsChanged(63)` → `keyDown(0xB3)` → `keyUp(0xB3)`，最后一对在 `AppleFnUsageType=0` 下照样产生，前台 App 收到后才按设置执行。裸 Fn 绑定了动作时 helper 只吞这一对（主进程经 stdin 下发 `config`），`flagsChanged` 照常放行，fn+方向键 / fn+Delete 不受影响；实测表情面板不再出现
 - **回调要快**：`.cghidEventTap` 在很底层，回调里别做重活，否则会被系统以 timeout 禁用
 - **CLI 自测的假象**：命令行直接跑探针时，重新编译会改变 cdhash → 可能出现「tap 非 nil 但收不到事件」的静默失效；正式由 Electron（持有辅助功能）spawn 时正常
 - **打包前复验**：确认打包后的 `.app` 申请了辅助功能（`electron-builder.yml` 的 `NSAccessibilityUsageDescription`），并复测 `.cghidEventTap` 仍只要辅助功能；可移除任何已无用的输入监控相关声明。`build:native` 产出 universal binary

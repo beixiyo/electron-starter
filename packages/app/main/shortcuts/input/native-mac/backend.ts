@@ -8,7 +8,7 @@ import { createMainDiagnosticLogger } from '../../../logging'
 import { getNativeBinaryPath, NativeBridge } from '../../../native-bridge'
 import { requestShortcutRuntimeSync } from '../../runtime-sync'
 import { createKeyboardInputListeners } from '../backend'
-import { decodeKeyboardListenerLine } from './protocol'
+import { decodeKeyboardListenerLine, encodeKeyboardListenerCommand } from './protocol'
 
 const HELPER_NAME = 'keyboard-listener'
 const RECOVERY_DELAY_MS = 5_000
@@ -30,10 +30,14 @@ let uptimeToEpochOffsetMs: number | null = null
 let missingBinaryReported = false
 /** helper 二进制是否存在；`null` 表示还没查过 */
 let helperBinaryExists: boolean | null = null
+/** 期望状态留在主进程：helper 崩溃重启后靠它重新下发，helper 自身启动时恒为不抑制 */
+let globeKeySuppressed = false
 const listeners = createKeyboardInputListeners()
 
 const bridge = new NativeBridge<Record<string, never>>({
   name: HELPER_NAME,
+  /** stdin 是下行通道：config 命令告诉 helper 要不要吞 🌐 键动作 */
+  writable: true,
   logStderr: true,
   onUnexpectedExit: handleUnexpectedExit,
   parseLine(line) {
@@ -52,6 +56,7 @@ export const nativeMacKeyboardInputBackend: KeyboardInputBackend = {
   release,
   sync,
   subscribe: listeners.add,
+  setGlobeKeySuppressed,
   shutdown: stop,
 }
 
@@ -130,6 +135,25 @@ function start(): void {
   /** 新一代 helper 的物理状态从零开始，消费方先清掉上一代残留的按键 */
   emitReset()
   bridge.start()
+  /** helper 自身启动时恒为不抑制，只有期望抑制时才需要补发 */
+  if (globeKeySuppressed)
+    sendGlobeKeyConfig()
+}
+
+function setGlobeKeySuppressed(suppressed: boolean): void {
+  if (globeKeySuppressed === suppressed)
+    return
+
+  globeKeySuppressed = suppressed
+  sendGlobeKeyConfig()
+}
+
+/** helper 没在跑就不写：期望状态已记下，下次 {@link start} 会补发 */
+function sendGlobeKeyConfig(): void {
+  if (!bridge.running)
+    return
+
+  bridge.send(encodeKeyboardListenerCommand({ type: 'config', suppressGlobeKey: globeKeySuppressed }))
 }
 
 function stop(): void {

@@ -15,10 +15,18 @@ macOS Accessibility API（`AXUIElement`）可以获取任意应用的 UI 层级�
 | tier | 判据 | 可用注入路径 |
 |------|------|-------------|
 | `editable` | AX 拿到了焦点元素，且它「选区可写」（`AXSelectedText` 或 `AXSelectedTextRange` 可写）；或者 role 属于 `AXTextField` / `AXTextArea` / `AXComboBox` / `AXSearchField` 且整体 `AXValue` 可写 | 直插（写 AXSelectedText）与粘贴都能走 |
-| `pasteable` | AX 看不见可写焦点元素，但**有焦点窗口**（`AXFocusedWindow`）且**菜单栏挂着标准 Cmd+V**（`AXMenuItem`，cmdChar 为 `v`，cmdModifiers 为 0） | 只能走粘贴 |
-| `none` | 上面两者都不满足；或焦点元素是密码框 | 没有落点，交回调用方 |
+| `pasteable` | AX 看不见可写焦点元素（拿不到，或只报出 `AXWindow` / `AXGroup` / `AXWebArea` 这类藏得住光标的容器），但**有焦点窗口**（`AXFocusedWindow`）且**菜单栏挂着标准 Cmd+V**（`AXMenuItem`，cmdChar 为 `v`，cmdModifiers 为 0） | 只能走粘贴 |
+| `none` | 上面两者都不满足；焦点元素是密码框；AX 明确报出焦点在列表 / 表格 / 按钮等不可能有插入点的控件上；或前台是访达 | 没有落点，交回调用方 |
 
 密码框（role / subrole 含 `secure` 或 `password`）无条件判成 `none`：明文写进密码框既写坏内容，也会把文本留在不该留的地方
+
+### 为什么 `pasteable` 还要看焦点元素的角色
+
+实测症状：前台是访达桌面时投递，文本不知去向。判定是 `pasteable role=AXOutline` —— 访达随时有焦点窗口、菜单栏也挂着 Cmd+V，文本被 Cmd+V「粘」进桌面，Finder 对文本粘贴无动作，投递却判成功，剪贴板随后还原，整段文本丢失。这比误判成没有落点严重得多，后者调用方至少还能把文本留给用户
+
+访达桌面 / 图标视图 / 分栏视图报 `AXList`，列表 / 画廊视图报 `AXOutline`，系统设置侧栏同样是 `AXOutline`。AX 既然**明确**点了名、而那个角色不可能有插入点，就照它说的办判 `none`；只有焦点元素拿不到，或落在 Chromium 会把光标藏在里面的容器时，才留给粘贴路径 —— VS Code 那条修复只依赖后者
+
+角色表只列**确定**没有插入点的角色（`canHideCaretFromAccessibility`）：列错一个就会把某类 App 的粘贴投递变回没有落点，所以 `AXStaticText` 这种在 Chromium 里可能顶替可编辑节点出现的角色不进表。访达整体不进粘贴档（`isPasteTargetExcluded`）：它唯一的文本落点（重命名、搜索框）都会被 `editable` 档直接命中，而侧栏 / 预览等区域实测还会报出 `AXGroup`，单靠角色表挡不住
 
 ### 为什么不再用 AXRole 白名单一档定生死
 
@@ -82,6 +90,7 @@ Node.js 主进程
       → AXManualAccessibility = true      → 对 Electron 官方版本开启 AX 树
       → AXFocusedUIElementAttribute       → 焦点元素
       → 选区 / AXValue 可写性 + role      → editable？
+      → 非文本角色 / 访达                 → none（不再赌粘贴）
       → AXFocusedWindow + 菜单栏 Cmd+V    → pasteable？
     → stdout JSON
   → parse → FocusCheckResult
@@ -140,6 +149,7 @@ Chromium 会在后台构建完整 AX 树（**首次设置时一次性开销**）
 | Chromium 系终端 / 复杂控件 | VSCode 集成终端 | `editable` 或 `pasteable`（AX 不稳定时退到后者） |
 | 原生终端 | kitty | `editable` / `pasteable` |
 | 串流 / 游戏客户端 | Moonlight | `none`（菜单栏没有标准 Cmd+V） |
+| 文件管理 / 列表焦点 | 访达桌面与各视图、系统设置侧栏 | `none`（焦点在 `AXList` / `AXOutline` 上，没有插入点） |
 
 ## 使用
 

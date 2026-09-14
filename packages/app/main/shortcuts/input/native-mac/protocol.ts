@@ -1,4 +1,4 @@
-/** macOS keyboard-listener helper 的 NDJSON 协议解码；严格校验，不合法的行直接丢弃 */
+/** macOS keyboard-listener helper 的 NDJSON 协议：上行事件严格解码，不合法的行直接丢弃；下行命令编码 */
 
 import type { FnModifier, KeyboardInput, KeyboardInputKey } from '@shared/shortcuts'
 import { isRecord } from '@jl-org/tool'
@@ -70,6 +70,16 @@ export function decodeKeyboardListenerLine(
   }
 }
 
+/**
+ * 编码一行写给 helper stdin 的命令
+ *
+ * `config` 告诉 helper 要不要在 tap 层吞掉 🌐 键动作事件（keyCode 0xB3 的 keyDown / keyUp）；
+ * Swift 侧 `KeyboardListenerCommandDecoder` 同样按字段集合精确匹配解析
+ */
+export function encodeKeyboardListenerCommand(command: KeyboardListenerCommand): string {
+  return JSON.stringify({ v: PROTOCOL_VERSION, ...command })
+}
+
 function isModifierList(value: unknown): value is FnModifier[] {
   if (!Array.isArray(value))
     return false
@@ -101,4 +111,11 @@ function hasExactFields(value: Record<string, unknown>, fields: readonly string[
  */
 function isProtocolTimestamp(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+/** 主进程下发给 helper 的命令 */
+export type KeyboardListenerCommand = {
+  type: 'config'
+  /** 为 true 时 helper 拦下系统的 🌐 键动作（表情面板 / 切输入法 / 系统听写） */
+  suppressGlobeKey: boolean
 }

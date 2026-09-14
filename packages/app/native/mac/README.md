@@ -59,6 +59,16 @@ SwiftPM 编译缓存保留在各 package 的 `.build/` 中，同一 package 的 
 - 系统自动重复、重复 down、没有对应 down 的 up 在 Swift 侧直接丢弃
 - 左右修饰键按各自键码配对 down/up，家族 flag 只用来拒绝没有对应 down 的陈旧 release
 - tap disabled 时输出 reset、清空物理状态并重新启用 tap
-- helper 始终透传 CGEvent，不拦截用户输入
+- 除下面的 🌐 键动作外，helper 透传全部 CGEvent，不拦截用户输入
 - 仅保证标准 macOS Fn/Globe 事件；不保证 Karabiner 等移除 `maskSecondaryFn` 的重映射环境
 - Swift 只上报 physical down/up/reset，down/up 配对与 chord 合成统一由 TypeScript 侧完成
+
+主进程经 stdin 下发命令，同样逐行 JSON、同一协议版本：
+
+```json
+{"v":2,"type":"config","suppressGlobeKey":true}
+```
+
+- `suppressGlobeKey` 为 true 时，helper 在 tap 层对 🌐 键动作事件（keyCode 0xB3 的 keyDown / keyUp）`return nil`。Fn 单独按下再松开时系统会合成这一对事件，前台 App 收到后才按「按下🌐键时」的设置开表情面板 / 切输入法 / 启动听写；吞掉它等价于该设置为「不执行任何操作」。Fn 自身的 flagsChanged 照常放行，fn+方向键、fn+Delete、fn+F 键不受影响（实测）
+- helper 启动时恒为不抑制；主进程只在当前绑定里有裸 Fn 动作时下发 true，helper 重启后由主进程补发
+- 字段集合必须精确匹配，不合法的行输出 `KEYBOARD_COMMAND_IGNORED` 到 stderr 后丢弃

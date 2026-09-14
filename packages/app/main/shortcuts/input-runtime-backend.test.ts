@@ -13,6 +13,7 @@ const harness = vi.hoisted(() => ({
   listener: null as ((input: KeyboardInput) => void) | null,
   acquire: vi.fn(),
   release: vi.fn(),
+  setGlobeKeySuppressed: vi.fn(),
 }))
 
 vi.mock('./input', () => ({
@@ -23,6 +24,7 @@ vi.mock('./input', () => ({
     release: harness.release,
     sync: vi.fn(),
     shutdown: vi.fn(),
+    setGlobeKeySuppressed: harness.setGlobeKeySuppressed,
     subscribe: (listener: (input: KeyboardInput) => void) => {
       harness.listener = listener
       return () => {
@@ -47,6 +49,7 @@ describe('系统级输入 runtime backend', () => {
     canTrigger = true
     harness.acquire.mockReset()
     harness.release.mockReset()
+    harness.setGlobeKeySuppressed.mockReset()
   })
 
   afterEach(() => {
@@ -313,6 +316,20 @@ describe('系统级输入 runtime backend', () => {
 
     expect(harness.acquire).not.toHaveBeenCalled()
     expect(harness.listener).toBeNull()
+  })
+
+  it('只有裸 Fn 绑定在场时才让捕获后端拦下系统的 🌐 键动作，清空后交还', () => {
+    apply({ voiceDictation: fn('press', 'Fn'), recording: fn('press', 'Space') })
+    expect(harness.setGlobeKeySuppressed).toHaveBeenLastCalledWith(true)
+
+    apply({ recording: fn('press', 'Space'), bookmark: { ...fn('press', 'Fn'), chord: { source: 'fn', key: 'Fn', modifiers: ['Meta'] } } })
+    expect(harness.setGlobeKeySuppressed).toHaveBeenLastCalledWith(false)
+
+    apply({ voiceDictation: fn('hold', 'Fn') })
+    expect(harness.setGlobeKeySuppressed).toHaveBeenLastCalledWith(true)
+
+    systemInputShortcutRuntimeBackend.reset()
+    expect(harness.setGlobeKeySuppressed).toHaveBeenLastCalledWith(false)
   })
 })
 

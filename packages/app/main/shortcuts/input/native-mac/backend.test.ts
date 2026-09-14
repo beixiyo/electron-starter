@@ -21,6 +21,7 @@ const harness = vi.hoisted(() => ({
   binaryExists: true,
   start: vi.fn(),
   stop: vi.fn(),
+  send: vi.fn(),
 }))
 
 vi.mock('node:fs', () => ({
@@ -54,6 +55,11 @@ vi.mock('../../../native-bridge', () => ({
       harness.running = false
       harness.stop()
     }
+
+    send(data: string): boolean {
+      harness.send(data)
+      return true
+    }
   },
 }))
 
@@ -78,6 +84,7 @@ describe('macOS 后端时间基归一', () => {
     harness.running = false
     harness.start.mockReset()
     harness.stop.mockReset()
+    harness.send.mockReset()
   })
 
   it('helper 的 uptime 时间戳在后端出口变成 epoch 毫秒', () => {
@@ -169,6 +176,36 @@ describe('macOS 后端时间基归一', () => {
     expect(received).toHaveLength(1)
     expect(received[0].timestamp).toBeGreaterThanOrEqual(before)
     expect(received[0].timestamp).toBeLessThanOrEqual(after)
+  })
+
+  /**
+   * 🌐 键抑制的期望状态归主进程：helper 启动时恒为不抑制，崩溃换代后不补发的话，
+   * 表情面板会在 helper 重启后悄悄回来，而绑定表并没有变、runtime 也不会重算
+   */
+  it('🌐 键抑制经 stdin 下发，helper 换代后按期望状态补发', async () => {
+    vi.resetModules()
+    const { nativeMacKeyboardInputBackend: fresh } = await import('./backend')
+    const configLine = JSON.stringify({ v: 2, type: 'config', suppressGlobeKey: true })
+
+    /** helper 没在跑：只记状态，不写 */
+    fresh.setGlobeKeySuppressed(true)
+    expect(harness.send).not.toHaveBeenCalled()
+
+    fresh.acquire()
+    expect(harness.send).toHaveBeenCalledWith(configLine)
+
+    /** 同一状态重复设置不再写 */
+    fresh.setGlobeKeySuppressed(true)
+    expect(harness.send).toHaveBeenCalledTimes(1)
+
+    harness.running = false
+    fresh.sync()
+    expect(harness.send).toHaveBeenCalledTimes(2)
+    expect(harness.send).toHaveBeenLastCalledWith(configLine)
+
+    fresh.setGlobeKeySuppressed(false)
+    expect(harness.send).toHaveBeenLastCalledWith(JSON.stringify({ v: 2, type: 'config', suppressGlobeKey: false }))
+    fresh.release()
   })
 
   /** 存在性按进程缓存，所以这里重新加载模块，避免依赖用例顺序 */

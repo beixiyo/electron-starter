@@ -7,7 +7,10 @@ import KeyboardListenerCore
 
 var state = KeyboardPhysicalState()
 let eventEncoder = KeyboardListenerEventEncoder()
+let commandDecoder = KeyboardListenerCommandDecoder()
 var eventTap: CFMachPort?
+/// 由主进程经 stdin 的 config 命令开关；只在主线程读写，tap 回调与 stdin 读取都跑在主 run loop 上
+var globeKeySuppressed = false
 
 func monotonicMilliseconds() -> UInt64 {
   UInt64(ProcessInfo.processInfo.systemUptime * 1_000)
@@ -89,14 +92,23 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
   let hasFnFlag = event.flags.contains(.maskSecondaryFn)
 
-  // @TODO 这里原样放行 fn 事件，macOS 系统设置里「按下🌐键时」的原生动作会与上层的 Fn 手势同时触发
+  // 裸 Fn 归上层动作时，在这里拦下系统的 🌐 键动作
   //
-  // 实测：该项设为「显示表情与符号」时单击 Fn，系统表情面板会和上层的单击手势一起响应；
-  // 设为「开始听写（连按两下）」时，双击 Fn 会和上层的双击手势撞车
-  // tap 建的是 .defaultTap（主动 tap，具备抑制能力），理论上判定为纯单击时 return nil 就能拦下，
-  // 难点是必须在事件当场决定吞不吞，且吞掉 up 会让下游 fn flag 状态与实际不符，
-  // 可能波及 Fn+F1~F12、fn+方向键、fn+Delete，需先单独做技术验证
-  // 在此之前只能靠引导用户把「按下🌐键时」改成「不执行任何操作」来规避
+  // 实测症状：「按下🌐键时」设为「显示表情与符号」，单击 Fn 触发上层动作的同时表情面板也弹出来；
+  // 设为「更改输入法」则每次都切一次输入法
+  // 根因：Fn 单独按下再松开，系统在 flagsChanged up 之后紧接着合成一对 keyCode 0xB3 的
+  // keyDown / keyUp（在 .cghidEventTap 实测可见，「不执行任何操作」下同样产生），
+  // 前台 App 的 HIToolbox 收到它才按设置执行动作。tap 是 .defaultTap，对这一对 return nil
+  // 就等价于把系统设置切成「不执行任何操作」
+  // 边界：只吞 0xB3 的 keyDown / keyUp，Fn 自己的 flagsChanged 照常放行——fn+方向键 / fn+Delete /
+  // fn+F1~F12 靠的是后续按键事件上的 maskSecondaryFn，与这一对合成事件无关（实测组合键未受影响）；
+  // 早先担心的「吞掉 up 让 fn flag 状态失真」只针对吞 flagsChanged 的方案，这里不碰它
+  // 是否要吞由主进程经 stdin 下发（见 KeyboardListenerCommand）：只有当前绑定里有裸 Fn 的动作才吞，
+  // 绑定清空或改成组合键时交还系统默认行为
+  if globeKeySuppressed, keyCode == globeKeyCode, type == .keyDown || type == .keyUp {
+    return nil
+  }
+
   switch type {
     case .flagsChanged:
       if keyCode == fnKeyCode {
@@ -169,5 +181,33 @@ parentCheckTimer.setEventHandler {
   }
 }
 parentCheckTimer.resume()
+
+/// 主进程的下行命令：stdin 每行一个 JSON。挂在主队列上，与 tap 回调共用主线程，不需要加锁
+/// EOF（父进程关掉了 stdin，或 stdin 是 /dev/null）就停止读取，退出仍由上面的父进程检查负责
+var stdinBuffer = Data()
+let stdinSource = DispatchSource.makeReadSource(fileDescriptor: STDIN_FILENO, queue: DispatchQueue.main)
+stdinSource.setEventHandler {
+  var chunk = [UInt8](repeating: 0, count: 4096)
+  let count = read(STDIN_FILENO, &chunk, chunk.count)
+  if count <= 0 {
+    stdinSource.cancel()
+    return
+  }
+  stdinBuffer.append(contentsOf: chunk[0..<count])
+
+  while let newline = stdinBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+    let line = stdinBuffer.subdata(in: stdinBuffer.startIndex..<newline)
+    stdinBuffer.removeSubrange(stdinBuffer.startIndex...newline)
+    guard let command = commandDecoder.decode(line) else {
+      fputs("KEYBOARD_COMMAND_IGNORED\n", stderr)
+      continue
+    }
+    switch command {
+      case let .config(suppressGlobeKey):
+        globeKeySuppressed = suppressGlobeKey
+    }
+  }
+}
+stdinSource.resume()
 
 CFRunLoopRun()

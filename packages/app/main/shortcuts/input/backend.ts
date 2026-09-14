@@ -31,6 +31,14 @@ export type KeyboardInputBackend = {
   sync: () => void
   /** 订阅原始输入；返回幂等的取消订阅函数 */
   subscribe: (listener: KeyboardInputListener) => () => void
+  /**
+   * 裸 Fn 是否归上层动作：为 true 时在系统看到之前拦下 🌐 键动作
+   * （表情面板 / 切输入法 / 系统听写），Fn 组合键与 Fn 的修饰键语义不受影响
+   *
+   * 只有 macOS 后端有这个能力，其余平台没有 Globe 键，实现为空操作；
+   * 状态由后端保留，底层捕获重启后自动重新下发
+   */
+  setGlobeKeySuppressed: (suppressed: boolean) => void
   /** App 退出前释放底层资源 */
   shutdown: () => void
 }

@@ -27,6 +27,13 @@ public let macKeyboardCodes: [Int64: String] = [
 /// Fn/Globe 键的虚拟键码
 public let fnKeyCode: Int64 = 0x3F
 
+/// 🌐 键动作事件的虚拟键码
+///
+/// Fn 单独按下再松开时，系统在 Fn 的 flagsChanged up 之后紧接着合成一对 keyDown / keyUp（0xB3），
+/// 前台 App 收到它才按「按下🌐键时」的设置去开表情面板、切输入法或启动听写。
+/// 「不执行任何操作」下这对事件照样产生，只是没人响应；它不在 `macKeyboardCodes` 里，不会上报成按键
+public let globeKeyCode: Int64 = 0xB3
+
 /// 通过 flagsChanged 上报的物理修饰键及其所属逻辑修饰键
 public let macModifierKeyCodes: [Int64: KeyboardModifier] = [
   0x36: .meta, 0x37: .meta,

@@ -46,6 +46,12 @@ export const systemInputShortcutRuntimeBackend: ShortcutRuntimeBackend = {
     runtime.updateEntries(entries.map(toGestureEntry))
     /** Fn 组合的物理键不会被 helper 拦下，本 App 窗口里要自己吞掉，否则字符落进输入框 */
     setFnComboSuppression(entries, context.canTrigger)
+    /**
+     * 裸 Fn 一旦绑定了动作，系统自己的 🌐 键动作就得让位，否则单击 Fn 触发动作的同时
+     * 表情面板（或输入法切换）也跟着出来。绑定清空或改成组合键时交还系统
+     * 绑定表变化在这里统一重算，不看手势类型：press / doublePress / hold 都占用单击
+     */
+    keyboardInputBackend.setGlobeKeySuppressed(entries.some(entry => isBareFnBinding(entry.binding)))
     unsubscribe = keyboardInputBackend.subscribe(runtime.handle)
 
     try {
@@ -67,6 +73,7 @@ export const systemInputShortcutRuntimeBackend: ShortcutRuntimeBackend = {
 function reset(): void {
   runtime.updateEntries([])
   setFnComboSuppression([], () => false)
+  keyboardInputBackend.setGlobeKeySuppressed(false)
   unsubscribe?.()
   unsubscribe = null
   registeredEntries = new Map()
@@ -100,4 +107,9 @@ function toGestureEntry(entry: ShortcutRuntimeEntry): ShortcutGestureRuntimeEntr
 
 function isSystemInputBinding(binding: ShortcutBinding | null): binding is ShortcutBinding {
   return !!binding && (binding.chord.source === 'fn' || binding.scope === 'global')
+}
+
+/** 裸 Fn：主键是 Fn 自身且不带修饰键——只有这种绑定的手势与系统的 🌐 键单击是同一个动作 */
+function isBareFnBinding(binding: ShortcutBinding): boolean {
+  return binding.chord.source === 'fn' && binding.chord.key === 'Fn' && !binding.chord.modifiers?.length
 }
