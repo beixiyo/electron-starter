@@ -1,5 +1,6 @@
 /** 转写结果视图；文本展示和关闭动作由宿主注入。 */
 import { Check, Copy, X } from 'lucide-react'
+import { motion } from 'motion/react'
 import { memo, useEffect, useRef, useState } from 'react'
 import { cn } from 'utils'
 
@@ -33,7 +34,13 @@ export const TranscriptionResult = memo<TranscriptionResultProps>((props) => {
   }
 
   return (
-    <div className={ cn('flex h-full flex-col gap-2 px-4 py-3', className) }>
+    <motion.div
+      initial={ { opacity: 0, y: 8 } }
+      animate={ { opacity: 1, y: 0 } }
+      exit={ { opacity: 0, y: -8 } }
+      transition={ { duration: 0.2 } }
+      className={ cn('flex h-full flex-col gap-2 px-4 py-3', className) }
+    >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="text-xs text-text3">
           { sourceHost
@@ -66,7 +73,7 @@ export const TranscriptionResult = memo<TranscriptionResultProps>((props) => {
         </div>
       </div>
       <p className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words text-sm leading-5 text-text">{ text || 'No text' }</p>
-    </div>
+    </motion.div>
   )
 })
 

@@ -66,4 +66,18 @@ describe('voice input surface measurements and expiry', () => {
     await waitFor(() => expect(onCopy).toHaveBeenCalledTimes(2))
     expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy()
   })
+
+  it('waits for the previous state to leave before entering the next state', async () => {
+    const { rerender } = render(<VoiceImeSurface viewMode="recording" />)
+    expect(screen.getByText('Listening')).toBeTruthy()
+
+    act(() => {
+      rerender(<VoiceImeSurface viewMode="prompt" />)
+    })
+
+    expect(screen.getByText('Listening')).toBeTruthy()
+    expect(screen.queryByText('Ready')).toBeNull()
+
+    await waitFor(() => expect(screen.getByText('Ready')).toBeTruthy())
+  })
 })

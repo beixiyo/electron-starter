@@ -1,5 +1,7 @@
 /** 取消后的短时撤销条。 */
+import { useLatestCallback } from 'hooks'
 import { RotateCcw, X } from 'lucide-react'
+import { motion, useIsPresent } from 'motion/react'
 import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { cn } from 'utils'
 import { VOICE_UNDO_WINDOW_MS } from '../constants'
@@ -8,6 +10,7 @@ export const CanceledView = memo<CanceledViewProps>((props) => {
   const { expiresAt, onUndo, onDismiss, onMeasure, className } = props
   const [now, setNow] = useState(() => Date.now())
   const contentRef = useRef<HTMLDivElement | null>(null)
+  const isPresent = useIsPresent()
   const remainingMs = expiresAt === null
     ? null
     : Math.max(0, expiresAt - now)
@@ -25,12 +28,26 @@ export const CanceledView = memo<CanceledViewProps>((props) => {
   }, [expiresAt])
 
   useLayoutEffect(() => {
+    if (!isPresent || !onMeasure || !contentRef.current) return
+    onMeasure(Math.max(200, Math.ceil(contentRef.current.scrollWidth) + 32))
+  }, [isPresent, onMeasure, seconds])
+
+  const measure = useLatestCallback(() => {
     if (!onMeasure || !contentRef.current) return
     onMeasure(Math.max(200, Math.ceil(contentRef.current.scrollWidth) + 32))
-  }, [onMeasure, seconds])
+  })
+
+  const setContentRef = useLatestCallback((node: HTMLDivElement | null) => {
+    contentRef.current = node
+    measure()
+  })
 
   return (
-    <div
+    <motion.div
+      initial={ { opacity: 0, y: 4 } }
+      animate={ { opacity: 1, y: 0 } }
+      exit={ { opacity: 0, y: -4 } }
+      transition={ { duration: 0.16 } }
       className={ cn(
         'relative flex size-full items-center overflow-hidden rounded-full px-4',
         className,
@@ -41,7 +58,7 @@ export const CanceledView = memo<CanceledViewProps>((props) => {
         style={ { transform: `scaleX(${progress})` } }
         aria-hidden="true"
       />
-      <div ref={ contentRef } className="flex w-max items-center gap-2">
+      <div ref={ setContentRef } className="flex w-max items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <RotateCcw className="size-4 shrink-0 text-warning" aria-hidden="true" />
           <span className="truncate text-xs text-text">Canceled</span>
@@ -56,11 +73,16 @@ export const CanceledView = memo<CanceledViewProps>((props) => {
         >
           Undo
         </button>
-        <button type="button" aria-label="Dismiss" className="grid size-7 shrink-0 place-items-center rounded-lg text-text3 transition-colors hover:bg-background2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text3/40" onClick={ onDismiss }>
+        <button
+          type="button"
+          aria-label="Dismiss"
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-text3 transition-colors hover:bg-background2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text3/40"
+          onClick={ onDismiss }
+        >
           <X className="size-4" />
         </button>
       </div>
-    </div>
+    </motion.div>
   )
 })
 

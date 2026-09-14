@@ -11,7 +11,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from 'utils'
 import { VoiceImeSurface } from './VoiceImeApp/components'
 import type { VoiceImeViewMode } from './VoiceImeApp/constants'
-import { useVoiceImeViewport } from './VoiceImeApp/hooks'
+import { useVoiceImeViewport, useVoiceImeWindowHitTest } from './VoiceImeApp/hooks'
 
 export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
   const { capture: injectedCapture, transcribe, className, style } = props
@@ -35,11 +35,19 @@ export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
   const viewMode: VoiceImeViewMode = session.text
     ? 'result'
     : session.phase === 'idle' || session.phase === 'result'
-      ? 'prompt'
-      : session.phase === 'processing'
-        ? 'recording'
-        : session.phase
-  const { viewMode: displayedMode, switchView, reportContentWidth, hideAndReset } = useVoiceImeViewport()
+    ? 'prompt'
+    : session.phase === 'processing'
+    ? 'recording'
+    : session.phase
+  const {
+    viewMode: displayedMode,
+    size,
+    shadowInset,
+    switchView,
+    reportContentWidth,
+    hideAndReset,
+  } = useVoiceImeViewport()
+  useVoiceImeWindowHitTest(displayedMode, size, shadowInset)
   const closingRef = useRef(false)
   const restoreAfterCloseRef = useRef(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -107,9 +115,11 @@ export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
   }, [session.completed, session.text, dismiss])
 
   return (
-    <div className={ cn('h-full p-7.5', className) } style={ style }>
+    <div className={ cn('h-full', className) } style={ style }>
       <VoiceImeSurface
         viewMode={ displayedMode }
+        size={ size }
+        shadowInset={ shadowInset }
         durationLabel={ session.phase === 'processing'
           ? 'Processing'
           : 'Listening' }
