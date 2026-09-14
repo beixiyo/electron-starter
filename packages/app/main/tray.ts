@@ -13,11 +13,12 @@ export type TrayOptions = {
    * 由调用方注入「不存在则重建」的逻辑——windowManager.show 对已销毁的窗口只会静默返回 false
    */
   onOpenMain?: () => void
+  /** 开发态窗口实验台入口；未提供时不显示菜单项。 */
+  onOpenWindowLab?: () => void
 }
 
 export function initTray(options: TrayOptions = {}): void {
-  if (tray)
-    return
+  if (tray) return
 
   const openMain = options.onOpenMain
     ?? (() => windowManager.show(WindowType.MAIN))
@@ -30,8 +31,7 @@ export function initTray(options: TrayOptions = {}): void {
 
   tray.on('click', (_event, bounds) => {
     const win = ensureMenubarWindow()
-    if (!win)
-      return
+    if (!win) return
 
     if (win.isVisible()) {
       win.hide()
@@ -62,6 +62,15 @@ export function initTray(options: TrayOptions = {}): void {
         label: 'Setting',
         click: openMain,
       },
+      ...(options.onOpenWindowLab
+        ? [
+          { type: 'separator' as const },
+          {
+            label: 'Window Lab',
+            click: options.onOpenWindowLab,
+          },
+        ]
+        : []),
       { type: 'separator' },
       {
         label: 'Exit',
@@ -79,11 +88,10 @@ function ensureMenubarWindow(create = true): Electron.BrowserWindow | null {
   const win = existing && !existing.isDestroyed()
     ? existing
     : create
-      ? windowManager.create(WindowType.MENUBAR)
-      : null
+    ? windowManager.create(WindowType.MENUBAR)
+    : null
 
-  if (!win)
-    return null
+  if (!win) return null
 
   if (!menubarBlurAttached) {
     menubarBlurAttached = true

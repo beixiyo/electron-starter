@@ -13,27 +13,28 @@ import { APP_PROTOCOL, FOCUS_NATIVE_WINDOW_SIZE, WindowType } from '@shared'
 import { app, ipcMain, screen, shell } from 'electron'
 import icon from '../resources/icon.png?asset'
 import { initDeeplink } from './deeplink'
-import { hideGlobalToast, setGlobalToastNoticeTargetResolver } from './global-toast'
 import { bindGlobalEscapeConsumerToVisibility } from './escape-dismiss'
-import { GLOBAL_ESCAPE_PRIORITY } from './global-escape'
-import { voiceImeState } from './voice-ime-state'
-import { registerMainWindowOpener } from './main-window-opener'
-import { attachMainWindowCloseBehavior, initWindowQuitCleanup } from './window-lifecycle'
 import { checkFocusedTextInput } from './focus-check'
+import { GLOBAL_ESCAPE_PRIORITY } from './global-escape'
+import { hideGlobalToast, setGlobalToastNoticeTargetResolver } from './global-toast'
 import { createMainDiagnosticLogger, initAppLogging } from './logging'
+import { registerMainWindowOpener } from './main-window-opener'
 import { setupDisplayMediaHandler } from './media/display-media'
 import { mediaSessionStore } from './media/session-store'
 import { initMeetingDetection } from './meeting-detection'
 import { initNativeRecordingPipeline } from './native-recording'
 import { initPowerEventCleanup } from './power-events'
 import { initPowerSaveBlockers } from './power-save-blocker'
-import { isCaptureOverlayOpen, warmScreenshotOverlays } from './screenshot'
 import { recordingState } from './recording-state'
+import { isCaptureOverlayOpen, warmScreenshotOverlays } from './screenshot'
 import { initSelectionHook } from './selection'
+import { cancelPendingVoiceImeShortcut, handleShortcutAction, reapplyAppShortcutRuntime } from './shortcut-actions'
 import { attachFnComboSuppression, onShortcutRuntimeSyncRequested, requestShortcutRuntimeSync } from './shortcuts'
 import { initTray } from './tray'
 import { dispatchTranscription } from './voice-ime-inject'
-import { cancelPendingVoiceImeShortcut, handleShortcutAction, reapplyAppShortcutRuntime } from './shortcut-actions'
+import { voiceImeState } from './voice-ime-state'
+import { initWindowLab, type WindowLabController } from './window-lab'
+import { attachMainWindowCloseBehavior, initWindowQuitCleanup } from './window-lifecycle'
 import { createWindowsSequentially, logicalWindowManager, windowManager } from './window-manager'
 import '@ipc/services'
 
@@ -55,76 +56,89 @@ setupHttpCachePolicy()
 setupDevParentExitCleanup()
 registerMainWindowOpener(showOrCreateMainWindow)
 
-initDeeplink(() => {
-  initAppLogging(ipcMain)
-  registerVoiceImeStartGuard(() => {
-    if (recordingState.isBusy && recordingState.snapshot.phase !== 'paused') return 'recording'
-    if (isCaptureOverlayOpen()) return 'capture'
-    return null
-  })
-  setGlobalToastNoticeTargetResolver(getVoiceImeForegroundWindowHost)
-  setVoiceImeTranscriptionDispatcher((payload, context) => dispatchTranscription(payload.text, {
-    sourceHost: payload.sourceHost,
-    sessionId: context.sessionId ?? undefined,
-  }))
-  const unbindVoiceImeDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.VOICE_IME, {
-    id: 'voice-ime-surface',
-    priority: GLOBAL_ESCAPE_PRIORITY.surface,
-    isActive: () => !voiceImeState.hasSession,
-    onEscape: () => {
-      const target = windowManager.get(WindowType.VOICE_IME)
-      if (target && !target.isDestroyed()) voiceImeToRenderer.emit('dismiss', { reason: 'escape' }, target)
-    },
-  })
-  const unbindToastDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.GLOBAL_TOAST, {
-    id: 'global-toast',
-    priority: GLOBAL_ESCAPE_PRIORITY.toast,
-    onEscape: hideGlobalToast,
-  })
-  app.once('before-quit', () => {
-    unbindVoiceImeDismissal()
-    unbindToastDismissal()
-  })
-  initPowerEventCleanup()
-  initPowerSaveBlockers()
-  const ipcLog = createMainDiagnosticLogger('ipc.service')
-  setIpcServiceErrorLogger((error, meta) => {
-    ipcLog.error(`${meta.kind}.failed`, 'IPC handler failed', error, meta)
-  })
+initDeeplink(
+  () => {
+    initAppLogging(ipcMain)
+    registerVoiceImeStartGuard(() => {
+      if (recordingState.isBusy && recordingState.snapshot.phase !== 'paused') return 'recording'
+      if (isCaptureOverlayOpen()) return 'capture'
+      return null
+    })
+    setGlobalToastNoticeTargetResolver(getVoiceImeForegroundWindowHost)
+    setVoiceImeTranscriptionDispatcher((payload, context) =>
+      dispatchTranscription(payload.text, {
+        sourceHost: payload.sourceHost,
+        sessionId: context.sessionId ?? undefined,
+      })
+    )
+    const unbindVoiceImeDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.VOICE_IME, {
+      id: 'voice-ime-surface',
+      priority: GLOBAL_ESCAPE_PRIORITY.surface,
+      isActive: () => !voiceImeState.hasSession,
+      onEscape: () => {
+        const target = windowManager.get(WindowType.VOICE_IME)
+        if (target && !target.isDestroyed()) voiceImeToRenderer.emit('dismiss', { reason: 'escape' }, target)
+      },
+    })
+    const unbindToastDismissal = bindGlobalEscapeConsumerToVisibility(WindowType.GLOBAL_TOAST, {
+      id: 'global-toast',
+      priority: GLOBAL_ESCAPE_PRIORITY.toast,
+      onEscape: hideGlobalToast,
+    })
+    app.once('before-quit', () => {
+      unbindVoiceImeDismissal()
+      unbindToastDismissal()
+    })
+    initPowerEventCleanup()
+    initPowerSaveBlockers()
+    const ipcLog = createMainDiagnosticLogger('ipc.service')
+    setIpcServiceErrorLogger((error, meta) => {
+      ipcLog.error(`${meta.kind}.failed`, 'IPC handler failed', error, meta)
+    })
 
-  setupAppIdentity()
-  setupDisplayMediaHandler()
-  setupBrowserWindowLifecycle()
-  setupAppActivation()
-  startSystemPreferencesListener()
+    setupAppIdentity()
+    setupDisplayMediaHandler()
+    setupBrowserWindowLifecycle()
+    setupAppActivation()
+    startSystemPreferencesListener()
 
-  createMainWindow()
+    if (is.dev) {
+      windowLabController = initWindowLab({
+        resolveMainWindow: () => windowManager.get(WindowType.MAIN) ?? null,
+      })
+      app.once('before-quit', () => windowLabController?.dispose())
+    }
 
-  createShortcutConfigService({
-    onReapply: requestShortcutRuntimeSync,
-    onTrigger: handleShortcutAction,
-  })
-  onShortcutRuntimeSyncRequested(reapplyAppShortcutRuntime)
-  reapplyAppShortcutRuntime()
+    createMainWindow()
 
-  initSelectionHook()
+    createShortcutConfigService({
+      onReapply: requestShortcutRuntimeSync,
+      onTrigger: handleShortcutAction,
+    })
+    onShortcutRuntimeSyncRequested(reapplyAppShortcutRuntime)
+    reapplyAppShortcutRuntime()
 
-  /**
-   * 初始化自动更新：桥接 autoUpdater 事件 → IPC，并默认启动后 ~10s 首检、每 4h 轮询
-   * 发现新版本会通过 status 事件让渲染端自动弹出更新窗。可传 { pollIntervalMs: 0 } 关闭轮询
-   */
-  initAutoUpdater()
+    initSelectionHook()
 
-  if (process.platform === 'darwin') {
-    startFocusCheckPolling()
-    initMeetingDetection()
-    /** 手动 native tap 录音管线（macOS 14.2+ 混入系统音频）：与会议录音共用 audio-recorder 子进程 */
-    initNativeRecordingPipeline()
-  }
-}, showOrCreateMainWindow, {
-  /** 自动启动的音频监测与系统时间格式 helper 最低支持 macOS 14.2。 */
-  minimumMacOS: { major: 14, minor: 2 },
-})
+    /**
+     * 初始化自动更新：桥接 autoUpdater 事件 → IPC，并默认启动后 ~10s 首检、每 4h 轮询
+     * 发现新版本会通过 status 事件让渲染端自动弹出更新窗。可传 { pollIntervalMs: 0 } 关闭轮询
+     */
+    initAutoUpdater()
+
+    if (process.platform === 'darwin') {
+      startFocusCheckPolling()
+      initMeetingDetection()
+      /** 手动 native tap 录音管线（macOS 14.2+ 混入系统音频）：与会议录音共用 audio-recorder 子进程 */
+      initNativeRecordingPipeline()
+    }
+  },
+  showOrCreateMainWindow,
+  {
+    /** 自动启动的音频监测与系统时间格式 helper 最低支持 macOS 14.2。 */
+    minimumMacOS: { major: 14, minor: 2 },
+  },
+)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -214,6 +228,20 @@ function setupBrowserWindowLifecycle(): void {
      */
     optimizer.watchWindowShortcuts(window, { zoom: true })
 
+    if (is.dev) {
+      window.webContents.on('before-input-event', (event, input) => {
+        const isWindowLabShortcut = input.type === 'keyDown'
+          && input.key.toLowerCase() === 'l'
+          && input.shift
+          && (input.meta || input.control)
+          && !input.alt
+        if (!isWindowLabShortcut) return
+
+        event.preventDefault()
+        windowLabController?.openControl()
+      })
+    }
+
     /** Fn 组合的物理键仍会走到窗口里，聚焦输入框时会多打出 `fn+\`` 的反引号、`fn+Space` 的空格 */
     attachFnComboSuppression(window.webContents)
 
@@ -279,7 +307,12 @@ function createMainWindow(): Electron.BrowserWindow {
   mainWindow.webContents.once('did-finish-load', () => {
     /** 主窗口加载完成后串行创建其余窗口，避免启动时多个 Chromium 进程同时初始化 */
     /** SELECTION / SHORTCUT_TEST 按需懒创建，不在此列 */
-    initTray({ onOpenMain: showOrCreateMainWindow })
+    initTray({
+      onOpenMain: showOrCreateMainWindow,
+      onOpenWindowLab: windowLabController
+        ? () => windowLabController?.openControl()
+        : undefined,
+    })
     void createWindowsSequentially([
       { type: WindowType.VOICE_IME },
     ]).then(() => {
@@ -398,3 +431,4 @@ const FOCUS_UPDATE_TARGETS = [
 
 const FOCUS_NATIVE_MARGIN = 20
 let focusNativeLastFocused = false
+let windowLabController: WindowLabController | null = null

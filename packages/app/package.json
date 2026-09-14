@@ -19,6 +19,7 @@
     "start": "electron-vite preview",
     "dev": "node scripts/ensure-native.mjs && electron-vite dev",
     "dev:web": "vite --config vite.config.web.ts",
+    "dev:window-lab": "vite --config vite.config.web.ts --open /windows/window-lab/index.html",
 
     "----- native -----": "-----",
     "build:native": "bash scripts/build-native.sh",

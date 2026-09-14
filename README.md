@@ -71,9 +71,17 @@ cd packages/app
 pnpm dev
 ```
 
-VSCode 开发直接按下 **F5**。macOS 的 `pnpm -F app dev` 会先检查原生 helper 是否存在且可执行，缺失时调用现有构建脚本。
+VSCode 开发直接按下 **F5**。macOS 的 `pnpm -F app dev` 会先检查原生 helper 是否存在且可执行，缺失时调用现有构建脚本
 
-所有渲染窗口的 CSP 由 `packages/app/vite.config.csp.ts` 统一注入。部署时可在构建环境或 `packages/app/env` 的环境文件中设置 `VITE_CSP_CONNECT_SRC`，以空格或逗号分隔需要连接的来源，例如 `https://api.example.com wss://api.example.com`。其他资源来源通过 `cspPlugin` 的 `additionalSources` 按指令追加；来源要包含协议和所需端口。渲染代码可直接读取构建期常量 `__APP_VERSION__`。
+调试窗口 UI 时，可按 `CommandOrControl+Shift+L` 或从开发版托盘菜单打开 **Window Lab**，同时比较浏览器画布与独立原生窗口的表现。只调组件和布局时也可单独启动浏览器画布：
+
+```bash
+pnpm -F app dev:window-lab
+```
+
+浏览器模式不加载 Electron preload，因此原生预览相关操作会保持禁用。Window Lab 的 HTML 入口不会进入生产构建
+
+所有渲染窗口的 CSP 由 `packages/app/vite.config.csp.ts` 统一注入。部署时可在构建环境或 `packages/app/env` 的环境文件中设置 `VITE_CSP_CONNECT_SRC`，以空格或逗号分隔需要连接的来源，例如 `https://api.example.com wss://api.example.com`。其他资源来源通过 `cspPlugin` 的 `additionalSources` 按指令追加；来源要包含协议和所需端口。渲染代码可直接读取构建期常量 `__APP_VERSION__`
 
 ---
 
@@ -94,7 +102,7 @@ bash packages/app/scripts/build-native.sh
 | `keyboard-listener` | `KeyboardListener/main.swift` | 监听全键盘物理按键事件（含 Fn/Globe） |
 | `screenshot-capture` | `ScreenshotCapture.swift` | ScreenCaptureKit 单帧原图捕获 |
 
-常驻二进制通过 `NativeBridge` 管理生命周期；一次性 helper（如 `screenshot-capture`）由主进程按需执行。
+常驻二进制通过 `NativeBridge` 管理生命周期；一次性 helper（如 `screenshot-capture`）由主进程按需执行
 
 > 产物（无扩展名的二进制文件）已在 `.gitignore` 中排除，每次拉取后需重新编译
 
@@ -136,7 +144,7 @@ ruby: error while loading shared libraries: libcrypt.so.1: cannot open shared ob
 sudo pacman -S libxcrypt-compat
 ```
 
-> **注意**：electron-builder 25.x 使用旧版 fpm，不受此问题影响。
+> **注意**：electron-builder 25.x 使用旧版 fpm，不受此问题影响
 
 ### electron-builder 26 + pnpm monorepo: `Cannot find module`
 
