@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /** 通过 IPC 指令驱动真实会话 Hook，验证身份和音频跨模块交付。 */
-import { act, render, renderHook, waitFor } from '@testing-library/react'
 import { createBrowserRouter, Outlet, RouterProvider } from '@jl-org/react-router'
+import { act, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useVoiceSession } from './useVoiceSession'
 
@@ -17,7 +17,9 @@ function setup() {
       const list = listeners.get(name) ?? new Set()
       list.add(listener)
       listeners.set(name, list)
-      return () => { list.delete(listener) }
+      return () => {
+        list.delete(listener)
+      }
     },
     setEmbeddedHost: vi.fn(async () => {}),
     setFocusContext: vi.fn(async () => {}),
@@ -40,12 +42,18 @@ describe('useVoiceSession', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
     const transcribe = vi.fn(async () => 'spoken text')
     const { unmount } = renderHook(() => useVoiceSession({ host: 'editor-a', capture, transcribe }))
-    await act(async () => { emit('embeddedStart', { host: 'editor-a', sessionId: 'session-a', mode: 'hold' }) })
+    await act(async () => {
+      emit('embeddedStart', { host: 'editor-a', sessionId: 'session-a', mode: 'hold' })
+    })
     expect(voiceIme.markRecordingStarted).toHaveBeenCalledWith('session-a', 1000)
     now.mockReturnValue(2500)
-    await act(async () => { emit('embeddedStop', { host: 'editor-b', sessionId: 'session-a', mode: 'hold' }) })
+    await act(async () => {
+      emit('embeddedStop', { host: 'editor-b', sessionId: 'session-a', mode: 'hold' })
+    })
     expect(capture.stop).not.toHaveBeenCalled()
-    await act(async () => { emit('embeddedStop', { host: 'editor-a', sessionId: 'session-a', mode: 'hold' }) })
+    await act(async () => {
+      emit('embeddedStop', { host: 'editor-a', sessionId: 'session-a', mode: 'hold' })
+    })
     expect(transcribe).toHaveBeenCalledWith(audio, expect.objectContaining({ sessionId: 'session-a' }))
     expect(voiceIme.releaseSession).toHaveBeenCalledExactlyOnceWith({ sessionId: 'session-a', result: { text: 'spoken text', duration: 1500 } })
     unmount()
@@ -57,11 +65,17 @@ describe('useVoiceSession', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1000)
     const transcribe = vi.fn(async () => 'restored text')
     const { result, unmount } = renderHook(() => useVoiceSession({ host: 'editor-a', capture, transcribe }))
-    await act(async () => { emit('embeddedStart', { host: 'editor-a', sessionId: 'session-a', mode: 'click' }) })
+    await act(async () => {
+      emit('embeddedStart', { host: 'editor-a', sessionId: 'session-a', mode: 'click' })
+    })
     now.mockReturnValue(2500)
-    await act(async () => { emit('cancel', { reason, sessionId: 'session-a' }) })
+    await act(async () => {
+      emit('cancel', { reason, sessionId: 'session-a' })
+    })
     expect(result.current.undoExpiresAt).toBe(7500)
-    await act(async () => { await result.current.undo() })
+    await act(async () => {
+      await result.current.undo()
+    })
     await waitFor(() => expect(voiceIme.deliverTranscription).toHaveBeenCalledExactlyOnceWith({ text: 'restored text', sourceHost: 'editor-a' }))
     expect(voiceIme.releaseSession).not.toHaveBeenCalled()
     expect(capture.start).toHaveBeenCalledOnce()
@@ -69,6 +83,43 @@ describe('useVoiceSession', () => {
     unmount()
     now.mockRestore()
   })
+  /**
+   * 之前有一道「录音不足 1 秒」门槛，从麦克风就绪那一刻起数：Esc 落在麦克风还没就绪、
+   * 或就绪后不到一秒时走 `reset()`，相位回 idle、窗口不收，浮窗看起来对第一次 Esc 毫无反应
+   * 这里把采集启动挂起来，在它就绪前按 Esc，断言会话进入撤销态而不是静默回 idle
+   */
+  it('麦克风尚未就绪时按 Esc 也进入撤销态，而不是静默回 idle', async () => {
+    const { voiceIme, emit, audio } = setup()
+    let resolveStart!: () => void
+    const capture = {
+      start: vi.fn(() =>
+        new Promise<void>((resolve) => {
+          resolveStart = resolve
+        })
+      ),
+      stop: vi.fn(async () => audio),
+      cancel: vi.fn(async () => {}),
+    }
+    const { result, unmount } = renderHook(() => useVoiceSession({ capture, transcribe: async () => 'text' }))
+    await act(async () => {
+      emit('floatingStart', { sessionId: 'session-a', mode: 'click' })
+    })
+    expect(result.current.phase).toBe('recording')
+    expect(voiceIme.markRecordingStarted).not.toHaveBeenCalled()
+
+    await act(async () => {
+      emit('cancel', { reason: 'escape', sessionId: 'session-a' })
+    })
+    expect(result.current.phase).toBe('canceled')
+
+    await act(async () => {
+      resolveStart()
+    })
+    await waitFor(() => expect(result.current.undoExpiresAt).not.toBeNull())
+    expect(result.current.phase).toBe('canceled')
+    unmount()
+  })
+
   it('切离缓存路由立即撤销宿主登记和采集，回到缓存页重新登记', async () => {
     const { voiceIme, emit, capture } = setup()
     window.history.replaceState(null, '', '/voice-a')
@@ -80,16 +131,26 @@ describe('useVoiceSession', () => {
       routes: [{ path: '/voice-a', component: HostPage }, { path: '/other', component: () => <div>Other page</div> }],
       options: { cache: { limit: 2 } },
     })
-    const view = render(<RouterProvider router={ router }><Outlet /></RouterProvider>)
+    const view = render(
+      <RouterProvider router={ router }>
+        <Outlet />
+      </RouterProvider>,
+    )
     try {
       await waitFor(() => expect(voiceIme.setEmbeddedHost).toHaveBeenCalledWith('cached-editor', true))
-      await act(async () => { emit('embeddedStart', { host: 'cached-editor', sessionId: 'cached-session', mode: 'click' }) })
-      await act(async () => { await router.push('/other') })
+      await act(async () => {
+        emit('embeddedStart', { host: 'cached-editor', sessionId: 'cached-session', mode: 'click' })
+      })
+      await act(async () => {
+        await router.push('/other')
+      })
       await waitFor(() => expect(voiceIme.setEmbeddedHost).toHaveBeenCalledWith('cached-editor', false))
       expect(capture.cancel).toHaveBeenCalledWith({ sessionId: 'cached-session' })
       expect(voiceIme.endSession).toHaveBeenCalledWith('cached-session')
       voiceIme.setEmbeddedHost.mockClear()
-      await act(async () => { await router.push('/voice-a') })
+      await act(async () => {
+        await router.push('/voice-a')
+      })
       await waitFor(() => expect(voiceIme.setEmbeddedHost).toHaveBeenCalledWith('cached-editor', true))
     }
     finally {
@@ -113,5 +174,4 @@ describe('useVoiceSession', () => {
     expect(capture.start).not.toHaveBeenCalled()
     unmount()
   })
-
 })

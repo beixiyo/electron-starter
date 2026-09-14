@@ -2,6 +2,10 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+/** 胶囊的底边光效来自 comps 源码链，测试只关心测宽与状态切换，不渲染它 */
+vi.mock('comps', () => ({ BottomGlow: () => null }))
+
 import { CanceledView } from './CanceledView'
 import { RecordingView } from './RecordingView'
 import { VoiceImeSurface } from './VoiceImeSurface'

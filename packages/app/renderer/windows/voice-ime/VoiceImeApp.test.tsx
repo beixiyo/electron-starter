@@ -30,6 +30,7 @@ const harness = vi.hoisted(() => {
       },
       setEmbeddedHost: vi.fn(async () => ({ success: true })),
       setFocusContext: vi.fn(async () => ({ success: true })),
+      setShellMetrics: vi.fn(async () => undefined),
       startClickMode: vi.fn(async () => ({ success: true, sessionId: 'session-a' })),
       stopSession: vi.fn(async () => true),
       cancelSession: vi.fn(async () => true),
@@ -46,6 +47,8 @@ vi.mock('@/components/voiceInput', () => ({
   createMediaRecorderCapture: vi.fn(),
   useGlobalToastNotice: vi.fn(),
 }))
+/** 胶囊的底边光效来自 comps 源码链，与关闭竞态无关 */
+vi.mock('comps', () => ({ BottomGlow: () => null }))
 vi.mock('@/hooks/useVoiceImeEscapeShield', () => ({ useVoiceImeEscapeShield: vi.fn() }))
 vi.mock('@/utils/env', () => ({ isElectron: () => true }))
 vi.mock('hooks', async (importOriginal) => ({

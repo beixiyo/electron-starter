@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VoiceImePreviewFrame } from './voiceImeTarget'
 
 vi.mock('comps', () => ({
+  BottomGlow: () => null,
   Button: () => null,
   ButtonGroup: () => null,
   Input: () => null,

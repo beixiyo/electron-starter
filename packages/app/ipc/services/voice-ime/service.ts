@@ -29,6 +29,7 @@ import {
   resolveVoiceImeSurface,
   setVoiceImeFocusContext,
   setVoiceImeSessionMode,
+  setVoiceImeShellMetrics,
 } from './state'
 import { voiceImeToRenderer } from './toRenderer'
 
@@ -559,6 +560,14 @@ const voiceImeService = createIpcService<VoiceImeContract>(VOICE_IME_NAMESPACE, 
       const window = getWindowFromEvent(event)
       if (!window || !isFocusContext(context)) return
       setVoiceImeFocusContext(window, context)
+    },
+
+    async setShellMetrics(event, patch) {
+      /** Window Lab 的原生预览跑的是同一套渲染层，不能让它把生产浮层的度量改掉 */
+      const window = getWindowFromEvent(event)
+      if (!window || window !== windowManager.get(WindowType.VOICE_IME)) return
+      if (!patch || typeof patch !== 'object') return
+      setVoiceImeShellMetrics(patch)
     },
 
     async setEmbeddedHost(event, host, active, options: VoiceImeHostRegistrationOptions = {}) {

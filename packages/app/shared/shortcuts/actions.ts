@@ -15,8 +15,16 @@ export const SHORTCUT_ACTIONS = [
     label: '助手',
     scope: 'global',
     activation: 'trigger',
-    /** 裸 Fn 保留双击；普通键盘默认值使用单击，避免双击白名单拒绝默认值 */
-    binding: { gesture: 'doublePress', chord: { source: 'fn', key: 'Fn' } },
+    /**
+     * 默认不再绑成裸 Fn 双击
+     *
+     * 实测症状：端内单击 Fn 唤起语音听写，胶囊要过零点几秒才出来，端外同样
+     * 根因：语音听写是裸 Fn 单击，助手若也挂在裸 Fn 上做双击，gesture engine 收到第一次松开后
+     * 必须等满 `DOUBLE_PRESS_INTERVAL_MS`（300ms）确认没有第二击，才敢把它当单击派发——
+     * 主动作的响应被次动作的判定窗口拖住。同一个键上单击与双击并存就必然有这段等待，
+     * 引擎层无解，只能不让两者共用裸 Fn。用户仍可在设置里把助手录成双击（白名单只允许裸 Fn）
+     */
+    binding: { chord: { source: 'fn', key: 'A' } },
     keyboardBinding: { chord: { source: 'keyboard', key: 'A', modifiers: ['Primary', 'Shift'] } },
   },
   {
@@ -38,12 +46,12 @@ export const SHORTCUT_ACTIONS = [
 ] as const satisfies readonly ShortcutActionDefinition[]
 
 export const MAC_DEFAULT_BINDINGS = Object.fromEntries(
-  SHORTCUT_ACTIONS.map(action => [action.id, toShortcutActionBinding(action, action.binding)]),
+  SHORTCUT_ACTIONS.map((action) => [action.id, toShortcutActionBinding(action, action.binding)]),
 ) as ShortcutBindingsByAction
 
 /** Windows、Linux 和 Web 默认使用普通键盘，避免依赖 macOS Fn helper */
 export const DEFAULT_KEYBOARD_BINDINGS = Object.fromEntries(
-  SHORTCUT_ACTIONS.map(action => [
+  SHORTCUT_ACTIONS.map((action) => [
     action.id,
     toShortcutActionBinding(action, action.keyboardBinding),
   ]),
@@ -59,8 +67,7 @@ export function toShortcutActionBinding(
   action: Pick<ShortcutActionDefinition, 'activation' | 'scope'>,
   binding: ShortcutGestureBinding | ShortcutActionInputBinding | null,
 ): ShortcutBinding | null {
-  if (!binding)
-    return null
+  if (!binding) return null
 
   const gesture = binding.gesture ?? getShortcutActionGesture(action)
 
@@ -90,8 +97,7 @@ export function isShortcutGestureBindingSupportedByAction(
   action: Pick<ShortcutActionDefinition, 'activation'>,
   binding: ShortcutGestureBinding,
 ): boolean {
-  if (!getShortcutActionRecordGestures(action).includes(binding.gesture))
-    return false
+  if (!getShortcutActionRecordGestures(action).includes(binding.gesture)) return false
 
   return binding.gesture !== 'doublePress' || canShortcutChordDoublePress(binding.chord)
 }
@@ -129,7 +135,7 @@ function detectShortcutDefaultPlatform(): 'darwin' | 'other' {
       : 'other'
   }
 
-  const maybeNavigator = globalThis as typeof globalThis & { navigator?: { platform?: string, userAgent?: string } }
+  const maybeNavigator = globalThis as typeof globalThis & { navigator?: { platform?: string; userAgent?: string } }
   const platform = maybeNavigator.navigator?.platform ?? ''
   const userAgent = maybeNavigator.navigator?.userAgent ?? ''
   return /Mac|iPhone|iPad|iPod/i.test(platform) || /Mac OS X/i.test(userAgent)

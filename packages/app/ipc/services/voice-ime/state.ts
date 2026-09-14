@@ -1,6 +1,15 @@
 /** Voice IME 的焦点、宿主登记和会话目标；不依赖 IPC handler 或文本投递实现。 */
 
-import type { VoiceImeFocusContext, VoiceImeHostId, VoiceImeHostRegistrationOptions, VoiceImeMode, VoiceImeSessionHost } from '@shared'
+import type {
+  VoiceImeFocusContext,
+  VoiceImeHostId,
+  VoiceImeHostRegistrationOptions,
+  VoiceImeMode,
+  VoiceImeSessionHost,
+  VoiceImeShellMetrics,
+  VoiceImeShellMetricsPatch,
+} from '@shared'
+import { VOICE_IME_CAPSULE_HEIGHT, VOICE_IME_SHADOW_INSET, VOICE_IME_SIZE } from '@shared'
 import type { BrowserWindow } from 'electron'
 
 const focusContextWindows = new Map<number, { window: BrowserWindow; context: VoiceImeFocusContext }>()
@@ -11,6 +20,19 @@ const defaultHosts = new Map<number, { window: BrowserWindow; host: VoiceImeHost
 let sessionTargetWindow: BrowserWindow | null = null
 let sessionTargetHost: VoiceImeSessionHost | null = null
 let sessionMode: VoiceImeMode = 'click'
+
+/**
+ * 浮层里壳的度量（不含留白），由浮层渲染层在形态切换时上报
+ *
+ * 浮层窗口固定为最大一档（理由见 shared 的 `VOICE_IME_SIZE`），窗口顶边不再是胶囊顶边；
+ * 全局提示条要贴在胶囊上方，只能靠 `height` 从窗口底边往上算。渲染层挂载即上报，
+ * 上报前高按胶囊兜底——提示条最多在首帧偏一档，不会压进卡片；宽暂无消费方，
+ * 兜底取窗口内容宽（壳能达到的最大值）
+ */
+let shellMetrics: VoiceImeShellMetrics = {
+  width: VOICE_IME_SIZE.width - VOICE_IME_SHADOW_INSET * 2,
+  height: VOICE_IME_CAPSULE_HEIGHT,
+}
 
 /** 为 renderer 上报的窗口安装一次销毁清理，避免缓存失效窗口。 */
 const trackedWindows = new Map<number, { window: BrowserWindow; remove: () => void }>()
@@ -242,6 +264,25 @@ export function setVoiceImeSessionMode(mode: VoiceImeMode): void {
 
 export function getVoiceImeSessionMode(): VoiceImeMode {
   return sessionMode
+}
+
+/**
+ * 合并浮层壳的度量，理由见 {@link shellMetrics}
+ *
+ * 只收带了的字段；非法值（NaN / 负数 / 非数字）按没带处理，保留上一次的
+ */
+export function setVoiceImeShellMetrics(patch: VoiceImeShellMetricsPatch): void {
+  const next = { ...shellMetrics }
+  for (const key of ['width', 'height'] as const) {
+    const value = patch[key]
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) next[key] = value
+  }
+  shellMetrics = next
+}
+
+/** 浮层壳当前的度量（不含留白），未上报前为 {@link shellMetrics} 的兜底值 */
+export function getVoiceImeShellMetrics(): VoiceImeShellMetrics {
+  return shellMetrics
 }
 
 /** 仅测试和生命周期清理使用，确保窗口追踪监听不残留。 */

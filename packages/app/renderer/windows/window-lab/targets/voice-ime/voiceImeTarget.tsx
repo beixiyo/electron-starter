@@ -2,6 +2,7 @@
 
 import { VoiceImeSurface } from '@/windows/voice-ime/VoiceImeApp/components'
 import { useVoiceImeViewport } from '@/windows/voice-ime/VoiceImeApp/hooks'
+import { VOICE_IME_SIZE } from '@shared'
 import { memo, useEffect } from 'react'
 import type { WindowLabScene } from '../../types'
 import type { WindowLabTargetAdapter, WindowLabTargetControlsProps, WindowLabTargetFrameProps } from '../types'
@@ -28,7 +29,8 @@ const VoiceImeFrame = memo<WindowLabTargetFrameProps>(({ preview }) => {
       className={ preview.theme === 'dark'
         ? 'dark'
         : undefined }
-      style={ { width: viewport.size.width, height: viewport.size.height } }
+      /** 预览 frame 与生产窗口同尺寸、同样固定；壳在里面锚到底边正中长开 */
+      style={ { width: VOICE_IME_SIZE.width, height: VOICE_IME_SIZE.height } }
     >
       <VoiceImeSurface
         viewMode={ viewport.viewMode }
@@ -54,6 +56,10 @@ const VoiceImeFrame = memo<WindowLabTargetFrameProps>(({ preview }) => {
           ? scene.sourceHost
           : undefined }
         onCopy={ NOOP }
+        /** 预览要把按钮画全：失败条的重试 / ✕、撤销条的撤销 / ✕ 都按有回调渲染 */
+        onRetry={ NOOP }
+        onUndo={ NOOP }
+        onDismiss={ NOOP }
         onMeasure={ viewport.reportContentWidth }
       />
     </div>

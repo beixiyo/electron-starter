@@ -32,22 +32,27 @@ export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
   const showFailureDetail = useLatestCallback(() => {
     if (session.error) showReason(session.error)
   })
+  /**
+   * 空闲也画成录音胶囊而不是 `prompt`：窗口只在会话里可见，空闲时早就收起了，
+   * 让它停在胶囊态，下次 Fn 展示的第一帧就是胶囊，不会从提示条缩成胶囊
+   */
   const viewMode: VoiceImeViewMode = session.text
     ? 'result'
-    : session.phase === 'idle' || session.phase === 'result'
-    ? 'prompt'
-    : session.phase === 'processing'
+    : session.phase === 'idle' || session.phase === 'result' || session.phase === 'processing'
     ? 'recording'
     : session.phase
   const {
     viewMode: displayedMode,
     size,
     shadowInset,
+    mountKey,
     switchView,
     reportContentWidth,
     hideAndReset,
   } = useVoiceImeViewport()
-  useVoiceImeWindowHitTest(displayedMode, size, shadowInset)
+  /** 壳元素：点击穿透的命中区按它的实际矩形算，窗口本身比壳大得多 */
+  const shellRef = useRef<HTMLDivElement>(null)
+  useVoiceImeWindowHitTest(displayedMode, shellRef)
   const closingRef = useRef(false)
   const restoreAfterCloseRef = useRef(false)
   const [isClosing, setIsClosing] = useState(false)
@@ -117,6 +122,9 @@ export const VoiceImeApp = memo<VoiceImeAppProps>((props) => {
   return (
     <div className={ cn('h-full', className) } style={ style }>
       <VoiceImeSurface
+        /** 收窗即换代：整棵形态树重挂成初始形态，理由见 `useVoiceImeViewport.mountKey` */
+        key={ mountKey }
+        shellRef={ shellRef }
         viewMode={ displayedMode }
         size={ size }
         shadowInset={ shadowInset }

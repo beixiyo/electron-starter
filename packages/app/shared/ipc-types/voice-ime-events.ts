@@ -26,6 +26,22 @@ export type VoiceImeFocusContext = {
   embeddedHost?: VoiceImeHostId
 }
 
+/**
+ * 浮层里壳（胶囊 / 结果卡等可见部分）的度量，单位 CSS px，不含四边透明留白
+ *
+ * 浮层窗口尺寸固定（见 `VOICE_IME_SIZE`），壳锚在窗口底边正中；主进程只要知道这几个数
+ * 就能反推它在屏幕上的位置
+ */
+export type VoiceImeShellMetrics = {
+  /** 壳的目标宽度；形态切换时报的是要长到的值，不是动画中的瞬时值 */
+  width: number
+  /** 壳的目标高度，同上 */
+  height: number
+}
+
+/** 上报时按需带字段，没带的保持主进程里上一次的值 */
+export type VoiceImeShellMetricsPatch = Partial<VoiceImeShellMetrics>
+
 /** 主进程广播的会话快照。 */
 export type VoiceImeActiveState = {
   phase: VoiceImePhase

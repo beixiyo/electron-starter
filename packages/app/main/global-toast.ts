@@ -1,6 +1,7 @@
 /** 全局提示层：主窗口不在前台时，用独立浮窗展示短提示 */
 
 import { globalToastToRenderer } from '@ipc/services/global-toast/toRenderer'
+import { getVoiceImeShellMetrics } from '@ipc/services/voice-ime/state'
 import type { GlobalToastPayload, GlobalToastPlacement, ShowGlobalToastOptions } from '@shared'
 import {
   GLOBAL_TOAST_CONTENT_SIZE,
@@ -87,8 +88,15 @@ function resolveToastBounds(
     if (anchor && !anchor.isDestroyed() && anchor.isVisible()) {
       const bounds = anchor.getBounds()
       const gap = offset ?? GLOBAL_TOAST_GAP
-      const anchorInset = windowManager.getMetadata(currentAnchorWindowType)?.config.visibleContentInsets?.top ?? SHADOW_INSET
-      const anchorVisibleTop = bounds.y + anchorInset
+      const anchorInsets = windowManager.getMetadata(currentAnchorWindowType)?.config.visibleContentInsets
+      /**
+       * 语音浮层的窗口固定为最大一档、壳贴着底边留白往上长（理由见 shared 的 `VOICE_IME_SIZE`），
+       * 窗口顶边上方还有一大段透明区，拿它当顶边提示条会飘在胶囊上方一百多像素；
+       * 只能从窗口底边减留白、再减渲染层上报的壳高。其它锚点窗仍按可见顶边算
+       */
+      const anchorVisibleTop = currentAnchorWindowType === WindowType.VOICE_IME
+        ? bounds.y + bounds.height - (anchorInsets?.bottom ?? SHADOW_INSET) - getVoiceImeShellMetrics().height
+        : bounds.y + (anchorInsets?.top ?? SHADOW_INSET)
       const visibleX = bounds.x + (bounds.width - contentWidth) / 2
       const visibleY = anchorVisibleTop - gap - contentHeight
 

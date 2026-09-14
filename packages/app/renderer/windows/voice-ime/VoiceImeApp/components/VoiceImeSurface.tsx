@@ -1,18 +1,19 @@
 /** 浮层五态装配：录音、提示、取消、失败、结果。 */
 import { useLatestCallback, useLatestRef } from 'hooks'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence } from 'motion/react'
 import { memo } from 'react'
 import { cn } from 'utils'
-import { VOICE_IME_RADIUS, VOICE_IME_SHADOW_INSET, VOICE_IME_WINDOW_SIZE } from '../constants'
+import { getVoiceImeShellRadius, VOICE_IME_SHADOW_INSET, VOICE_IME_WINDOW_SIZE } from '../constants'
 import type { VoiceImeViewMode } from '../constants'
 import { CanceledView } from './CanceledView'
 import { FailureView } from './FailureView'
 import { PromptView } from './PromptView'
 import { RecordingView } from './RecordingView'
 import { TranscriptionResult } from './TranscriptionResult'
+import { VoiceImeShell } from './VoiceImeShell'
 
 export const VoiceImeSurface = memo<VoiceImeSurfaceProps>((props) => {
-  const { viewMode, className, size, shadowInset, style, ...rest } = props
+  const { viewMode, className, size, shadowInset, style, shellRef, ...rest } = props
   const activeViewModeRef = useLatestRef(viewMode)
   const reportModeMeasure = useLatestCallback((mode: VoiceImeViewMode, width: number) => {
     if (activeViewModeRef.current !== mode) return
@@ -21,78 +22,79 @@ export const VoiceImeSurface = memo<VoiceImeSurfaceProps>((props) => {
   const reportRecordingMeasure = useLatestCallback((width: number) => reportModeMeasure('recording', width))
   const reportCanceledMeasure = useLatestCallback((width: number) => reportModeMeasure('canceled', width))
   const reportFailureMeasure = useLatestCallback((width: number) => reportModeMeasure('failure', width))
-  const resolvedShadowInset = size
-    ? shadowInset ?? VOICE_IME_SHADOW_INSET
-    : 0
-  const fallbackSize = VOICE_IME_WINDOW_SIZE[viewMode]
-  const viewportSize = size ?? fallbackSize
-  const contentSize = size
-    ? {
-      width: Math.max(0, viewportSize.width - resolvedShadowInset * 2),
-      height: Math.max(0, viewportSize.height - resolvedShadowInset * 2),
-    }
-    : undefined
+  const resolvedShadowInset = shadowInset ?? VOICE_IME_SHADOW_INSET
+  const targetSize = size ?? VOICE_IME_WINDOW_SIZE[viewMode]
+  const contentWidth = Math.max(0, targetSize.width - resolvedShadowInset * 2)
+  const contentHeight = Math.max(0, targetSize.height - resolvedShadowInset * 2)
 
   return (
-    <div
-      className="size-full"
-      style={ { padding: resolvedShadowInset } }
+    <VoiceImeShell
+      ref={ shellRef }
+      variant={ viewMode === 'result'
+        ? 'card'
+        : 'capsule' }
+      width={ contentWidth }
+      height={ contentHeight }
+      radius={ getVoiceImeShellRadius(viewMode, contentHeight) }
+      /**
+       * 传了 `size` 就是在固定尺寸的透明窗里：壳锚在窗口底边正中，宽高一变就从这个点
+       * 向上、向两侧长。窗口位置由主进程按「水平居中、底边贴屏」摆好且可见期间不 resize
+       * （见 `useVoiceImeViewport`），底边正中就是所有形态共同的锚点，形变全程只有壳自己
+       * 的一条弹簧，没有任何位移。不传 `size` 是内联预览 / 测试，壳留在文档流里
+       */
+      className={ cn(
+        size && 'fixed inset-x-0 mx-auto',
+        className,
+      ) }
+      style={ size
+        ? { bottom: resolvedShadowInset, ...style }
+        : style }
     >
-      <motion.div
-        className={ cn(
-          'relative h-full w-full overflow-hidden bg-background text-text shadow-[0_5px_20px_rgba(0,0,0,0.1),inset_0_0_0_1px_rgba(0,0,0,0.1)]',
-          className,
+      <AnimatePresence mode="wait">
+        { viewMode === 'recording' && (
+          <RecordingView
+            key="recording"
+            durationLabel={ rest.durationLabel }
+            remainingSeconds={ rest.remainingSeconds }
+            isProcessing={ rest.isProcessing }
+            audioLevel={ rest.audioLevel }
+            onMeasure={ reportRecordingMeasure }
+            onCancel={ rest.onCancel ?? (() => {}) }
+            onStop={ rest.onStop ?? (() => {}) }
+          />
         ) }
-        style={ { borderRadius: VOICE_IME_RADIUS[viewMode], ...style } }
-        animate={ contentSize ?? { width: '100%', height: '100%' } }
-        transition={ { type: 'spring', stiffness: 400, damping: 35 } }
-      >
-        <AnimatePresence mode="wait">
-          { viewMode === 'recording' && (
-            <RecordingView
-              key="recording"
-              durationLabel={ rest.durationLabel }
-              remainingSeconds={ rest.remainingSeconds }
-              isProcessing={ rest.isProcessing }
-              audioLevel={ rest.audioLevel }
-              onMeasure={ reportRecordingMeasure }
-              onCancel={ rest.onCancel ?? (() => {}) }
-              onStop={ rest.onStop ?? (() => {}) }
-            />
-          ) }
-          { viewMode === 'prompt' && <PromptView key="prompt" { ...rest } /> }
-          { viewMode === 'canceled' && (
-            <CanceledView
-              key="canceled"
-              expiresAt={ rest.expiresAt ?? null }
-              onUndo={ rest.onUndo ?? (() => {}) }
-              onDismiss={ rest.onDismiss ?? (() => {}) }
-              onMeasure={ reportCanceledMeasure }
-            />
-          ) }
-          { viewMode === 'failure' && (
-            <FailureView
-              key="failure"
-              message={ rest.message ?? 'Unable to complete voice input' }
-              detail={ rest.detail }
-              onRetry={ rest.onRetry }
-              onDismiss={ rest.onDismiss }
-              onShowDetail={ rest.onShowDetail }
-              onMeasure={ reportFailureMeasure }
-            />
-          ) }
-          { viewMode === 'result' && (
-            <TranscriptionResult
-              key="result"
-              text={ rest.text ?? '' }
-              sourceHost={ rest.sourceHost }
-              onCopy={ rest.onCopy }
-              onDismiss={ rest.onDismiss }
-            />
-          ) }
-        </AnimatePresence>
-      </motion.div>
-    </div>
+        { viewMode === 'prompt' && <PromptView key="prompt" { ...rest } /> }
+        { viewMode === 'canceled' && (
+          <CanceledView
+            key="canceled"
+            expiresAt={ rest.expiresAt ?? null }
+            onUndo={ rest.onUndo ?? (() => {}) }
+            onDismiss={ rest.onDismiss ?? (() => {}) }
+            onMeasure={ reportCanceledMeasure }
+          />
+        ) }
+        { viewMode === 'failure' && (
+          <FailureView
+            key="failure"
+            message={ rest.message ?? 'Unable to complete voice input' }
+            detail={ rest.detail }
+            onRetry={ rest.onRetry }
+            onDismiss={ rest.onDismiss }
+            onShowDetail={ rest.onShowDetail }
+            onMeasure={ reportFailureMeasure }
+          />
+        ) }
+        { viewMode === 'result' && (
+          <TranscriptionResult
+            key="result"
+            text={ rest.text ?? '' }
+            sourceHost={ rest.sourceHost }
+            onCopy={ rest.onCopy }
+            onDismiss={ rest.onDismiss }
+          />
+        ) }
+      </AnimatePresence>
+    </VoiceImeShell>
   )
 })
 
@@ -118,10 +120,16 @@ export type VoiceImeSurfaceProps = {
   onRetry?: () => void
   onDismiss?: () => void
   onShowDetail?: () => void
-  /** 含透明阴影留白的完整窗口尺寸；传入后启用窗口内层的尺寸动画。 */
+  /**
+   * 壳要长到的尺寸，含透明阴影留白（即该形态的「窗口尺寸」）
+   *
+   * 传入即视为跑在固定尺寸的透明窗里，壳锚到窗口底边正中；不传则按形态默认值内联渲染
+   */
   size?: { width: number; height: number }
-  /** 可见表面与透明窗口边缘之间的单侧留白。 */
+  /** 壳与透明窗口底边之间的留白。 */
   shadowInset?: number
+  /** 壳元素本体，宿主拿它算点击穿透的命中区 */
+  shellRef?: React.Ref<HTMLDivElement>
   className?: string
   style?: React.CSSProperties
 }

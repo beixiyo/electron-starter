@@ -1,7 +1,7 @@
 /** 全局提示的定位、替换计时与过期测量保护 */
 
-import { EventEmitter } from 'node:events'
 import type { BrowserWindow } from 'electron'
+import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const setBounds = vi.fn()
@@ -37,6 +37,12 @@ vi.mock('./logging', () => ({
   }),
 }))
 
+/** 浮层渲染层上报的壳高；浮层窗口固定为最大一档，胶囊顶边只能靠它从底边往上算 */
+const shellHeightState = vi.hoisted(() => ({ current: 40 }))
+vi.mock('@ipc/services/voice-ime/state', () => ({
+  getVoiceImeShellMetrics: () => ({ width: 140, height: shellHeightState.current }),
+}))
+
 vi.mock('@ipc/services/global-toast/toRenderer', () => ({
   globalToastToRenderer: { emit: vi.fn() },
 }))
@@ -46,11 +52,12 @@ vi.mock('./window-manager', () => ({
     create: () => toastWindow,
     showInactive: vi.fn(),
     hide: vi.fn(),
-    getTargetWindow: (type: string) => type === 'voice-ime'
-      ? voiceImeVisible
-    ? voiceImeWindow
-    : undefined
-      : toastWindow,
+    getTargetWindow: (type: string) =>
+      type === 'voice-ime'
+        ? voiceImeVisible
+          ? voiceImeWindow
+          : undefined
+        : toastWindow,
   },
   windowManager: {
     getMetadata: () => ({ config: { visibleContentInsets: { top: 30 } } }),
@@ -101,6 +108,7 @@ describe('全局提示', () => {
     setBounds.mockClear()
     setIgnoreMouseEvents.mockClear()
     voiceImeVisible = true
+    shellHeightState.current = 40
     hideGlobalToast()
     setGlobalToastNoticeTargetResolver(() => null)
     voiceImeWindow.removeAllListeners()
@@ -113,11 +121,30 @@ describe('全局提示', () => {
 
     const bounds = lastBounds()
     const toastVisibleBottom = bounds.y + GLOBAL_TOAST_SHADOW_INSET + 40
-    const anchorVisibleTop = 900 + SHADOW_INSET
+    /** 浮层窗口固定、壳贴底：可见顶边 = 窗口底边 − 底边留白 − 上报壳高 */
+    const anchorVisibleTop = 900 + 132 - SHADOW_INSET - 40
 
     expect(anchorVisibleTop - toastVisibleBottom).toBe(GLOBAL_TOAST_GAP)
     expect(bounds.x + GLOBAL_TOAST_SHADOW_INSET).toBe(660 + (340 - 200) / 2)
     expect(setIgnoreMouseEvents).toHaveBeenCalledWith(true)
+  })
+
+  it('胶囊顶边跟渲染层上报的壳高走，而不是浮层的窗口顶边', () => {
+    /**
+     * 浮层窗口固定为最大一档（结果卡那么大），胶囊只占底部一小截：
+     * 仍按窗口顶边算的话，提示条会飘在胶囊上方一百多像素的透明区里
+     */
+    shellHeightState.current = 194
+    showGlobalToast({ text: '磁盘空间不足' })
+    applyGlobalToastMeasurement(currentToken(), 200, 40)
+    const aboveCard = lastBounds().y
+
+    shellHeightState.current = 40
+    showGlobalToast({ text: '磁盘空间不足' })
+    applyGlobalToastMeasurement(currentToken(), 200, 40)
+    const aboveCapsule = lastBounds().y
+
+    expect(aboveCapsule - aboveCard).toBe(194 - 40)
   })
 
   it('Voice IME 不可见时回落到当前屏幕底部', () => {
@@ -211,5 +238,4 @@ describe('全局提示', () => {
     expect(emit).toHaveBeenLastCalledWith('notice', null, host)
     detach()
   })
-
 })

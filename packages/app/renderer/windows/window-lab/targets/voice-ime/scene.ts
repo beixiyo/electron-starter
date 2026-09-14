@@ -1,6 +1,6 @@
 /** 语音输入目标的中性场景预设；只包含可见状态，不连接真实输入链路。 */
 
-import { VOICE_IME_WINDOW_SIZE } from '@/windows/voice-ime/VoiceImeApp/constants'
+import { VOICE_IME_SIZE } from '@shared'
 import type { WindowLabPreview, WindowLabScene, WindowLabSize } from '../../types'
 import type { WindowLabPreset } from '../types'
 
@@ -51,10 +51,7 @@ export function applyVoiceImePreset(preview: WindowLabPreview, presetId: string)
     : preview
 }
 
-export function getVoiceImeInitialSize(preview: WindowLabPreview): WindowLabSize {
-  return VOICE_IME_WINDOW_SIZE[getViewMode(preview.scene)]
-}
-
-function getViewMode(scene: WindowLabScene): 'recording' | 'prompt' | 'canceled' | 'failure' | 'result' {
-  return scene.kind
+/** 生产浮层尺寸固定、可见期间不 resize，预览 frame 也一样：形变全在壳里 */
+export function getVoiceImeInitialSize(_preview: WindowLabPreview): WindowLabSize {
+  return { width: VOICE_IME_SIZE.width, height: VOICE_IME_SIZE.height }
 }

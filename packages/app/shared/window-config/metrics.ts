@@ -44,11 +44,33 @@ export const BOTTOM_FLOATING_CLEARANCE = 8
 /** 语音浮层的阴影留白，主进程落位与渲染层测量共用。 */
 export const VOICE_IME_SHADOW_INSET = SHADOW_INSET
 
-/** 语音浮层首次创建的兜底尺寸；挂载后按当前形态的实际内容调整。 */
+/**
+ * 语音浮层的固定尺寸：结果卡内容 344 × 194 加四边留白，所有形态共用这一个窗
+ *
+ * 实测症状：胶囊切结果卡时先整体平移到卡片的左上角、停一下再放大，中途大小还闪
+ * 根因是透明窗 `setBounds` 会先把**上一帧**按新原点画一次，再换成新尺寸的帧
+ * （electron/electron#39834，macOS 与 Windows 都有，Electron 43 仍未修）：窗口居中、
+ * 底边钉死，长大时原点必然往左上跑，旧帧跟着挪就是那次「平移」；只要可见期间
+ * 变过尺寸这一帧就躲不掉，再叠一条原生 resize 动画便是用户看到的两段式
+ *
+ * 所以窗口从建出来就固定为最大的一档、可见期间永不 resize，形变全由渲染层的壳画
+ * （壳锚在窗口底边正中，见 `VoiceImeShell`）。代价是主进程不能再拿窗口顶边当
+ * 胶囊顶边——壳的度量由渲染层上报（`voiceIme.setShellMetrics`），见 `global-toast.ts`
+ *
+ * 各形态的内容尺寸都必须装得下：宽 ≤ 344、高 ≤ 194，超出的部分会被窗口边裁掉
+ */
 export const VOICE_IME_SIZE = {
-  width: 200 + VOICE_IME_SHADOW_INSET * 2,
-  height: 44 + VOICE_IME_SHADOW_INSET * 2,
+  width: 344 + VOICE_IME_SHADOW_INSET * 2,
+  height: 194 + VOICE_IME_SHADOW_INSET * 2,
 } as const
+
+/**
+ * 语音胶囊的内容高度
+ *
+ * 主进程在渲染层上报壳高之前拿它兜底摆全局提示条；渲染层的胶囊形态也从这里取，
+ * 两边不能各写一个 40
+ */
+export const VOICE_IME_CAPSULE_HEIGHT = 40
 
 /** 全局提示窗口为自身视觉留白预留的单侧边距 */
 export const GLOBAL_TOAST_SHADOW_INSET = 10

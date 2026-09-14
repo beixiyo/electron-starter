@@ -1,8 +1,3 @@
-import type {
-  KeyboardModifierCode,
-  KeyboardShortcutChord,
-  ShortcutBinding,
-} from './types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_KEYBOARD_BINDINGS,
@@ -17,13 +12,14 @@ import { createElectronShortcutCapabilities, resolveEffectiveShortcutScope, toEf
 import { createShortcutGestureEngine } from './gesture-engine'
 import type { KeyboardInputTracker } from './input-tracker'
 import { createKeyboardInputTracker } from './input-tracker'
+import type { KeyboardModifierCode, KeyboardShortcutChord, ShortcutBinding } from './types'
 import {
+  keyboardShortcutChordMatchesModifierState,
   normalizeKeyboardCode,
   normalizeKeyboardShortcutChord,
   normalizeShortcutBinding,
   normalizeShortcutBindingsOrThrow,
   resolveShortcutBindingConflicts,
-  keyboardShortcutChordMatchesModifierState,
   shortcutBindingsConflict,
   shortcutChordsEqual,
 } from './utils'
@@ -37,22 +33,26 @@ describe('快捷键键名规范化', () => {
       gesture: 'press',
       chord: { source: 'keyboard', key: 'Grave', modifiers: [] },
     })).toBeNull()
-    expect(normalizeShortcutBinding({
-      scope: 'global',
-      gesture: 'press',
-      chord: { source: 'fn', key: 'Backquote' },
-    })?.chord).toEqual({ source: 'fn', key: 'Backquote', modifiers: [] })
+    expect(
+      normalizeShortcutBinding({
+        scope: 'global',
+        gesture: 'press',
+        chord: { source: 'fn', key: 'Backquote' },
+      })?.chord,
+    ).toEqual({ source: 'fn', key: 'Backquote', modifiers: [] })
   })
 
   it('拒绝未知键盘按键而不是将其持久化', () => {
     expect(normalizeBrowserShortcutKey({ code: 'UnknownKey', key: 'UnknownKey' })).toBeNull()
-    expect(() => normalizeShortcutBindingsOrThrow({
-      recording: {
-        scope: 'global',
-        gesture: 'press',
-        chord: { source: 'keyboard', key: 'UnknownKey', modifiers: [] },
-      },
-    })).toThrow('recording')
+    expect(() =>
+      normalizeShortcutBindingsOrThrow({
+        recording: {
+          scope: 'global',
+          gesture: 'press',
+          chord: { source: 'keyboard', key: 'UnknownKey', modifiers: [] },
+        },
+      })
+    ).toThrow('recording')
   })
 
   it('Fn chord 拒绝当前平台重复声明同一逻辑 modifier 家族', () => {
@@ -123,13 +123,15 @@ describe('快捷键键名规范化', () => {
     expect(normalizeBrowserShortcutKey({ code: 'ControlRight', key: 'Control' })).toBe('ControlRight')
     expect(normalizeKeyboardCode('AltRight')).toBe('AltRight')
     expect(normalizeKeyboardCode('Shift')).toBeNull()
-    expect(() => normalizeShortcutBindingsOrThrow({
-      voiceDictation: {
-        scope: 'global',
-        gesture: 'press',
-        chord: { source: 'keyboard', key: 'Alt', modifiers: [] },
-      },
-    })).toThrow('voiceDictation')
+    expect(() =>
+      normalizeShortcutBindingsOrThrow({
+        voiceDictation: {
+          scope: 'global',
+          gesture: 'press',
+          chord: { source: 'keyboard', key: 'Alt', modifiers: [] },
+        },
+      })
+    ).toThrow('voiceDictation')
   })
 
   it('单独按下和松开右侧 Option 时保留物理侧别', () => {
@@ -291,13 +293,15 @@ describe('快捷键键名规范化', () => {
       gesture: 'press',
       chord: { source: 'keyboard', key: 'A', modifiers: ['AltLeft', 'Alt'] },
     })).toBeNull()
-    expect(() => normalizeShortcutBindingsOrThrow({
-      recording: {
-        scope: 'global',
-        gesture: 'press',
-        chord: { source: 'keyboard', key: 'A', modifiers: ['AltLeft', 'Alt'] },
-      },
-    })).toThrow('recording')
+    expect(() =>
+      normalizeShortcutBindingsOrThrow({
+        recording: {
+          scope: 'global',
+          gesture: 'press',
+          chord: { source: 'keyboard', key: 'A', modifiers: ['AltLeft', 'Alt'] },
+        },
+      })
+    ).toThrow('recording')
   })
 
   it('物理 modifier 主键不能叠加当前平台等价的 Primary', () => {
@@ -395,18 +399,20 @@ describe('浏览器快捷键运行时生命周期', () => {
     })
     const tracker = createKeyboardInputTracker()
 
-    for (const event of browserEvents(tracker, {
-      code: 'AltRight',
-      key: 'Alt',
-      altKey: true,
-    }, 'down'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, {
-      code: 'KeyA',
-      key: 'a',
-      altKey: true,
-    }, 'down'))
-      engine.handle(event)
+    for (
+      const event of browserEvents(tracker, {
+        code: 'AltRight',
+        key: 'Alt',
+        altKey: true,
+      }, 'down')
+    ) engine.handle(event)
+    for (
+      const event of browserEvents(tracker, {
+        code: 'KeyA',
+        key: 'a',
+        altKey: true,
+      }, 'down')
+    ) engine.handle(event)
 
     await vi.advanceTimersByTimeAsync(300)
     expect(emit).toHaveBeenCalledWith(expect.objectContaining({
@@ -414,12 +420,13 @@ describe('浏览器快捷键运行时生命周期', () => {
       gesture: 'hold',
     }))
 
-    for (const event of browserEvents(tracker, {
-      code: 'AltRight',
-      key: 'Alt',
-      altKey: false,
-    }, 'up'))
-      engine.handle(event)
+    for (
+      const event of browserEvents(tracker, {
+        code: 'AltRight',
+        key: 'Alt',
+        altKey: false,
+      }, 'up')
+    ) engine.handle(event)
 
     expect(emit).toHaveBeenLastCalledWith(expect.objectContaining({
       phase: 'release',
@@ -537,18 +544,12 @@ describe('浏览器快捷键运行时生命周期', () => {
     })
     const tracker = createKeyboardInputTracker()
 
-    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'down'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'up'))
-      engine.handle(event)
-    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up'))
-      engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down')) engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up')) engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'down')) engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'down')) engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowLeft', key: 'ArrowLeft' }, 'up')) engine.handle(event)
+    for (const event of browserEvents(tracker, { code: 'ArrowUp', key: 'ArrowUp' }, 'up')) engine.handle(event)
 
     expect(emit).toHaveBeenCalledOnce()
     expect(emit).toHaveBeenCalledWith(expect.objectContaining({
@@ -568,7 +569,7 @@ describe('跨平台快捷键默认值', () => {
   })
 
   it('由 action activation 声明语音听写的 toggle 手势', () => {
-    const action = SHORTCUT_ACTIONS.find(item => item.id === 'voiceDictation')!
+    const action = SHORTCUT_ACTIONS.find((item) => item.id === 'voiceDictation')!
 
     expect(action.activation).toBe('toggle')
     expect(MAC_DEFAULT_BINDINGS.voiceDictation?.gesture).toBe('press')
@@ -582,6 +583,19 @@ describe('跨平台快捷键默认值', () => {
       gesture: 'press',
       chord: { source: 'keyboard', key: 'V', modifiers: ['Primary', 'Shift'] },
     })).toBe(true)
+  })
+
+  /**
+   * 裸 Fn 上单击与双击并存时，引擎收到单击的松开后必须等满双击判定窗口（300ms）才能派发，
+   * 语音听写这条主动作每次都慢一拍。默认值曾经就是这样（助手 = 裸 Fn 双击），这里锁住不再回去
+   */
+  it('默认绑定不在裸 Fn 上同时挂单击与双击', () => {
+    const bareFnGestures = Object.values(MAC_DEFAULT_BINDINGS)
+      .filter((binding) => binding?.chord.source === 'fn' && binding.chord.key === 'Fn')
+      .map((binding) => binding!.gesture)
+
+    expect(bareFnGestures).toContain('press')
+    expect(bareFnGestures).not.toContain('doublePress')
   })
 
   it('所有普通键盘动作同时接受单键和组合键', () => {
