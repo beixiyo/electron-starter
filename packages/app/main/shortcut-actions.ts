@@ -5,6 +5,8 @@ import type { VoiceImeShortcutStartOptions } from './voice-ime-shortcut/types'
 import { notifyShortcutRuntimeChanged } from '@ipc/services/shortcut-config/service'
 import { requestVoiceImeStart, requestVoiceImeStop } from '@ipc/services/voice-ime/service'
 import { SHORTCUT_ACTIONS, WindowType } from '@shared'
+import { BrowserWindow } from 'electron'
+import { prewarmExternalFocusCheck } from './focus-check'
 import { createMainDiagnosticLogger } from './logging'
 import { reapplyShortcutRuntime } from './shortcuts'
 import { readShortcutBindings } from './store/shortcut-bindings'
@@ -92,6 +94,8 @@ function handleVoiceDictationShortcut(event: ShortcutRuntimeEvent): void {
 }
 
 async function startVoiceImeFromShortcut(options: VoiceImeShortcutStartOptions): Promise<string | null> {
+  prewarmExternalFocusIfForeign()
+
   try {
     const result = await requestVoiceImeStart(options)
     return result.started
@@ -102,6 +106,29 @@ async function startVoiceImeFromShortcut(options: VoiceImeShortcutStartOptions):
     log.error('start.failed', 'voice input could not start', error)
     return null
   }
+}
+
+/**
+ * 端外发起时把前台 App 的 AX 树提前捂热，不等结果
+ *
+ * 投递完成时 `dispatchTranscription` 要靠 focus-check 判落点，而 Chromium 系 App 首次被查后约 2 s 内
+ * 焦点一律拿不到（详见 `focus-check.ts`）。按下这一刻先查一次，输入准备阶段的时间正好把这个窗口耗掉
+ * 与投递同一个门：自身应用聚焦时不查（不给自己的窗口写 AX 开关，也没有端外落点可判）
+ * 结果落一条 `shortcut.prewarm-focus` 诊断日志：与投递时的焦点判定对照能看出焦点在按下与完成之间有没有漂移
+ */
+function prewarmExternalFocusIfForeign(): void {
+  if (BrowserWindow.getFocusedWindow()) return
+
+  void prewarmExternalFocusCheck().then((focus) => {
+    log.info('shortcut.prewarm-focus', 'external focus prewarmed at shortcut press', {
+      app: focus.app,
+      bundleId: focus.bundleId,
+      tier: focus.tier,
+      role: focus.role,
+      webContent: focus.webContent,
+      focusWaitMs: focus.focusWaitMs,
+    })
+  })
 }
 
 const voiceImeShortcutController = createVoiceImeShortcutController({

@@ -1,6 +1,7 @@
 /** 文本投递路由的行为测试：端内宿主、外部焦点档位与过期会话 */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExternalTextInjectOutcome } from './external-text-inject'
 
 const harness = vi.hoisted(() => {
   const appWindow = {
@@ -24,17 +25,20 @@ const harness = vi.hoisted(() => {
     externalFocus: {
       focused: false,
       tier: 'none' as 'editable' | 'pasteable' | 'none',
+      reason: null as string | null,
       role: null,
       app: null,
       bundleId: null,
       pid: -1,
+      webContent: false,
+      focusWaitMs: 0,
       pasteMenuEnabled: null,
     },
     currentSessionId: null as string | null,
     emit: vi.fn(),
     checkFocusedTextInput: vi.fn(),
-    injectTextToExternalInput: vi.fn(async () => ({ method: 'ax' as const, fallbackReason: null })),
-    insertTextAtFocusedInput: vi.fn(async () => ({ ok: true, method: 'paste' as const, reason: null, app: 'Editor' })),
+    injectTextToExternalInput: vi.fn(async (): Promise<ExternalTextInjectOutcome> => ({ delivered: true, method: 'ax', fallbackReason: null, receiptMs: null })),
+    insertTextAtFocusedInput: vi.fn(async () => ({ ok: true, method: 'paste' as const, reason: null, app: 'Editor', receiptMs: null, receiptCount: 0 })),
     windowGet: vi.fn(),
     windowCreate: vi.fn(),
     windowWhenReady: vi.fn(async () => true),
@@ -100,10 +104,13 @@ describe('文本投递路由', () => {
     harness.externalFocus = {
       focused: false,
       tier: 'none',
+      reason: null,
       role: null,
       app: null,
       bundleId: null,
       pid: -1,
+      webContent: false,
+      focusWaitMs: 0,
       pasteMenuEnabled: null,
     }
     harness.currentSessionId = null
@@ -112,9 +119,9 @@ describe('文本投递路由', () => {
     harness.checkFocusedTextInput.mockReset()
     harness.checkFocusedTextInput.mockResolvedValue(harness.externalFocus)
     harness.injectTextToExternalInput.mockReset()
-    harness.injectTextToExternalInput.mockResolvedValue({ method: 'ax', fallbackReason: null })
+    harness.injectTextToExternalInput.mockResolvedValue({ delivered: true, method: 'ax', fallbackReason: null, receiptMs: null })
     harness.insertTextAtFocusedInput.mockReset()
-    harness.insertTextAtFocusedInput.mockResolvedValue({ ok: true, method: 'paste', reason: null, app: 'Editor' })
+    harness.insertTextAtFocusedInput.mockResolvedValue({ ok: true, method: 'paste', reason: null, app: 'Editor', receiptMs: null, receiptCount: 0 })
     harness.windowGet.mockReset()
     harness.windowGet.mockReturnValue(harness.resultWindow)
     harness.windowCreate.mockReset()
@@ -160,6 +167,22 @@ describe('文本投递路由', () => {
 
     expect(harness.injectTextToExternalInput).toHaveBeenCalledWith('editable text')
     expect(harness.insertTextAtFocusedInput).not.toHaveBeenCalled()
+  })
+
+  it('端外 editable 档位粘贴没有读回执时视为没有落点，保留到结果窗口', async () => {
+    harness.externalFocus.tier = 'editable'
+    harness.checkFocusedTextInput.mockResolvedValue(harness.externalFocus)
+    harness.injectTextToExternalInput.mockResolvedValue({ delivered: false, method: null, reason: 'paste-not-consumed', receiptMs: null })
+
+    await dispatchTranscription('没人接的文本')
+
+    expect(harness.injectTextToExternalInput).toHaveBeenCalledWith('没人接的文本')
+    expect(harness.emit).toHaveBeenCalledWith(
+      'transcription',
+      { text: '没人接的文本' },
+      harness.resultWindow,
+    )
+    expect(harness.windowShowInactive).toHaveBeenCalledWith('voice-ime')
   })
 
   it('端外 pasteable 档位强制原生 paste，不调用 auto 直插路径', async () => {

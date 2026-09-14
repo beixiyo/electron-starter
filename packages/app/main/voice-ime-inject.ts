@@ -78,9 +78,16 @@ export async function dispatchTranscription(
 
   if (externalFocus.tier === 'editable') {
     try {
-      await injectTextToExternalInput(text)
+      const outcome = await injectTextToExternalInput(text)
       if (!isDeliveryCurrent(options.sessionId)) return
-      return
+      if (outcome.delivered) return
+
+      /**
+       * 粘贴发出去了但预算内没人读剪贴板：一定没粘，文本没丢（helper 已还原剪贴板），交回结果窗口
+       *
+       * 这只是 AX 闸门之后的第二道保险，不是闸门本身：实测 Chrome body、Safari 空白页、系统设置侧栏
+       * 在 Cmd+V 后都会读剪贴板却不落字，「有人读」证明不了送达，能不能投仍由 focus-check 决定
+       */
     }
     catch {
       if (!isDeliveryCurrent(options.sessionId)) return
@@ -92,6 +99,7 @@ export async function dispatchTranscription(
 
   if (externalFocus.tier === 'pasteable') {
     try {
+      /** 强制 paste：AX 已经判过拿不到可写焦点元素，`result.ok=false` 时 reason 多半是 `paste-not-consumed` */
       const result = await insertTextAtFocusedInput(text, { method: 'paste' })
       if (result.ok) {
         if (!isDeliveryCurrent(options.sessionId)) return

@@ -6,13 +6,31 @@ import CoreGraphics
 ///
 /// 两条路径按顺序尝试：
 /// 1. `ax`：对焦点元素写 AXSelectedText。原生 Cocoa 文本控件的标准能力，一次原子编辑、可整段撤销，完全不碰剪贴板
-/// 2. `paste`：快照剪贴板 → 写入文本 → 发 Cmd+V → 等目标读完再写回快照。AX 不可写（Chromium / Electron / 终端等）时的兜底
+/// 2. `paste`：快照剪贴板 → 把文本作为**惰性承诺**放上剪贴板 → 发 Cmd+V → 等目标真正读取 → 写回快照
+///    AX 不可写（Chromium / Electron / 终端等）时的兜底
+///
+/// **粘贴路径带「读回执」，但回执只是必要条件，不是送达证明。** 文本用 `declareTypes:owner:` 作为惰性承诺放上剪贴板，
+/// 目标 App 处理 Cmd+V 真正调 `stringForType:` 时 pasteboard 服务回到本进程调 `pasteboard:provideDataForType:`
+/// 回执的三个用途：
+/// 1. 还原剪贴板的时机——回执后静默 200 ms 即可写回，比固定等 400 ms 更快也更稳（慢目标可等到 1.5 s）
+/// 2. 预算内**没有任何进程读**剪贴板 → 报 `paste-not-consumed`：没人读一定没粘，调用方视为没有落点而不是判成功
+/// 3. `receiptMs` / `receiptCount` 供调用方落诊断日志，排查时能看出目标什么时候读、读了几次
+///
+/// 曾试过把回执当投递闸门、把 focus-check 的 AX 角色判定拆掉，实测证明不可行：Chrome 焦点在 body
+/// （页面无 paste 监听）32 ms 就读了、Safari 空白页 0 ms、系统设置侧栏（`AXOutline`）138 ms，文本全都没落——
+/// 菜单项校验、SwiftUI 粘贴命令、Chromium 构建 paste 事件都会读剪贴板，实测连续三次文本无声消失
+/// 「有人读」证明不了任何事，能不能投仍由 `focus-check` 的 AX 判定决定
+///
+/// 已实测的边界：只查 `types` / `canReadObject` 不触发回执；纯 CLI 进程泵 RunLoop 即可收到回执，不需要
+/// NSApplication；兑现承诺不改变 `changeCount`，写回快照的守卫仍可靠。假回执来源还有剪贴板历史工具主动读取：
+/// 带 Transient / Concealed 标记（守约的工具会跳过），只认 Cmd+V 发出之后的回执
 ///
 /// 曾经的兜底是逐块发键盘事件，已废弃：换行怎么解释由目标 App 决定，裸 Return 在聊天框是发送，
 /// Shift+Return 在 VS Code 终端（xterm.js）被编码成裸回车、只有 kitty 这类支持新键盘协议的终端才当换行；
-/// 粘贴走 bracketed paste，换行以字面形式送达，任何目标都一致。Typeless / type4me 等同类工具也都以粘贴为兜底
+/// 粘贴走 bracketed paste，换行以字面形式送达，任何目标都一致
 ///
-/// stdout 输出 JSON：{"ok":true,"method":"ax","app":"Notes"} 或 {"ok":false,"reason":"…","app":"…"}
+/// stdout 输出 JSON：{"ok":true,"method":"paste","reason":null,"app":"Code","receiptMs":41,"receiptCount":2}
+/// 或 {"ok":false,"method":null,"reason":"paste-not-consumed","app":"Finder","receiptMs":null,"receiptCount":0}
 /// `--method=ax|paste` 只走指定路径，用于排查各 App 的兼容矩阵；默认两条都试
 /// 需要辅助功能权限（与 focus-check / keyboard-listener 共享同一权限）
 
@@ -21,22 +39,43 @@ enum InsertMethod: String {
   case paste
 }
 
+/// 失败原因；`paste-not-consumed` 是唯一「程序一切正常、只是预算内没人读剪贴板」的结果，调用方据它视为没有落点而不是再盲粘一次
+enum InsertFailure: String {
+  case emptyText = "empty-text"
+  case noFrontmostApp = "no-frontmost-app"
+  case axNotSettable = "ax-not-settable"
+  case pasteEventFailed = "paste-event-failed"
+  case pasteNotConsumed = "paste-not-consumed"
+}
+
 struct InsertOutcome {
   let ok: Bool
   let method: InsertMethod?
-  let reason: String?
+  let reason: InsertFailure?
   let app: String?
+  /// 粘贴路径：从发出 Cmd+V 到目标第一次读取剪贴板文本的毫秒数；没有回执或没走粘贴时为 nil
+  let receiptMs: Int?
+  /// 粘贴路径：Cmd+V 之后收到的回执总数
+  let receiptCount: Int
 }
 
 /// AX 写入后等待目标 App 把新值同步回 AX 树的时间，用于确认写入确实生效
-private let axSettleMicroseconds: useconds_t = 50_000
-/// 写完剪贴板到发 Cmd+V 之间的间隔，让 pasteboard 服务先落盘
-private let pasteboardSettleMicroseconds: useconds_t = 50_000
-/// Cmd+V 发出后到写回原剪贴板的等待
+private let axSettleSeconds: TimeInterval = 0.05
+/// 写完剪贴板到发 Cmd+V 之间的间隔，让 pasteboard 服务先落盘；期间泵 RunLoop，
+/// 让剪贴板工具因写入而触发的早期读取在 Cmd+V 之前就被消费掉，不混进回执
+private let pasteboardSettleSeconds: TimeInterval = 0.05
+/// Cmd+V 发出后等待**第一次**回执的预算；超过即判没人读、没送达
 ///
-/// 目标 App 读剪贴板是异步的，写回太早会把旧内容粘进去。type4me 实测 Electron 系（VS Code / Slack / Notion / 飞书）
-/// 要 200~500ms，150ms 太快，最终取 400ms 左右；这里沿用该经验值
-private let pasteRestoreDelayMicroseconds: useconds_t = 400_000
+/// 目标读剪贴板是异步的：AppKit 控件几毫秒，Electron 系（VS Code / Slack / Notion）type4me 实测 200~500 ms，
+/// 主线程忙（终端刷屏）时更久。预算既是无人读时判成没有落点的延迟，也是「先超时还原、目标后来才粘」这一竞态的护栏
+/// ——那种情况粘进去的是还原后的用户旧剪贴板；预算越长越安全，取 1.5 s
+private let receiptWaitBudgetSeconds: TimeInterval = 1.5
+/// 最后一次回执之后的静默期，静默满了才写回快照。Chromium 会先探后读，Handy 实测 200 ms 够用
+private let receiptQuietSeconds: TimeInterval = 0.2
+/// 有回执但一直不静默（剪贴板工具反复读）时的总上限，避免进程挂住
+private let receiptSettleCapSeconds: TimeInterval = 3.0
+/// 泵 RunLoop 的步长
+private let runLoopStepSeconds: TimeInterval = 0.015
 private let vKeyCode: CGKeyCode = 9
 
 /// 剪贴板历史工具（Paste / Maccy 等）约定：带此类型的写入不计入历史
@@ -49,11 +88,11 @@ func main() {
   let data = FileHandle.standardInput.readDataToEndOfFile()
 
   guard let text = String(data: data, encoding: .utf8), !text.isEmpty else {
-    emit(InsertOutcome(ok: false, method: nil, reason: "empty-text", app: nil))
+    emit(InsertOutcome(ok: false, method: nil, reason: .emptyText, app: nil, receiptMs: nil, receiptCount: 0))
     return
   }
   guard let frontApp = NSWorkspace.shared.frontmostApplication else {
-    emit(InsertOutcome(ok: false, method: nil, reason: "no-frontmost-app", app: nil))
+    emit(InsertOutcome(ok: false, method: nil, reason: .noFrontmostApp, app: nil, receiptMs: nil, receiptCount: 0))
     return
   }
 
@@ -64,19 +103,23 @@ func main() {
 
   if forced != .paste {
     if let focused, insertViaAccessibility(foldLineBreaksForSingleLine(unified, role: role), into: focused) {
-      emit(InsertOutcome(ok: true, method: .ax, reason: nil, app: appName))
+      emit(InsertOutcome(ok: true, method: .ax, reason: nil, app: appName, receiptMs: nil, receiptCount: 0))
       return
     }
     if forced == .ax {
-      emit(InsertOutcome(ok: false, method: nil, reason: "ax-not-settable", app: appName))
+      emit(InsertOutcome(ok: false, method: nil, reason: .axNotSettable, app: appName, receiptMs: nil, receiptCount: 0))
       return
     }
   }
 
-  if insertViaPaste(unified) {
-    emit(InsertOutcome(ok: true, method: .paste, reason: nil, app: appName))
-  } else {
-    emit(InsertOutcome(ok: false, method: nil, reason: "paste-event-failed", app: appName))
+  let paste = insertViaPaste(unified)
+  switch paste.result {
+  case .consumed:
+    emit(InsertOutcome(ok: true, method: .paste, reason: nil, app: appName, receiptMs: paste.firstReceiptMs, receiptCount: paste.receiptCount))
+  case .notConsumed:
+    emit(InsertOutcome(ok: false, method: nil, reason: .pasteNotConsumed, app: appName, receiptMs: nil, receiptCount: paste.receiptCount))
+  case .eventFailed:
+    emit(InsertOutcome(ok: false, method: nil, reason: .pasteEventFailed, app: appName, receiptMs: nil, receiptCount: 0))
   }
 }
 
@@ -91,7 +134,7 @@ func unifyLineBreaks(_ text: String) -> String {
 ///
 /// 粘贴路径**不做**这个折叠：粘贴不按 Return，不存在触发提交的风险，换行怎么处理交给目标自己；
 /// 而且角色判定在终端上会误判——xterm.js（VS Code 终端）给隐藏 textarea 标了 aria-multiline=false，
-/// Chromium 因此把它暴露成 AXTextField，按单行折叠会把 Claude Code 里的多行输入压成一行（实测）
+/// Chromium 因此把它暴露成 AXTextField，按单行折叠会把多行输入压成一行（实测）
 func foldLineBreaksForSingleLine(_ text: String, role: String?) -> String {
   let singleLineRoles: Set<String> = [kAXTextFieldRole as String, kAXComboBoxRole as String]
   guard let role, singleLineRoles.contains(role) else { return text }
@@ -122,25 +165,27 @@ func focusedElement(ofPid pid: pid_t) -> AXUIElement? {
 // MARK: - AX 路径
 
 /// 写 AXSelectedText 等价于「替换当前选区」，无选区时就是在光标处插入
+///
+/// 只对 AXValue 是字符串的元素动手：Chromium 把滑块、复选框、下拉框的 AXSelectedText 也报成可写，
+/// 它们的 AXValue 是数字 / 布尔。曾经 AXValue 读不到字符串就跳过校验直接判成功，
+/// 实测 `AXSlider` 场景的文本就是这样无声消失的；现在这类元素直接退到粘贴路径
 func insertViaAccessibility(_ text: String, into element: AXUIElement) -> Bool {
   var settable: DarwinBoolean = false
   guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
-        settable.boolValue else {
+        settable.boolValue,
+        let before = stringAttribute(element, kAXValueAttribute) else {
     return false
   }
 
-  let before = stringAttribute(element, kAXValueAttribute)
   guard AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success else {
     return false
   }
 
-  /// 部分 App 对不支持的写入也回 success 却什么都没发生。能读到 AXValue 时要求内容确实变了，
-  /// 否则退到粘贴路径；只比较「变没变」而不比较精确内容，自动缩进、智能引号会改写插入结果
-  if let before {
-    usleep(axSettleMicroseconds)
-    if let after = stringAttribute(element, kAXValueAttribute), after == before {
-      return false
-    }
+  /// 部分 App 对不支持的写入也回 success 却什么都没发生。要求内容确实变了，否则退到粘贴路径；
+  /// 只比较「变没变」而不比较精确内容，自动缩进、智能引号会改写插入结果
+  Thread.sleep(forTimeInterval: axSettleSeconds)
+  if let after = stringAttribute(element, kAXValueAttribute), after == before {
+    return false
   }
   return true
 }
@@ -153,30 +198,112 @@ func stringAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
 
 // MARK: - 粘贴路径
 
-/// 快照 → 写入 → Cmd+V → 写回。对用户而言剪贴板前后内容不变
+enum PasteResult {
+  /// Cmd+V 之后目标读了剪贴板文本
+  case consumed
+  /// 预算内没有任何读取，文本没送达；剪贴板已还原
+  case notConsumed
+  /// Cmd+V 事件都发不出去
+  case eventFailed
+}
+
+struct PasteOutcome {
+  let result: PasteResult
+  let firstReceiptMs: Int?
+  let receiptCount: Int
+}
+
+/// 快照 → 承诺 → Cmd+V → 等回执 → 写回。对用户而言剪贴板前后内容不变
 ///
-/// 写回前比对 changeCount：用户在这几百毫秒里自己复制了新内容，就放弃写回、不覆盖
-func insertViaPaste(_ text: String) -> Bool {
+/// 写回前比对 changeCount：用户在这期间自己复制了新内容，就放弃写回、不覆盖
+/// 承诺被别的写入者顶掉（`pasteboardChangedOwner:`）时同样不写回；此时若还没有回执，
+/// 目标即便处理了 Cmd+V 粘的也是别人的内容，照实报 `notConsumed`
+func insertViaPaste(_ text: String) -> PasteOutcome {
   let pasteboard = NSPasteboard.general
   let snapshot = ClipboardSnapshot.capture(from: pasteboard)
+  let provider = PromisedTextProvider(text: text)
 
-  pasteboard.clearContents()
-  let item = NSPasteboardItem()
-  item.setString(text, forType: .string)
-  markInternal(item)
-  pasteboard.writeObjects([item])
-  let changeCountAfterWrite = pasteboard.changeCount
-  usleep(pasteboardSettleMicroseconds)
+  /// 文本只登记类型、由 provider 惰性提供；两个标记类型当场给空数据，
+  /// 剪贴板工具查标记时不会走到 provider，回执只可能来自对文本本身的读取
+  let changeCountAfterWrite = pasteboard.declareTypes([.string, transientPasteboardType, concealedPasteboardType], owner: provider)
+  pasteboard.setData(Data(), forType: transientPasteboardType)
+  pasteboard.setData(Data(), forType: concealedPasteboardType)
+  pumpRunLoop(for: pasteboardSettleSeconds)
 
   guard postCommandV() else {
-    /// 事件都发不出去，剪贴板里留着的是我们的文本；立即还原，不让转写文本泄漏进用户剪贴板
+    /// 事件都发不出去，剪贴板里挂着的是我们的承诺；立即还原，不让待插入文本泄漏进用户剪贴板
     snapshot.restore(to: pasteboard, expectedChangeCount: changeCountAfterWrite)
-    return false
+    return PasteOutcome(result: .eventFailed, firstReceiptMs: nil, receiptCount: 0)
   }
 
-  usleep(pasteRestoreDelayMicroseconds)
+  let injectedAt = Date()
+  let wait = waitForReceipts(provider: provider, since: injectedAt)
   snapshot.restore(to: pasteboard, expectedChangeCount: changeCountAfterWrite)
-  return true
+
+  guard let firstReceipt = wait.firstReceipt else {
+    return PasteOutcome(result: .notConsumed, firstReceiptMs: nil, receiptCount: 0)
+  }
+  return PasteOutcome(
+    result: .consumed,
+    firstReceiptMs: Int(firstReceipt.timeIntervalSince(injectedAt) * 1000),
+    receiptCount: wait.receiptCount,
+  )
+}
+
+/// 泵 RunLoop 直到：有回执且静默期已满 / 预算内无回执 / 总上限到期 / 承诺被顶掉
+///
+/// 只认 `since` 之后的回执：写入剪贴板那一刻剪贴板工具就可能读一次，那不是目标 App
+func waitForReceipts(provider: PromisedTextProvider, since injectedAt: Date) -> (firstReceipt: Date?, receiptCount: Int) {
+  while true {
+    RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: runLoopStepSeconds))
+    let now = Date()
+    let receipts = provider.receipts.filter { $0 >= injectedAt }
+    let elapsed = now.timeIntervalSince(injectedAt)
+
+    if provider.ownershipLost {
+      return (receipts.first, receipts.count)
+    }
+    if let last = receipts.last {
+      if now.timeIntervalSince(last) >= receiptQuietSeconds || elapsed >= receiptSettleCapSeconds {
+        return (receipts.first, receipts.count)
+      }
+      continue
+    }
+    if elapsed >= receiptWaitBudgetSeconds {
+      return (nil, 0)
+    }
+  }
+}
+
+func pumpRunLoop(for seconds: TimeInterval) {
+  let deadline = Date(timeIntervalSinceNow: seconds)
+  while Date() < deadline {
+    RunLoop.main.run(mode: .default, before: deadline)
+  }
+}
+
+/// 剪贴板承诺的兑现者：目标 App 读文本时 pasteboard 服务回到本进程调它，每次调用记一条回执
+///
+/// 走的是 `declareTypes:owner:` 的非正式协议（`pasteboard:provideDataForType:`），不是
+/// `NSPasteboardItemDataProvider`：两者机制相同，前者能直接拿到 changeCount 当还原守卫
+final class PromisedTextProvider: NSObject {
+  private let text: String
+  private(set) var receipts: [Date] = []
+  /// 别的进程 clearContents / 写入后为 true：承诺已失效，也不该再写回快照
+  private(set) var ownershipLost = false
+
+  init(text: String) {
+    self.text = text
+  }
+
+  @objc func pasteboard(_ pasteboard: NSPasteboard, provideDataForType type: NSPasteboard.PasteboardType) {
+    receipts.append(Date())
+    pasteboard.setString(text, forType: type)
+  }
+
+  @objc func pasteboardChangedOwner(_ pasteboard: NSPasteboard) {
+    ownershipLost = true
+  }
 }
 
 /// Cmd+V 投到 HID 层而不是指定进程：终端类 App 有的只认系统层事件
@@ -263,9 +390,11 @@ struct ClipboardSnapshot {
 
 func emit(_ outcome: InsertOutcome) {
   let methodStr = outcome.method.map { "\"\($0.rawValue)\"" } ?? "null"
-  let reasonStr = outcome.reason.map { "\"\(escapeJSON($0))\"" } ?? "null"
+  let reasonStr = outcome.reason.map { "\"\($0.rawValue)\"" } ?? "null"
   let appStr = outcome.app.map { "\"\(escapeJSON($0))\"" } ?? "null"
-  print("{\"ok\":\(outcome.ok),\"method\":\(methodStr),\"reason\":\(reasonStr),\"app\":\(appStr)}")
+  let receiptStr = outcome.receiptMs.map(String.init) ?? "null"
+  print("{\"ok\":\(outcome.ok),\"method\":\(methodStr),\"reason\":\(reasonStr),\"app\":\(appStr),"
+    + "\"receiptMs\":\(receiptStr),\"receiptCount\":\(outcome.receiptCount)}")
   fflush(stdout)
 }
 

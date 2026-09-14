@@ -25,20 +25,26 @@ describe.skipIf(process.platform !== 'darwin')('focus-check helper 输出解析'
     mockHelperResult({
       focused: true,
       tier: 'pasteable',
+      reason: null,
       role: 'AXWindow',
       app: 'Editor',
       bundleId: 'com.example.editor',
       pid: 42,
+      web: false,
+      waitMs: 12,
       pasteMenuEnabled: false,
     })
 
     await expect(checkFocusedTextInput()).resolves.toEqual({
       focused: true,
       tier: 'pasteable',
+      reason: null,
       role: 'AXWindow',
       app: 'Editor',
       bundleId: 'com.example.editor',
       pid: 42,
+      webContent: false,
+      focusWaitMs: 12,
       pasteMenuEnabled: false,
     })
   })
@@ -47,16 +53,20 @@ describe.skipIf(process.platform !== 'darwin')('focus-check helper 输出解析'
     mockHelperResult({
       focused: true,
       tier: 'future-tier',
+      reason: 'focus-unavailable',
       role: 'AXTextArea',
       app: 'Editor',
       bundleId: 'com.example.editor',
       pid: 42,
+      web: true,
+      waitMs: 640,
       pasteMenuEnabled: true,
     })
 
     await expect(checkFocusedTextInput()).resolves.toMatchObject({
       focused: false,
       tier: 'none',
+      reason: 'focus-unavailable',
       pasteMenuEnabled: true,
     })
   })
@@ -71,10 +81,13 @@ describe.skipIf(process.platform !== 'darwin')('focus-check helper 输出解析'
     await expect(checkFocusedTextInput()).resolves.toEqual({
       focused: false,
       tier: 'none',
+      reason: 'helper-unavailable',
       role: null,
       app: null,
       bundleId: null,
       pid: -1,
+      webContent: false,
+      focusWaitMs: 0,
       pasteMenuEnabled: null,
     })
 
