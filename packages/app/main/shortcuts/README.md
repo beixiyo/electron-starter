@@ -67,7 +67,7 @@ shortcuts/
 - **后端只归一物理事实**：`KeyboardInput` 不含 chord、手势、scope、action。哪个键属于 Fn 组合由后端用 `fn` 标记，但组合怎么合成由 shared tracker 决定
 - **键名只有一个命名空间**：`KeyboardCode`（W3C `KeyboardEvent.code` 去掉 `Key` / `Digit` 前缀）。uIOhook 键码在 `input/uiohook/keycodes.ts` 转换，macOS 虚拟键码在 Swift `MacKeyCodes.swift` 转换，浏览器 `code` 在 `browser-key.ts` 转换；持久化边界不做别名兜底，未知键名直接拒绝
 - **Fn 组合存物理键**：Apple 键盘驱动在 HID 层把 fn+Return / fn+Delete / fn+方向键改写成 Keypad Enter / Forward Delete / Home / End / PageUp / PageDown（`ioreg` 里的 `FnKeyboardUsageMap`），CGEvent 与 Chromium `code` 都只剩改写后的键。helper 在 Fn 已按住时还原成 `Enter` / `Backspace` / 方向键上报（`native/mac/README.md`），录制与运行时因此一致；只有 `fn-combo-suppression.ts` 拿的是 Chromium 的 `code`，靠 `FN_TRANSLATED_KEYS` 把绑定的物理键映射到翻译结果再比对
-- **物理修饰键必须保留侧别**：`MetaLeft/MetaRight` 等作为 chord 成员严格匹配；声明式默认绑定可用逻辑修饰键 `Meta/Control/Alt/Shift/Primary`，表示同一家族至少按下一侧
+- **物理修饰键必须保留侧别**：`MetaLeft/MetaRight` 等作为 chord 成员严格匹配，keyboard 与 Fn 两种 chord 同一套规则（`fn + Left ⌥` 与 `Left ⌥ + A` 一样分侧；事件对 Fn 组合键只给逻辑家族，tracker 按自己记录的物理按住状态补齐侧别）；声明式默认绑定与 `system/` 读到的系统快捷键可用逻辑修饰键 `Meta/Control/Alt/Shift/Primary`，表示同一家族至少按下一侧
 - **修饰键状态偏离即撤销**：`input-runtime.ts` 每次 down/up 后用当前物理与逻辑修饰键校验每个 keyboard 注册项，不匹配的候选立即取消并释放已触发的 hold；裸 Fn 候选在 Fn 组合开始时撤销，`[` 候选在追加成员成 `[ + ]` 时撤销（`isShortcutChordPrefixOf`）
 - **重载要清物理状态**：`updateEntries` 同时清手势与 tracker，否则按住中的键会在重载后被当成「已按住」丢弃下一次按下
 - **runtime backend 与 provider 解耦**：`providers.ts` 只声明能力矩阵；`input-runtime-backend.ts` 一个 backend 同时认领 Fn 与有效 scope 为 global 的 keyboard 绑定，降级到 local 的 keyboard 绑定交给渲染进程 DOM backend，触发后经 `shortcutConfig.trigger` 回传主进程执行业务

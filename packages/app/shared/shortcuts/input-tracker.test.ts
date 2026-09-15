@@ -11,7 +11,8 @@ import { createKeyboardInputTracker } from './input-tracker'
 import type { KeyboardInput, KeyboardInputEvent } from './types'
 
 describe('键盘输入 tracker', () => {
-  it('Fn 组合键在 down 时冻结逻辑修饰键，up 复用同一 chord', () => {
+  /** 事件只给逻辑家族；tracker 没记录到对应物理键时原样保留，运行时按「任一侧」匹配 */
+  it('Fn 组合键在 down 时冻结修饰键，补不出侧别时保留逻辑家族，up 复用同一 chord', () => {
     const tracker = createKeyboardInputTracker()
 
     expect(tracker.handle(input('down', 'Fn'))).toEqual([
@@ -52,32 +53,57 @@ describe('键盘输入 tracker', () => {
     ])
   })
 
-  it('Fn 按住时修饰键仍走 keyboard 路径，同时另发 fn + 修饰键 chord', () => {
+  /**
+   * 修复前 Fn 路径把修饰键收敛成逻辑家族，`fn + Left ⌥` 录出来只有 `fn + ⌥`，与 keyboard chord
+   * 的 `Left ⌥ + A` 不一致；现在两条路径都带物理侧别，事件给的逻辑 flags 按 tracker 按住状态补齐
+   */
+  it('Fn 按住时修饰键仍走 keyboard 路径，同时另发 fn + 修饰键 chord，并以物理侧别进入 Fn 组合', () => {
     const tracker = createKeyboardInputTracker()
     tracker.handle(input('down', 'Fn'))
 
     expect(tracker.handle(input('down', 'ShiftLeft', { fn: true, modifiers: ['Shift'] }))).toEqual([
       { phase: 'down', chord: { source: 'keyboard', key: 'ShiftLeft', modifiers: [] }, timestamp: 1 },
-      { phase: 'down', chord: { source: 'fn', key: 'Fn', modifiers: ['Shift'] }, timestamp: 1 },
+      { phase: 'down', chord: { source: 'fn', key: 'Fn', modifiers: ['ShiftLeft'] }, timestamp: 1 },
     ])
     expect(tracker.handle(input('down', 'S', { fn: true, modifiers: ['Shift'] }))).toEqual([
-      { phase: 'down', chord: { source: 'fn', key: 'S', modifiers: ['Shift'] }, timestamp: 1 },
+      { phase: 'down', chord: { source: 'fn', key: 'S', modifiers: ['ShiftLeft'] }, timestamp: 1 },
     ])
   })
 
+  it('左右两侧同时按住时 Fn 修饰键 chord 按物理键结束，松开一侧就不再成立', () => {
+    const tracker = createKeyboardInputTracker()
+    tracker.handle(input('down', 'Fn'))
+    tracker.handle(input('down', 'MetaLeft', { fn: true, modifiers: ['Meta'] }))
+    tracker.handle(input('down', 'MetaRight', { fn: true, modifiers: ['Meta'] }))
+
+    /** 两个 Fn 修饰键 chord 都含 Left ⌘，一起结束；keyboard 路径照旧结束依赖 Left ⌘ 的组合与裸 Left ⌘ */
+    expect(tracker.handle(input('up', 'MetaLeft', { fn: true, modifiers: ['Meta'] })).map(event => event.chord)).toEqual([
+      { source: 'fn', key: 'Fn', modifiers: ['MetaLeft', 'MetaRight'] },
+      { source: 'fn', key: 'Fn', modifiers: ['MetaLeft'] },
+      { source: 'keyboard', key: 'MetaLeft', modifiers: ['MetaRight'] },
+      { source: 'keyboard', key: 'MetaLeft', modifiers: [] },
+    ])
+  })
+
+  /**
+   * 修复前 Fn 自身的按下事件固定不带 modifiers，先按 ⌘ 再按 Fn 只得到裸 Fn；
+   * 两种顺序都要收敛到同一个 `fn + ⌘`，且松开任一成员时它就结束
+   */
   it('Fn 与修饰键不论谁先按都合成同一个 fn + 修饰键 chord，成员松开即结束', () => {
-    const fnMeta = { source: 'fn', key: 'Fn', modifiers: ['Meta'] }
+    const fnMeta = { source: 'fn', key: 'Fn', modifiers: ['MetaLeft'] }
     const bareMeta = { source: 'keyboard', key: 'MetaLeft', modifiers: [] }
 
     const fnFirst = createKeyboardInputTracker()
     fnFirst.handle(input('down', 'Fn'))
     fnFirst.handle(input('down', 'MetaLeft', { fn: true, modifiers: ['Meta'] }))
     expect(fnFirst.handle(input('up', 'MetaLeft', { fn: true })).map(event => event.chord)).toEqual([fnMeta, bareMeta])
+    /** ⌘ 松开后只剩裸 Fn 按住，Fn 键自己的 chord 仍是 down 时冻结的裸 Fn */
     expect(fnFirst.handle(input('up', 'Fn')).map(event => event.chord)).toEqual([{ source: 'fn', key: 'Fn' }])
 
     const metaFirst = createKeyboardInputTracker()
     metaFirst.handle(input('down', 'MetaLeft', { modifiers: ['Meta'] }))
     expect(metaFirst.handle(input('down', 'Fn')).map(event => event.chord)).toEqual([fnMeta])
+    /** Fn 先松开时 `fn + ⌘` 随之结束；之后松开 ⌘ 只剩 keyboard 路径的裸 ⌘ */
     expect(metaFirst.handle(input('up', 'Fn')).map(event => event.chord)).toEqual([fnMeta])
     expect(metaFirst.handle(input('up', 'MetaLeft')).map(event => event.chord)).toEqual([bareMeta])
   })

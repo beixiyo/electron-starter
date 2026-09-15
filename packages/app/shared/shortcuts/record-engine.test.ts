@@ -212,7 +212,7 @@ describe('Fn 与修饰键组合录制', () => {
   it('Fn 与修饰键不论谁先按都录成同一个组合，且不等双击窗口', () => {
     vi.useFakeTimers()
     const fnMetaPress = {
-      binding: { gesture: 'press', chord: { source: 'fn', key: 'Fn', modifiers: ['Meta'] } },
+      binding: { gesture: 'press', chord: { source: 'fn', key: 'Fn', modifiers: ['MetaLeft'] } },
     }
 
     expect(recordRawInputs([
@@ -246,7 +246,7 @@ describe('Fn 与修饰键组合录制', () => {
 
     expect(onActiveChange.mock.calls.map(([active]) => active?.chord)).toEqual([
       { source: 'fn', key: 'Fn' },
-      { source: 'fn', key: 'Fn', modifiers: ['Shift'] },
+      { source: 'fn', key: 'Fn', modifiers: ['ShiftLeft'] },
     ])
   })
 })

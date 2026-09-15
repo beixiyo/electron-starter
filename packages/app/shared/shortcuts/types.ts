@@ -225,13 +225,16 @@ export type ActiveKeyboardShortcutEntry = {
 /**
  * Fn/Globe 快捷键 chord
  *
- * `key: 'Fn'` 表示 Fn 键自身是主键：不带 modifiers 是裸 Fn，带 modifiers 是 Fn 与修饰键的组合；
- * 其余 key 是 Fn 组合键的普通主键。修饰键一律是逻辑家族，不分左右侧
+ * `key: 'Fn'` 表示 Fn 键自身是主键：不带 modifiers 是裸 Fn，带 modifiers 是 `fn + ⌘` 这类
+ * 只有 Fn 与修饰键的组合；其余 key 是 Fn 组合键的普通主键
+ *
+ * 修饰键与 keyboard chord 同一套规则：录制结果带物理侧别（`fn + Left ⌥`），运行时严格分侧；
+ * 声明式默认值与系统快捷键表仍可写逻辑家族，表示同一家族任一侧
  */
 export type FnShortcutChord = {
   source: 'fn'
   key: FnShortcutKey
-  modifiers?: ShortcutModifier[]
+  modifiers?: KeyboardShortcutModifier[]
   /**
    * 与主键同时按住的其他普通键（`fn + [ + ]` 里的 `]`），归一规则同 {@link KeyboardShortcutChord.keys}
    *

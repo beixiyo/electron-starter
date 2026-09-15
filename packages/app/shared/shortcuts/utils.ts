@@ -269,7 +269,7 @@ export function pressKeyboardShortcutChord<Key>(
 export function pressFnShortcutChord(
   activeEntries: Map<KeyboardPlainCode, ActiveFnShortcutEntry>,
   key: KeyboardPlainCode,
-  modifiers: ShortcutModifier[],
+  modifiers: KeyboardShortcutModifier[],
 ): FnShortcutChord {
   const entry: ActiveFnShortcutEntry = {
     key,
@@ -408,7 +408,7 @@ export function releaseActiveKeyboardChords<Key>(
 /**
  * 释放一个 Fn 组合键，并返回所有依赖该成员的冻结 chord
  *
- * 仍按住的键保留各自 down 时冻结的逻辑修饰键，只把松开的成员从组合里去掉；
+ * 仍按住的键保留各自 down 时冻结的修饰键，只把松开的成员从组合里去掉；
  * 返回值与 keyboard 路径一样按成员数从多到少排序
  */
 export function releaseFnShortcutChords(
@@ -640,14 +640,18 @@ function toChordKeyList(key: KeyboardInputKey, keys: readonly KeyboardPlainCode[
   return [members.key, ...members.keys]
 }
 
-/** Fn 组合键 chord：主键与成员按普通键顺序归一，修饰键保持逻辑家族 */
+/** Fn 组合键 chord：主键与成员按普通键顺序归一，修饰键与 keyboard chord 同一套归一（物理侧别在前） */
 function normalizeFnComboChord(
   key: KeyboardPlainCode,
-  modifiers: ShortcutModifier[],
+  modifiers: Iterable<KeyboardShortcutModifier>,
   keys: readonly KeyboardPlainCode[],
 ): FnShortcutChord {
   const members = canonicalizeChordKeys(key, keys)
-  const chord: FnShortcutChord = { source: 'fn', key: members.key, modifiers }
+  const chord: FnShortcutChord = {
+    source: 'fn',
+    key: members.key,
+    modifiers: canonicalizeKeyboardShortcutModifiers(modifiers),
+  }
   if (members.keys.length)
     chord.keys = members.keys
 
@@ -661,13 +665,16 @@ function getKeyboardModifierChordMembers(chord: KeyboardShortcutChord): Keyboard
   return sortKeyboardShortcutModifiers([chord.key, ...chord.modifiers])
 }
 
-/** 裸 Fn 不带 modifiers 字段；`fn + ⌘` 这类 Fn 修饰键 chord 与 Fn 组合键一样保留逻辑修饰键 */
+/**
+ * 裸 Fn 不带 modifiers 字段；`fn + ⌘` 这类 Fn 修饰键 chord 与 Fn 组合键一样按 keyboard chord 的规则
+ * 收修饰键：物理侧别与逻辑家族都接受，同一家族不能既有侧别又有逻辑值
+ */
 function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord | null {
   if (!isFnShortcutKey(chord.key))
     return null
 
   const key = chord.key
-  const modifiers = normalizeShortcutModifierList(chord.modifiers)
+  const modifiers = normalizeKeyboardShortcutModifierList(chord.modifiers)
   if (!modifiers)
     return null
 
@@ -688,18 +695,8 @@ function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord
   return {
     source: 'fn',
     key,
-    modifiers,
+    modifiers: canonicalizeKeyboardShortcutModifiers(modifiers),
   }
-}
-
-function normalizeShortcutModifierList(modifiers: unknown): ShortcutModifier[] | null {
-  if (!Array.isArray(modifiers))
-    return []
-
-  const normalized = Array.from(new Set(modifiers.filter(isShortcutModifier)))
-  return hasDuplicateLogicalModifierFamily(normalized)
-    ? null
-    : normalized
 }
 
 function normalizeKeyboardShortcutModifierList(modifiers: unknown): KeyboardShortcutModifier[] | null {

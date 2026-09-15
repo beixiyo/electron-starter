@@ -43,4 +43,17 @@ describe('快捷键格式化', () => {
       },
     })).toBe('fn + [ + ]')
   })
+
+  /** 修复前 Fn chord 只存逻辑家族，单独 ⌥ 显示 `Left ⌥` 而 `fn + ⌥` 丢掉侧别 */
+  it('录制得到的 fn + 修饰键与 keyboard chord 一样带侧别', () => {
+    expect(formatBinding({
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Fn', modifiers: ['AltLeft'] },
+    })).toBe('fn + Left ⌥')
+
+    expect(formatBinding({
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Space', modifiers: ['ShiftRight'] },
+    })).toBe('fn + Right ⇧ + Space')
+  })
 })

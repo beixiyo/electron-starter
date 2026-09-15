@@ -1,9 +1,9 @@
 /** Fn 组合成员键的窗口内抑制：Fn 按住期间吞掉已绑定的组合键，避免字符落进输入框 */
 
-import type { FnModifier, KeyboardCode, KeyboardInput, ShortcutBinding } from '@shared/shortcuts'
+import type { FnModifier, KeyboardCode, KeyboardInput, KeyboardShortcutModifier, ShortcutBinding } from '@shared/shortcuts'
 import type { Input, WebContents } from 'electron'
 import type { ShortcutRuntimeEntry } from './runtime-backend'
-import { normalizeBrowserShortcutKey, normalizeShortcutModifier } from '@shared/shortcuts'
+import { isKeyboardModifierCode, KEYBOARD_MODIFIER_BY_CODE, normalizeBrowserShortcutKey, normalizeShortcutModifier } from '@shared/shortcuts'
 import { keyboardInputBackend } from './input'
 
 /**
@@ -113,12 +113,19 @@ function toSuppressionEntry(
      * modifiers 必须一起比
      *
      * 只看主键的话，绑定 `Fn+Space` 会把 `Fn+Shift+Space` 也吞掉，而那个组合在运行时
-     * 并不匹配——用户按下去既没有动作、字符也没了。语义对齐 `shortcutChordsEqual`：
-     * Fn chord 的 modifiers 只有逻辑修饰键，归一掉 `Primary` 后比集合是否完全相同
+     * 并不匹配——用户按下去既没有动作、字符也没了。Electron `Input` 只报家族不分侧别，
+     * 因此不管绑定存的是物理侧别还是逻辑家族，都归一到家族粒度再比集合是否完全相同
      */
-    modifiers: new Set((binding.chord.modifiers ?? []).map(normalizeShortcutModifier)),
+    modifiers: new Set((binding.chord.modifiers ?? []).map(modifierFamilyOf)),
     canTrigger: () => canTrigger(binding),
   }]
+}
+
+/** 物理侧别与逻辑家族统一收敛成家族，用于只有家族粒度的比较场景 */
+function modifierFamilyOf(modifier: KeyboardShortcutModifier): FnModifier {
+  return isKeyboardModifierCode(modifier)
+    ? KEYBOARD_MODIFIER_BY_CODE[modifier]!
+    : normalizeShortcutModifier(modifier)
 }
 
 function getInputModifiers(input: Input): Set<FnModifier> {
