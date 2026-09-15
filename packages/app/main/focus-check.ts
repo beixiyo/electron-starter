@@ -46,6 +46,14 @@ function parseNoneReason(value: unknown): FocusNoneReason | null {
     : null
 }
 
+/**
+ * 查前台 App 此刻有没有转写文本能落进去的地方，档位见 {@link FocusTier}
+ *
+ * 「前台」有一个例外：系统「表情与符号」面板（`com.apple.CharacterPaletteIM`）持有键盘焦点时改查它
+ * 它是输入法助手进程的非激活面板，点进搜索框后键盘归它、前台 App 与其 AX 焦点却不变，只查前台
+ * 永远摸不到那个搜索框，转写只能弹结果条。判定与 `insert-text` 的投递走同一条规则，
+ * 结果里的 `app` / `bundleId` 会是面板自己
+ */
 export function checkFocusedTextInput(): Promise<FocusCheckResult> {
   if (process.platform !== 'darwin')
     throw new Error('[focus-check] macOS only')

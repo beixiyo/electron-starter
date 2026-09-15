@@ -74,6 +74,13 @@ import Carbon.HIToolbox
 /// - 访达整体不进第二档：它唯一的文本落点（重命名、搜索框）都会被第一档直接命中，
 ///   而侧栏 / 预览等区域实测还会报出 `AXGroup`，单靠角色表挡不住
 ///
+/// **查哪个 App 不只看前台。** 系统「表情与符号」面板（`com.apple.CharacterPaletteIM`）是输入法助手进程的
+/// 非激活面板：点进它的搜索框后键盘输入归它，但 `frontmostApplication` 与背后 App 的 AX 焦点都纹丝不动
+/// （实测：面板搜索框有光标时前台仍是访达、焦点仍是桌面的 `AXOutline`，对面板进程单独查却是 `AXTextField`
+/// 可写）。只查前台 App 永远摸不到它，转写只能弹结果条；所以先看面板进程有没有键盘焦点，有就改查它，
+/// 判定与投递（`insert-text` 同一条规则）都落到面板的搜索框。面板关掉或点回背后 App 后它的焦点元素
+/// 查不到，自然退回前台 App
+///
 /// stdout 输出 JSON：{"focused":true,"tier":"pasteable","reason":null,"role":"AXWindow","app":"Code","web":false,"waitMs":0,…}
 /// `focused` 恒等于 `tier != none`，保留给只关心「投不投」的调用方
 /// `--pid=<pid>` 改查指定进程而不是前台 App，用于离线摸各 App 的兼容矩阵——判定同一套，
@@ -145,6 +152,7 @@ func parseTargetPid(_ arguments: [String]) -> pid_t? {
 
 func checkFocusTarget(target: pid_t? = nil) -> FocusResult {
   let app = target.flatMap { NSRunningApplication(processIdentifier: $0) }
+    ?? characterPaletteWithKeyboardFocus()
     ?? NSWorkspace.shared.frontmostApplication
   guard let frontApp = app else {
     return FocusResult(
@@ -211,6 +219,27 @@ func checkFocusTarget(target: pid_t? = nil) -> FocusResult {
     return result(.none, reason: .noFocusedWindow, pasteMenuEnabled: pasteMenuEnabled)
   }
   return result(.pasteable, pasteMenuEnabled: pasteMenuEnabled)
+}
+
+/// 系统「表情与符号」面板的输入法助手进程
+let characterPaletteBundleId = "com.apple.CharacterPaletteIM"
+
+/// 键盘焦点此刻落在「表情与符号」面板里时返回该进程，否则 nil；见文件头「查哪个 App 不只看前台」
+///
+/// 只问面板进程自己的 `kAXFocusedUIElementAttribute`：非激活面板成为 key window 时它报出搜索框，
+/// 失去 key 或面板收起后 noValue。焦点在面板里但不在搜索框上（如落在表情网格）同样改查它——
+/// 此时键盘输入归面板，往背后 App 粘只会粘错地方，让后面的角色判定去弹结果条
+/// 与 `insert-text` 的同名函数保持一致
+func characterPaletteWithKeyboardFocus() -> NSRunningApplication? {
+  for app in NSRunningApplication.runningApplications(withBundleIdentifier: characterPaletteBundleId) {
+    var ref: AnyObject?
+    let element = AXUIElementCreateApplication(app.processIdentifier)
+    if AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
+       let ref, CFGetTypeID(ref) == AXUIElementGetTypeID() {
+      return app
+    }
+  }
+  return nil
 }
 
 /// 取焦点元素；拿不到（noValue / cannotComplete）时在预算内轮询

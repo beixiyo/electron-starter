@@ -22,6 +22,9 @@ import { windowManager } from './window-manager'
  * 端内优先使用当前窗口的可写输入或已登记宿主；端外只在辅助功能检查确认有目标时
  * 注入。`pasteable` 档位必须显式走原生粘贴路径，不能让 auto 模式再次尝试 AX 直插
  * `sessionId` 用于异步完成前后的过期检查；补投场景省略它，不会占用会话槽位
+ *
+ * 端外分支完全依赖 `checkFocusedTextInput` 的 AX 判定：系统「表情与符号」面板持有键盘焦点时，
+ * focus-check 与 insert-text 都改查该面板进程而不是前台 App，见 `focus-check.ts`
  */
 export async function dispatchTranscription(
   text: string,

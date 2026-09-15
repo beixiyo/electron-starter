@@ -29,6 +29,9 @@ import CoreGraphics
 /// Shift+Return 在 VS Code 终端（xterm.js）被编码成裸回车、只有 kitty 这类支持新键盘协议的终端才当换行；
 /// 粘贴走 bracketed paste，换行以字面形式送达，任何目标都一致
 ///
+/// 目标 App 与 `focus-check` 同一条规则：系统「表情与符号」面板（`com.apple.CharacterPaletteIM`）有键盘焦点时
+/// 改投它而不是前台 App——它是输入法助手进程的非激活面板，键盘归它时前台 App 不变，只查前台永远摸不到它的搜索框
+///
 /// stdout 输出 JSON：{"ok":true,"method":"paste","reason":null,"app":"Code","receiptMs":41,"receiptCount":2}
 /// 或 {"ok":false,"method":null,"reason":"paste-not-consumed","app":"Finder","receiptMs":null,"receiptCount":0}
 /// `--method=ax|paste` 只走指定路径，用于排查各 App 的兼容矩阵；默认两条都试
@@ -91,7 +94,7 @@ func main() {
     emit(InsertOutcome(ok: false, method: nil, reason: .emptyText, app: nil, receiptMs: nil, receiptCount: 0))
     return
   }
-  guard let frontApp = NSWorkspace.shared.frontmostApplication else {
+  guard let frontApp = characterPaletteWithKeyboardFocus() ?? NSWorkspace.shared.frontmostApplication else {
     emit(InsertOutcome(ok: false, method: nil, reason: .noFrontmostApp, app: nil, receiptMs: nil, receiptCount: 0))
     return
   }
@@ -148,7 +151,26 @@ func parseForcedMethod(_ arguments: [String]) -> InsertMethod? {
   return nil
 }
 
-/// 前台进程的焦点元素；与 FocusCheck 同款，先给 Electron / Chromium 打开完整 AX 树
+/// 系统「表情与符号」面板的输入法助手进程
+let characterPaletteBundleId = "com.apple.CharacterPaletteIM"
+
+/// 键盘焦点此刻落在「表情与符号」面板里时返回该进程，否则 nil；与 `focus-check` 的同名函数保持一致
+///
+/// 只问面板进程自己的 `kAXFocusedUIElementAttribute`：非激活面板成为 key window 时它报出搜索框，
+/// 失去 key 或面板收起后 noValue。AX 直写落在这个元素上，粘贴路径的 Cmd+V 也由 key window 接收，两条路都能到
+func characterPaletteWithKeyboardFocus() -> NSRunningApplication? {
+  for app in NSRunningApplication.runningApplications(withBundleIdentifier: characterPaletteBundleId) {
+    var ref: AnyObject?
+    let element = AXUIElementCreateApplication(app.processIdentifier)
+    if AXUIElementCopyAttributeValue(element, kAXFocusedUIElementAttribute as CFString, &ref) == .success,
+       let ref, CFGetTypeID(ref) == AXUIElementGetTypeID() {
+      return app
+    }
+  }
+  return nil
+}
+
+/// 目标进程的焦点元素；与 FocusCheck 同款，先给 Electron / Chromium 打开完整 AX 树
 func focusedElement(ofPid pid: pid_t) -> AXUIElement? {
   let appElement = AXUIElementCreateApplication(pid)
   AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
