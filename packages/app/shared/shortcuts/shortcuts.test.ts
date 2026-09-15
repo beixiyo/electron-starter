@@ -94,28 +94,69 @@ describe('快捷键键名规范化', () => {
     )).toBe(false)
   })
 
-  it('方向键组合按成员顺序归一，跨组成员在持久化边界拒绝', () => {
-    const upLeft = normalizeKeyboardShortcutChord('ArrowLeft', [], ['ArrowUp'])
+  it('普通键组合按规范键名顺序归一，与按下顺序无关', () => {
+    const rightLeft = normalizeKeyboardShortcutChord('BracketRight', [], ['BracketLeft'])
 
-    expect(upLeft).toEqual({
+    expect(rightLeft).toEqual({
       source: 'keyboard',
-      key: 'ArrowUp',
+      key: 'BracketLeft',
       modifiers: [],
-      keys: ['ArrowLeft'],
+      keys: ['BracketRight'],
     })
     expect(shortcutChordsEqual(
-      upLeft,
-      normalizeKeyboardShortcutChord('ArrowUp', [], ['ArrowLeft']),
+      rightLeft,
+      normalizeKeyboardShortcutChord('BracketLeft', [], ['BracketRight']),
     )).toBe(true)
+    expect(shortcutBindingsConflict(
+      { gesture: 'press', chord: rightLeft },
+      { gesture: 'press', chord: normalizeKeyboardShortcutChord('BracketLeft', [], ['BracketRight']) },
+    )).toBe(true)
+  })
+
+  it('普通键组合的 keys 只接受普通键成员，修饰键、锁定键与主键自己都不能当成员', () => {
     expect(normalizeShortcutBinding({
       scope: 'global',
       gesture: 'press',
       chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['A'] },
+    })?.chord).toEqual({ source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['A'] })
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['MetaLeft'] },
     })).toBeNull()
-    expect(shortcutBindingsConflict(
-      { gesture: 'press', chord: upLeft },
-      { gesture: 'press', chord: normalizeKeyboardShortcutChord('ArrowUp', [], ['ArrowLeft']) },
-    )).toBe(true)
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['CapsLock'] },
+    })).toBeNull()
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['ArrowUp'] },
+    })).toBeNull()
+    /** 主键是修饰键时不能有成员 */
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'keyboard', key: 'MetaLeft', modifiers: [], keys: ['A'] },
+    })).toBeNull()
+  })
+
+  it('Fn 组合键的 keys 同样归一，Fn 键自身不能带成员', () => {
+    const fnPair = normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'fn', key: 'BracketRight', modifiers: [], keys: ['BracketLeft'] },
+    })!.chord
+
+    expect(fnPair).toEqual({ source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] })
+    expect(shortcutChordsEqual(fnPair, { source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] })).toBe(true)
+    expect(shortcutChordsEqual(fnPair, { source: 'fn', key: 'BracketLeft', modifiers: [] })).toBe(false)
+    expect(normalizeShortcutBinding({
+      scope: 'global',
+      gesture: 'press',
+      chord: { source: 'fn', key: 'Fn', modifiers: [], keys: ['A'] },
+    })).toBeNull()
   })
 
   it('只接受带左右侧的物理修饰键主键', () => {
@@ -258,17 +299,18 @@ describe('快捷键键名规范化', () => {
       key: 'Alt',
       altKey: false,
     }, 'up')
-    const next = browserEvents(tracker, {
-      code: 'KeyB',
-      key: 'b',
-      altKey: false,
-    }, 'down')[0]
     /** 仍按住的 A 已按当前 modifier 状态重算，松开时不应再带上已经松开的 AltRight */
     const releasedA = browserEvents(tracker, {
       code: 'KeyA',
       key: 'a',
       altKey: false,
     }, 'up')[0]
+    /** A 必须先松开再按 B：两个普通键同时按住会合成一个 chord，不是本用例要测的东西 */
+    const next = browserEvents(tracker, {
+      code: 'KeyB',
+      key: 'b',
+      altKey: false,
+    }, 'down')[0]
 
     expect(released[0]?.chord).toEqual({
       source: 'keyboard',

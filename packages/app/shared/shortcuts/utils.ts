@@ -1,12 +1,15 @@
 import { isRecord } from '@jl-org/tool'
 import type {
+  ActiveFnShortcutEntry,
   ActiveKeyboardShortcutEntry,
   FnModifier,
   FnShortcutChord,
   FnShortcutKey,
   KeyboardCode,
+  KeyboardInputKey,
   KeyboardLockCode,
   KeyboardModifierCode,
+  KeyboardPlainCode,
   KeyboardShortcutChord,
   KeyboardShortcutModifier,
   ShortcutBinding,
@@ -18,11 +21,11 @@ import type {
 } from './types'
 import {
   FN_SHORTCUT_KEYS,
-  KEYBOARD_CHORD_KEY_GROUPS,
   KEYBOARD_CODES,
   KEYBOARD_LOCK_CODES,
   KEYBOARD_MODIFIER_BY_CODE,
   KEYBOARD_MODIFIER_CODES,
+  KEYBOARD_PLAIN_CODES,
   SHORTCUT_GESTURES,
 } from './types'
 
@@ -49,7 +52,8 @@ export function shortcutChordsEqual(a: ShortcutChord, b: ShortcutChord): boolean
       && shortcutModifiersEqual(left.modifiers, right.modifiers)
   }
 
-  return a.key === b.key
+  /** Fn 组合的成员与 keyboard 路径一样先归一，`fn + ] + [` 与 `fn + [ + ]` 是同一个 chord */
+  return sameList(toChordKeyList(a.key, a.keys), toChordKeyList(b.key, b.keys))
     && shortcutModifiersEqual(a.modifiers ?? [], b.modifiers ?? [])
 }
 
@@ -178,24 +182,24 @@ export function normalizeKeyboardCode(value: unknown): KeyboardCode | null {
  * 普通组合保留原主键；单个物理修饰键保留左右侧，多个修饰键则按固定
  * 物理键顺序选取主键，使不同按下顺序得到相同的持久化和运行时结构
  *
- * `keys` 是与主键同时按住的同组普通键（方向键组合），成员按组内顺序归一，主键取最靠前的一个；
- * 不与主键同组的键会被丢弃，持久化边界要先用 {@link normalizeShortcutBinding} 拒绝
+ * `keys` 是与主键同时按住的其他普通键（`[ + ]`），成员按 `KEYBOARD_PLAIN_CODES` 顺序归一，主键取
+ * 最靠前的一个，同样与按下顺序无关；主键是修饰键时成员被丢弃，持久化边界要先用 {@link normalizeShortcutBinding} 拒绝
  */
 export function normalizeKeyboardShortcutChord(
   key: KeyboardCode,
   modifiers: KeyboardShortcutModifier[],
-  keys: readonly KeyboardCode[] = [],
+  keys: readonly KeyboardPlainCode[] = [],
 ): KeyboardShortcutChord {
   const mainModifier = KEYBOARD_MODIFIER_BY_CODE[key]
   if (!mainModifier) {
-    const [mainKey, ...restKeys] = canonicalizeKeyboardChordKeys(key, keys)
+    const members = canonicalizeChordKeys(key, keys)
     const chord: KeyboardShortcutChord = {
       source: 'keyboard',
-      key: mainKey,
+      key: members.key,
       modifiers: canonicalizeKeyboardShortcutModifiers(modifiers),
     }
-    if (restKeys.length)
-      chord.keys = restKeys
+    if (members.keys.length)
+      chord.keys = members.keys
 
     return chord
   }
@@ -242,7 +246,7 @@ export function specializeKeyboardShortcutModifiers(
   ])
 }
 
-/** 记录物理键 keydown，并返回该时刻冻结的 keyboard chord */
+/** 记录物理键 keydown，并返回该时刻冻结的 keyboard chord；此刻按住的其他普通键一并进入 chord */
 export function pressKeyboardShortcutChord<Key>(
   activeEntries: Map<Key, ActiveKeyboardShortcutEntry>,
   keyId: Key,
@@ -254,17 +258,32 @@ export function pressKeyboardShortcutChord<Key>(
     chord: normalizeKeyboardShortcutChord(
       key,
       specializeKeyboardShortcutModifiers(modifiers, activeEntries.values()),
-      getActiveKeyboardChordKeys(activeEntries.values(), key),
+      getHeldPlainKeys(activeEntries.values(), key),
     ),
   }
   activeEntries.set(keyId, entry)
   return entry.chord
 }
 
+/** 记录 Fn 组合键 keydown，并返回该时刻冻结的 Fn chord；此刻按住的其他 Fn 组合键一并进入 chord */
+export function pressFnShortcutChord(
+  activeEntries: Map<KeyboardPlainCode, ActiveFnShortcutEntry>,
+  key: KeyboardPlainCode,
+  modifiers: ShortcutModifier[],
+): FnShortcutChord {
+  const entry: ActiveFnShortcutEntry = {
+    key,
+    chord: normalizeFnComboChord(key, modifiers, getHeldPlainKeys(activeEntries.values(), key)),
+  }
+  activeEntries.set(key, entry)
+  return entry.chord
+}
+
 /**
  * 判断 next 是否在仍按住的 previous 上继续扩展
  *
- * 三种情况：纯修饰键组合追加新成员、Fn chord 追加修饰键或普通主键，以及纯修饰键并入 Fn chord
+ * 四种情况：纯修饰键组合追加新成员、Fn chord 追加修饰键或主键、纯修饰键组合并入 Fn chord，
+ * 以及普通主键追加成员（`[` → `[ + ]`、`fn + [` → `fn + [ + ]`）
  *
  * 手势与录制状态机共用这一个判据：前者据此撤销 previous 的候选，避免 Fn+Space 同时
  * 触发「按下 Fn」；后者据此把 activeChord 换成更长的组合。两边必须一致，否则录下来的
@@ -284,17 +303,20 @@ export function isShortcutChordPrefixOf(previous: ShortcutChord, next: ShortcutC
     || isKeyboardChordKeysPrefixOf(previous, next)
 }
 
-/** 只有 `key: 'Fn'` 的 chord 能当前缀：修饰键家族被包含，且 next 要么多出修饰键、要么换成了普通主键 */
+/**
+ * 修饰键家族被包含的前提下：`key: 'Fn'` 的 chord 要么被追加修饰键、要么换成了普通主键；
+ * 普通主键的 Fn 组合则要在自己的全部成员之上追加成员（`fn + [` → `fn + [ + ]`）
+ */
 function isFnChordPrefixOf(previous: FnShortcutChord, next: FnShortcutChord): boolean {
-  if (previous.key !== 'Fn')
-    return false
-
   const previousFamilies = toModifierFamilies(previous.modifiers ?? [])
   const nextFamilies = toModifierFamilies(next.modifiers ?? [])
   if (!previousFamilies.every(family => nextFamilies.includes(family)))
     return false
 
-  return next.key !== 'Fn' || nextFamilies.length > previousFamilies.length
+  if (previous.key === 'Fn')
+    return next.key !== 'Fn' || nextFamilies.length > previousFamilies.length
+
+  return next.key !== 'Fn' && chordKeysExtend(previous, next)
 }
 
 /** 纯修饰键 keyboard chord 的全部家族都出现在 Fn chord 的修饰键里时，它是该 Fn chord 的前缀 */
@@ -307,17 +329,27 @@ function isKeyboardModifierChordPrefixOfFn(previous: KeyboardShortcutChord, next
     .every(family => nextFamilies.includes(family))
 }
 
-/** 判断新的 keyboard chord 是否在已按住的普通主键 chord 上追加了同组成员（方向键组合） */
+/**
+ * 判断新的 keyboard chord 是否在已按住的普通主键 chord 上追加了成员（`[` → `[ + ]`）
+ *
+ * 修饰键允许 next 比 previous 多：先按 `[` 再按 ⌘ 再按 `]` 时 ⌘ 已经冻结进 `⌘ + [ + ]`，
+ * 物理上仍是在 previous 的全部成员之上继续按，状态机据此把候选换成完整组合
+ */
 function isKeyboardChordKeysPrefixOf(previous: KeyboardShortcutChord, next: KeyboardShortcutChord): boolean {
   if (isKeyboardModifierCode(previous.key) || isKeyboardModifierCode(next.key))
     return false
 
-  const previousKeys = [previous.key, ...(previous.keys ?? [])]
-  const nextKeys = [next.key, ...(next.keys ?? [])]
+  return chordKeysExtend(previous, next)
+    && keyboardModifierListContainsAll(next.modifiers, previous.modifiers)
+}
+
+/** next 的普通键成员严格包含 previous 的全部成员 */
+function chordKeysExtend(previous: ShortcutChord, next: ShortcutChord): boolean {
+  const previousKeys = toChordKeyList(previous.key, previous.keys)
+  const nextKeys = toChordKeyList(next.key, next.keys)
 
   return nextKeys.length > previousKeys.length
     && previousKeys.every(key => nextKeys.includes(key))
-    && keyboardModifierListContainsAll(next.modifiers, previous.modifiers)
 }
 
 /** 判断新的 keyboard chord 是否在已按住的纯修饰键 chord 上继续扩展 */
@@ -365,29 +397,63 @@ export function releaseActiveKeyboardChords<Key>(
     entry.chord = normalizeKeyboardShortcutChord(
       entry.key,
       specializeKeyboardShortcutModifiers(modifiers, activeEntries.values()),
-      getActiveKeyboardChordKeys(activeEntries.values(), entry.key),
+      getHeldPlainKeys(activeEntries.values(), entry.key),
     )
   }
 
-  return uniqueKeyboardShortcutChords(releasedChords)
-    .sort((a, b) => countKeyboardChordMembers(b) - countKeyboardChordMembers(a))
+  return uniqueShortcutChords(releasedChords)
+    .sort((a, b) => countChordMembers(b) - countChordMembers(a))
 }
 
-/** 当前仍按住、且与 `key` 同组的其他普通键，按组内顺序 */
-function getActiveKeyboardChordKeys(
-  activeEntries: Iterable<ActiveKeyboardShortcutEntry>,
-  key: KeyboardCode,
-): KeyboardCode[] {
-  const group = getKeyboardChordKeyGroup(key)
-  if (!group)
+/**
+ * 释放一个 Fn 组合键，并返回所有依赖该成员的冻结 chord
+ *
+ * 仍按住的键保留各自 down 时冻结的逻辑修饰键，只把松开的成员从组合里去掉；
+ * 返回值与 keyboard 路径一样按成员数从多到少排序
+ */
+export function releaseFnShortcutChords(
+  activeEntries: Map<KeyboardPlainCode, ActiveFnShortcutEntry>,
+  key: KeyboardPlainCode,
+): FnShortcutChord[] {
+  const ownEntry = activeEntries.get(key)
+  if (!ownEntry)
     return []
 
-  const held = new Set(Array.from(activeEntries).map(entry => entry.key))
-  return group.filter(member => member !== key && held.has(member))
+  const releasedChords = Array.from(activeEntries.values())
+    .filter(entry => entry === ownEntry || toChordKeyList(entry.chord.key, entry.chord.keys).includes(key))
+    .map(entry => entry.chord)
+
+  activeEntries.delete(key)
+  for (const entry of activeEntries.values()) {
+    entry.chord = normalizeFnComboChord(
+      entry.key,
+      entry.chord.modifiers ?? [],
+      getHeldPlainKeys(activeEntries.values(), entry.key),
+    )
+  }
+
+  return uniqueShortcutChords(releasedChords)
+    .sort((a, b) => countChordMembers(b) - countChordMembers(a))
 }
 
-function countKeyboardChordMembers(chord: KeyboardShortcutChord): number {
-  return 1 + chord.modifiers.length + (chord.keys?.length ?? 0)
+/** 当前仍按住的其他普通键；顺序无关，进入 chord 前会归一 */
+function getHeldPlainKeys(
+  activeEntries: Iterable<{ key: KeyboardCode }>,
+  key: KeyboardCode,
+): KeyboardPlainCode[] {
+  const held: KeyboardPlainCode[] = []
+
+  for (const entry of activeEntries) {
+    if (entry.key !== key && isKeyboardPlainCode(entry.key))
+      held.push(entry.key)
+  }
+
+  return held
+}
+
+/** 主键、修饰键与普通键成员各算一个；只用于同一输入源内部排序 */
+function countChordMembers(chord: ShortcutChord): number {
+  return 1 + (chord.modifiers?.length ?? 0) + (chord.keys?.length ?? 0)
 }
 
 /** 当前物理 modifier 状态是否精确满足 chord；逻辑 modifier 仍表示该家族任一侧 */
@@ -522,46 +588,70 @@ function parseKeyboardShortcutChord(chord: Record<string, unknown>): KeyboardSho
     return null
   }
 
-  const keys = parseKeyboardChordKeys(key, chord.keys)
+  const keys = parseChordKeys(key, chord.keys)
   if (!keys)
     return null
 
   return normalizeKeyboardShortcutChord(key, modifiers, keys)
 }
 
-/** `keys` 缺省视为空；出现时每个成员都必须是与主键同组、且不等于主键的规范键名 */
-function parseKeyboardChordKeys(key: KeyboardCode, value: unknown): KeyboardCode[] | null {
+/** `keys` 缺省视为空；出现时每个成员都必须是不等于主键的普通键，主键不是普通键（修饰键、`Fn`）时不能有成员 */
+function parseChordKeys(key: KeyboardInputKey, value: unknown): KeyboardPlainCode[] | null {
   if (value === undefined)
     return []
   if (!Array.isArray(value))
     return null
+  if (value.length === 0)
+    return []
+  if (!isKeyboardPlainCode(key))
+    return null
 
-  const group = getKeyboardChordKeyGroup(key)
   const keys = value.map(normalizeKeyboardCode)
-  const valid = !!group && keys.every((member): member is KeyboardCode => (
-    !!member && member !== key && group.includes(member)
+  const valid = keys.every((member): member is KeyboardPlainCode => (
+    !!member && member !== key && isKeyboardPlainCode(member)
   ))
 
   return valid
-    ? keys as KeyboardCode[]
+    ? keys
     : null
 }
 
-/** `key` 所属的可组合分组；不在任何分组里的普通键与修饰键返回 null */
-function getKeyboardChordKeyGroup(key: KeyboardCode): readonly KeyboardCode[] | null {
-  return KEYBOARD_CHORD_KEY_GROUPS.find(group => (
-    (group as readonly KeyboardCode[]).includes(key)
-  )) ?? null
+/**
+ * 主键与成员去重后按 `KEYBOARD_PLAIN_CODES` 顺序排列，首位即归一后的主键
+ *
+ * 主键不是普通键（修饰键、`Fn`）时没有成员可言，原样返回
+ */
+function canonicalizeChordKeys<Key extends KeyboardInputKey>(
+  key: Key,
+  keys: readonly KeyboardPlainCode[],
+): { key: Key | KeyboardPlainCode, keys: KeyboardPlainCode[] } {
+  if (!isKeyboardPlainCode(key))
+    return { key, keys: [] }
+
+  const members = new Set<KeyboardPlainCode>([key, ...keys])
+  const [mainKey, ...restKeys] = KEYBOARD_PLAIN_CODES.filter(code => members.has(code))
+
+  return { key: mainKey, keys: restKeys }
 }
 
-/** 主键与同组成员去重后按组内顺序排列，首位即归一后的主键；不同组的成员丢弃 */
-function canonicalizeKeyboardChordKeys(key: KeyboardCode, keys: readonly KeyboardCode[]): KeyboardCode[] {
-  const group = getKeyboardChordKeyGroup(key)
-  if (!group)
-    return [key]
+/** 主键与成员摊平成一个列表，比较与包含判断用 */
+function toChordKeyList(key: KeyboardInputKey, keys: readonly KeyboardPlainCode[] | undefined): KeyboardInputKey[] {
+  const members = canonicalizeChordKeys(key, keys ?? [])
+  return [members.key, ...members.keys]
+}
 
-  const members = new Set([key, ...keys])
-  return group.filter(member => members.has(member))
+/** Fn 组合键 chord：主键与成员按普通键顺序归一，修饰键保持逻辑家族 */
+function normalizeFnComboChord(
+  key: KeyboardPlainCode,
+  modifiers: ShortcutModifier[],
+  keys: readonly KeyboardPlainCode[],
+): FnShortcutChord {
+  const members = canonicalizeChordKeys(key, keys)
+  const chord: FnShortcutChord = { source: 'fn', key: members.key, modifiers }
+  if (members.keys.length)
+    chord.keys = members.keys
+
+  return chord
 }
 
 function getKeyboardModifierChordMembers(chord: KeyboardShortcutChord): KeyboardShortcutModifier[] | null {
@@ -571,6 +661,7 @@ function getKeyboardModifierChordMembers(chord: KeyboardShortcutChord): Keyboard
   return sortKeyboardShortcutModifiers([chord.key, ...chord.modifiers])
 }
 
+/** 裸 Fn 不带 modifiers 字段；`fn + ⌘` 这类 Fn 修饰键 chord 与 Fn 组合键一样保留逻辑修饰键 */
 function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord | null {
   if (!isFnShortcutKey(chord.key))
     return null
@@ -580,7 +671,14 @@ function normalizeFnShortcutChord(chord: Record<string, unknown>): ShortcutChord
   if (!modifiers)
     return null
 
-  if (key === 'Fn' && modifiers.length === 0) {
+  const keys = parseChordKeys(key, chord.keys)
+  if (!keys)
+    return null
+
+  if (key !== 'Fn')
+    return normalizeFnComboChord(key, modifiers, keys)
+
+  if (modifiers.length === 0) {
     return {
       source: 'fn',
       key,
@@ -765,7 +863,7 @@ function hasMixedLogicalAndPhysicalModifierFamily(
 ): boolean {
   const physicalModifiers = new Set(modifiers.filter(isKeyboardModifierCode))
 
-  return modifiers.some(modifier => {
+  return modifiers.some((modifier) => {
     if (isKeyboardModifierCode(modifier))
       return false
 
@@ -779,12 +877,10 @@ function keyboardChordContainsPhysicalKey(
 ): boolean {
   return chord.key === key
     || chord.modifiers.includes(key as KeyboardModifierCode)
-    || !!chord.keys?.includes(key)
+    || toChordKeyList(chord.key, chord.keys).includes(key)
 }
 
-function uniqueKeyboardShortcutChords(
-  chords: readonly KeyboardShortcutChord[],
-): KeyboardShortcutChord[] {
+function uniqueShortcutChords<T extends ShortcutChord>(chords: readonly T[]): T[] {
   return chords.filter((chord, index) => (
     chords.findIndex(candidate => shortcutChordsEqual(candidate, chord)) === index
   ))
@@ -816,6 +912,11 @@ export function isKeyboardLockCode(value: unknown): value is KeyboardLockCode {
     && (KEYBOARD_LOCK_CODES as readonly string[]).includes(value)
 }
 
+export function isKeyboardPlainCode(value: unknown): value is KeyboardPlainCode {
+  return typeof value === 'string'
+    && (KEYBOARD_PLAIN_CODES as readonly string[]).includes(value)
+}
+
 function isShortcutGesture(value: unknown): value is ShortcutGestureType {
   return typeof value === 'string'
     && (SHORTCUT_GESTURES as readonly string[]).includes(value)
@@ -838,4 +939,3 @@ export function isFnShortcutKey(value: unknown): value is FnShortcutKey {
   return typeof value === 'string'
     && (FN_SHORTCUT_KEYS as readonly string[]).includes(value)
 }
-

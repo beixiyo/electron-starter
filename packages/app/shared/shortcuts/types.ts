@@ -168,16 +168,6 @@ export const KEYBOARD_LOCK_CODES = [
 /** 锁定键键名 */
 export type KeyboardLockCode = typeof KEYBOARD_LOCK_CODES[number]
 
-/**
- * 能互相组成一个 chord 的普通键分组
- *
- * 同组的键同时按住合成一个 chord（方向键之间），跨组或组外的普通键同时按住仍是各自独立的
- * chord，录制时会被当成多主键组合拒绝。组内顺序用于成员的稳定归一化与展示
- */
-export const KEYBOARD_CHORD_KEY_GROUPS = [
-  ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
-] as const satisfies readonly (readonly KeyboardCode[])[]
-
 /** 作为主键使用时，对应的逻辑修饰键 */
 export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, FnModifier>>> = {
   MetaLeft: 'Meta',
@@ -190,20 +180,25 @@ export const KEYBOARD_MODIFIER_BY_CODE: Readonly<Partial<Record<KeyboardCode, Fn
   ShiftRight: 'Shift',
 }
 
-/** 可与 Fn 组成组合键的普通键：规范键名去掉修饰键与锁定键 */
-export const FN_COMBO_KEYS = KEYBOARD_CODES.filter((code): code is FnComboKey => (
+/**
+ * 普通键：规范键名去掉修饰键与锁定键
+ *
+ * 既是 keyboard chord 与 Fn 组合键的主键集合，也是 chord 里能与主键一起按住的成员集合
+ * 多个普通键同时按住合成一个 chord（`[ + ]`），成员按本表顺序归一，与按下顺序无关
+ */
+export const KEYBOARD_PLAIN_CODES = KEYBOARD_CODES.filter((code): code is KeyboardPlainCode => (
   !(KEYBOARD_MODIFIER_CODES as readonly string[]).includes(code)
   && !(KEYBOARD_LOCK_CODES as readonly string[]).includes(code)
 ))
 
-/** Fn 组合键的主键 */
-export type FnComboKey = Exclude<KeyboardCode, KeyboardModifierCode | KeyboardLockCode>
+/** 普通键键名 */
+export type KeyboardPlainCode = Exclude<KeyboardCode, KeyboardModifierCode | KeyboardLockCode>
 
 /** Fn chord 支持的按键集合，`Fn` 表示 Fn 键自身 */
-export const FN_SHORTCUT_KEYS = ['Fn', ...FN_COMBO_KEYS] as const
+export const FN_SHORTCUT_KEYS = ['Fn', ...KEYBOARD_PLAIN_CODES] as const
 
 /** Fn chord 支持的按键 */
-export type FnShortcutKey = 'Fn' | FnComboKey
+export type FnShortcutKey = 'Fn' | KeyboardPlainCode
 
 /** 键盘 chord 的 modifier；录制结果使用物理侧别，声明式默认值仍可使用逻辑修饰键 */
 export type KeyboardShortcutModifier = ShortcutModifier | KeyboardModifierCode
@@ -214,11 +209,11 @@ export type KeyboardShortcutChord = {
   key: KeyboardCode
   modifiers: KeyboardShortcutModifier[]
   /**
-   * 与主键同时按住的同组普通键，按 {@link KEYBOARD_CHORD_KEY_GROUPS} 组内顺序排列
+   * 与主键同时按住的其他普通键（`[ + ]` 里的 `]`），按 {@link KEYBOARD_PLAIN_CODES} 顺序排列
    *
-   * 只有与主键同组的键能出现，主键取组内最靠前的成员；省略等同于空
+   * 主键取全部成员里最靠前的一个；修饰键不在其中，主键是修饰键时也不能有成员；省略等同于空
    */
-  keys?: KeyboardCode[]
+  keys?: KeyboardPlainCode[]
 }
 
 /** 单个已按下物理键及其 keydown 时冻结的 keyboard chord */
@@ -237,6 +232,18 @@ export type FnShortcutChord = {
   source: 'fn'
   key: FnShortcutKey
   modifiers?: ShortcutModifier[]
+  /**
+   * 与主键同时按住的其他普通键（`fn + [ + ]` 里的 `]`），归一规则同 {@link KeyboardShortcutChord.keys}
+   *
+   * 只有主键是普通键时才可能出现，`key: 'Fn'` 的 chord 没有成员
+   */
+  keys?: KeyboardPlainCode[]
+}
+
+/** 单个已按下的 Fn 组合键及其 keydown 时冻结的 Fn chord */
+export type ActiveFnShortcutEntry = {
+  key: KeyboardPlainCode
+  chord: FnShortcutChord
 }
 
 /** 统一快捷键 chord */

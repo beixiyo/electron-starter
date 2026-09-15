@@ -47,7 +47,7 @@ shortcuts/
 ```
 
 - **原始输入层**（`shared/shortcuts/types.ts` 的 `KeyboardInput`）：每个后端只负责把系统输入归一成 `{ phase, key, modifiers, fn, timestamp }`，键名用统一的 `KeyboardCode`，Fn/Globe 用 `Fn`。系统自动重复由后端过滤
-- **合成层**（`shared/shortcuts/input-tracker.ts`）：把原始输入合成 chord 事件。普通键在 down 时冻结此刻按住的物理修饰键；`fn: true` 且 Fn 已按住的普通键合成 Fn chord；修饰键永远走 keyboard 路径；Fn 松开按 down 顺序结束全部 Fn 组合
+- **合成层**（`shared/shortcuts/input-tracker.ts`）：把原始输入合成 chord 事件。普通键在 down 时冻结此刻按住的物理修饰键与其他仍按住的普通键（`[ + ]`）；`fn: true` 且 Fn 已按住的普通键合成 Fn chord，同样带上其他仍按住的 Fn 组合键；修饰键永远走 keyboard 路径；Fn 松开按 down 顺序结束全部 Fn 组合
 - **判定层**（`shared/shortcuts/input-runtime.ts` / `record-engine.ts`）：手势状态机与录制状态机只消费 chord 事件，main 系统级后端与 renderer DOM 后端共用同一份
 
 渲染进程 DOM 是第三个后端：`shared/shortcuts/browser-key.ts` 把 `KeyboardEvent` 归一成同一种 `KeyboardInput`，`renderer/shortcuts/useShortcutRuntime.ts` 与录制 DOM 层走同一个 tracker
@@ -68,7 +68,7 @@ shortcuts/
 - **键名只有一个命名空间**：`KeyboardCode`（W3C `KeyboardEvent.code` 去掉 `Key` / `Digit` 前缀）。uIOhook 键码在 `input/uiohook/keycodes.ts` 转换，macOS 虚拟键码在 Swift `MacKeyCodes.swift` 转换，浏览器 `code` 在 `browser-key.ts` 转换；持久化边界不做别名兜底，未知键名直接拒绝
 - **Fn 组合存物理键**：Apple 键盘驱动在 HID 层把 fn+Return / fn+Delete / fn+方向键改写成 Keypad Enter / Forward Delete / Home / End / PageUp / PageDown（`ioreg` 里的 `FnKeyboardUsageMap`），CGEvent 与 Chromium `code` 都只剩改写后的键。helper 在 Fn 已按住时还原成 `Enter` / `Backspace` / 方向键上报（`native/mac/README.md`），录制与运行时因此一致；只有 `fn-combo-suppression.ts` 拿的是 Chromium 的 `code`，靠 `FN_TRANSLATED_KEYS` 把绑定的物理键映射到翻译结果再比对
 - **物理修饰键必须保留侧别**：`MetaLeft/MetaRight` 等作为 chord 成员严格匹配；声明式默认绑定可用逻辑修饰键 `Meta/Control/Alt/Shift/Primary`，表示同一家族至少按下一侧
-- **修饰键状态偏离即撤销**：`input-runtime.ts` 每次 down/up 后用当前物理与逻辑修饰键校验每个 keyboard 注册项，不匹配的候选立即取消并释放已触发的 hold；裸 Fn 候选在 Fn 组合开始时撤销（`isShortcutChordPrefixOf`）
+- **修饰键状态偏离即撤销**：`input-runtime.ts` 每次 down/up 后用当前物理与逻辑修饰键校验每个 keyboard 注册项，不匹配的候选立即取消并释放已触发的 hold；裸 Fn 候选在 Fn 组合开始时撤销，`[` 候选在追加成员成 `[ + ]` 时撤销（`isShortcutChordPrefixOf`）
 - **重载要清物理状态**：`updateEntries` 同时清手势与 tracker，否则按住中的键会在重载后被当成「已按住」丢弃下一次按下
 - **runtime backend 与 provider 解耦**：`providers.ts` 只声明能力矩阵；`input-runtime-backend.ts` 一个 backend 同时认领 Fn 与有效 scope 为 global 的 keyboard 绑定，降级到 local 的 keyboard 绑定交给渲染进程 DOM backend，触发后经 `shortcutConfig.trigger` 回传主进程执行业务
 - **scope 是动作语义，不是能力检测**：`SHORTCUT_ACTIONS[].scope` 声明该动作要不要在应用不在前台时触发，录制保存时原样沿用；当前能不能全局捕获由 `resolveEffectiveShortcutScope` 算出降级后的有效 scope，**降级结果只用于注册，不写回配置**，权限恢复后自动升回 global

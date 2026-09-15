@@ -1,9 +1,9 @@
 /**
  * 输入 tracker：原始物理输入合成 chord 事件的边界
  *
- * 守的是四条跨后端契约：Fn 组合只在 Fn 按住且后端确认时成立、修饰键永远走 keyboard 路径、
- * Fn 与修饰键同时按住时另合成 fn + 修饰键 chord、Fn 先松开时按 down 顺序结束全部组合。
- * 这些以前分散在各后端的录制层里，
+ * 守的是五条跨后端契约：Fn 组合只在 Fn 按住且后端确认时成立、修饰键永远走 keyboard 路径、
+ * Fn 与修饰键同时按住时另合成 fn + 修饰键 chord、Fn 先松开时按 down 顺序结束全部组合、
+ * 多个普通键同时按住合成一个 chord。这些以前分散在各后端的录制层里，
  * 现在所有后端共用这一份，漂移只会发生在这里
  */
 import { describe, expect, it } from 'vitest'
@@ -34,10 +34,11 @@ describe('键盘输入 tracker', () => {
     tracker.handle(input('down', 'Space', { fn: true }))
     tracker.handle(input('down', 'A', { fn: true }))
 
-    expect(tracker.handle(input('up', 'Fn')).map(event => `${event.phase}:${event.chord.key}`)).toEqual([
-      'up:Space',
-      'up:A',
-      'up:Fn',
+    /** A 在 Space 按住时按下，冻结成 `fn + Space + A`；Space 自己的 chord 仍是 down 时的 `fn + Space` */
+    expect(tracker.handle(input('up', 'Fn'))).toEqual([
+      { phase: 'up', chord: { source: 'fn', key: 'Space', modifiers: [] }, timestamp: 1 },
+      { phase: 'up', chord: { source: 'fn', key: 'Space', modifiers: [], keys: ['A'] }, timestamp: 1 },
+      { phase: 'up', chord: { source: 'fn', key: 'Fn' }, timestamp: 1 },
     ])
     expect(tracker.handle(input('up', 'Space'))).toEqual([])
     expect(tracker.handle(input('up', 'A'))).toEqual([])
@@ -92,31 +93,58 @@ describe('键盘输入 tracker', () => {
       { source: 'keyboard', key: 'A', modifiers: ['AltRight'] },
       { source: 'keyboard', key: 'AltRight', modifiers: [] },
     ])
+    /** 仍按住的 A 已重算成裸 A；松开后再按 B 不会继承已松开的 ⌥ */
+    expect(tracker.handle(input('up', 'A')).map(event => event.chord)).toEqual([
+      { source: 'keyboard', key: 'A', modifiers: [] },
+    ])
     expect(tracker.handle(input('down', 'B'))).toEqual([
       { phase: 'down', chord: { source: 'keyboard', key: 'B', modifiers: [] }, timestamp: 1 },
     ])
   })
 
-  it('同组的方向键同时按住合成一个 chord，与按下顺序无关；组外普通键仍是独立 chord', () => {
-    const upLeft = { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['ArrowLeft'] }
-
-    const upFirst = createKeyboardInputTracker()
-    upFirst.handle(input('down', 'ArrowUp'))
-    expect(upFirst.handle(input('down', 'ArrowLeft')).map(event => event.chord)).toEqual([upLeft])
-    expect(upFirst.handle(input('down', 'A')).map(event => event.chord)).toEqual([
-      { source: 'keyboard', key: 'A', modifiers: [] },
-    ])
-    expect(upFirst.handle(input('up', 'ArrowUp')).map(event => event.chord)).toEqual([
-      upLeft,
-      { source: 'keyboard', key: 'ArrowUp', modifiers: [] },
-    ])
-    expect(upFirst.handle(input('up', 'ArrowLeft')).map(event => event.chord)).toEqual([
-      { source: 'keyboard', key: 'ArrowLeft', modifiers: [] },
-    ])
+  /** 以前只有同组方向键能合成 chord，`[` 按住再按 `]` 只是另一个独立 chord */
+  it('多个普通键同时按住合成一个 chord，主键按规范键名顺序归一、与按下顺序无关', () => {
+    const bracketPair = { source: 'keyboard', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] }
 
     const leftFirst = createKeyboardInputTracker()
-    leftFirst.handle(input('down', 'ArrowLeft'))
-    expect(leftFirst.handle(input('down', 'ArrowUp')).map(event => event.chord)).toEqual([upLeft])
+    leftFirst.handle(input('down', 'BracketLeft'))
+    expect(leftFirst.handle(input('down', 'BracketRight')).map(event => event.chord)).toEqual([bracketPair])
+    /** 第三个普通键把此刻按住的两个一并冻结进来 */
+    expect(leftFirst.handle(input('down', 'A')).map(event => event.chord)).toEqual([
+      { source: 'keyboard', key: 'A', modifiers: [], keys: ['BracketLeft', 'BracketRight'] },
+    ])
+    /** `[` 松开结束依赖它的全部 chord（成员多的在前），剩下的键重算成不含 `[` 的组合 */
+    expect(leftFirst.handle(input('up', 'BracketLeft')).map(event => event.chord)).toEqual([
+      { source: 'keyboard', key: 'A', modifiers: [], keys: ['BracketLeft', 'BracketRight'] },
+      bracketPair,
+      { source: 'keyboard', key: 'BracketLeft', modifiers: [] },
+    ])
+    expect(leftFirst.handle(input('up', 'A')).map(event => event.chord)).toEqual([
+      { source: 'keyboard', key: 'A', modifiers: [], keys: ['BracketRight'] },
+    ])
+    expect(leftFirst.handle(input('up', 'BracketRight')).map(event => event.chord)).toEqual([
+      { source: 'keyboard', key: 'BracketRight', modifiers: [] },
+    ])
+
+    const rightFirst = createKeyboardInputTracker()
+    rightFirst.handle(input('down', 'BracketRight'))
+    expect(rightFirst.handle(input('down', 'BracketLeft')).map(event => event.chord)).toEqual([bracketPair])
+  })
+
+  it('Fn 按住时多个组合键合成一个 Fn chord，成员松开只结束依赖它的组合', () => {
+    const tracker = createKeyboardInputTracker()
+    tracker.handle(input('down', 'Fn'))
+    tracker.handle(input('down', 'BracketRight', { fn: true }))
+
+    expect(tracker.handle(input('down', 'BracketLeft', { fn: true })).map(event => event.chord)).toEqual([
+      { source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] },
+    ])
+    expect(tracker.handle(input('up', 'BracketLeft', { fn: true })).map(event => event.chord)).toEqual([
+      { source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] },
+    ])
+    expect(tracker.handle(input('up', 'BracketRight', { fn: true })).map(event => event.chord)).toEqual([
+      { source: 'fn', key: 'BracketRight', modifiers: [] },
+    ])
   })
 
   it('重复 down、锁定键和 reset 之后的孤儿 up 都不产生事件', () => {

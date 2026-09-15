@@ -47,11 +47,15 @@ function attachWindow(): (input: Partial<Input>) => boolean {
   }
 }
 
-function fnBinding(key: string, modifiers: ShortcutBinding['chord']['modifiers'] = []): ShortcutBinding {
+function fnBinding(
+  key: string,
+  modifiers: ShortcutBinding['chord']['modifiers'] = [],
+  keys?: string[],
+): ShortcutBinding {
   return {
     scope: 'global',
     gesture: 'press',
-    chord: { source: 'fn', key, modifiers } as ShortcutBinding['chord'],
+    chord: { source: 'fn', key, modifiers, keys } as ShortcutBinding['chord'],
   }
 }
 
@@ -112,6 +116,15 @@ describe('Fn 组合抑制', () => {
     harness.listener?.({ phase: 'down', key: 'Fn' })
 
     expect(send({ code: 'NumpadEnter', key: 'Enter' })).toBe(true)
+  })
+
+  it('`fn + [ + ]` 这类带成员的组合，每个成员键都会被吞', () => {
+    const send = attachWindow()
+    register(fnBinding('BracketLeft', [], ['BracketRight']))
+    harness.listener?.({ phase: 'down', key: 'Fn' })
+
+    expect(send({ code: 'BracketLeft', key: '[' })).toBe(true)
+    expect(send({ code: 'BracketRight', key: ']' })).toBe(true)
   })
 
   it('门禁不通过的绑定不吞键', () => {

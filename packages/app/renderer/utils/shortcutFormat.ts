@@ -1,4 +1,4 @@
-import type { FnModifier, KeyboardCode, KeyboardModifierCode, KeyboardShortcutModifier, ShortcutChord, ShortcutGestureBinding } from '@shared/shortcuts'
+import type { FnModifier, KeyboardModifierCode, KeyboardShortcutModifier, ShortcutChord, ShortcutGestureBinding } from '@shared/shortcuts'
 import { isKeyboardModifierCode, KEYBOARD_MODIFIER_BY_CODE, normalizeShortcutModifier } from '@shared/shortcuts'
 import { isApplePlatform } from 'utils/keyboard'
 
@@ -7,8 +7,8 @@ export function formatBinding(
   binding: ShortcutGestureBinding,
   options: FormatBindingOptions = {},
 ): string {
-  const { separator = SHORTCUT_KEY_SEPARATOR, extraKeys = [] } = options
-  const chord = [formatChord(binding.chord, separator), ...extraKeys.map(formatKey)].join(separator)
+  const { separator = SHORTCUT_KEY_SEPARATOR } = options
+  const chord = formatChord(binding.chord, separator)
 
   switch (binding.gesture) {
     case 'press':
@@ -30,7 +30,7 @@ function formatChord(chord: ShortcutChord, separator: string): string {
       ...formatModifierFamilies(chord.modifiers ?? []),
       ...(chord.key === 'Fn'
         ? []
-        : [formatKey(chord.key)]),
+        : [formatKey(chord.key), ...(chord.keys ?? []).map(formatKey)]),
     ].join(separator)
   }
 
@@ -131,8 +131,6 @@ const KEY_DISPLAY: Record<string, string> = {
 export type FormatBindingOptions = {
   /** 修饰键与主键之间的连接符。 @default SHORTCUT_KEY_SEPARATOR */
   separator?: string
-  /** 主键之后一起按下的普通键，用于失败录制的完整回显。 @default [] */
-  extraKeys?: readonly KeyboardCode[]
 }
 
 type ModifierSide = 'Left' | 'Right'

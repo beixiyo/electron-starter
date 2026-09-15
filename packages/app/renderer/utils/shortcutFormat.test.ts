@@ -20,7 +20,7 @@ describe('快捷键格式化', () => {
     })).toBe('fn + fn')
   })
 
-  it('方向键组合和额外键都保留可辨认文本', () => {
+  it('方向键组合保留可辨认文本，成员接在主键后面', () => {
     expect(formatBinding({
       gesture: 'press',
       chord: {
@@ -30,10 +30,17 @@ describe('快捷键格式化', () => {
         keys: ['ArrowLeft'],
       },
     })).toBe('Up ↑ + Left ←')
+  })
 
+  it('Fn 组合键的成员同样接在主键后面', () => {
     expect(formatBinding({
       gesture: 'press',
-      chord: { source: 'keyboard', key: 'A', modifiers: [] },
-    }, { extraKeys: ['2'] })).toBe('A + 2')
+      chord: {
+        source: 'fn',
+        key: 'BracketLeft',
+        modifiers: [],
+        keys: ['BracketRight'],
+      },
+    })).toBe('fn + [ + ]')
   })
 })

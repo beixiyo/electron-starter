@@ -97,13 +97,18 @@ function toSuppressionEntry(
   if (binding.chord.source !== 'fn' || binding.chord.key === 'Fn')
     return []
 
-  const { key } = binding.chord
-  const translated = FN_TRANSLATED_KEYS[key]
+  /** `fn + [ + ]` 的每个成员都会落字符，连同各自的翻译结果一并登记 */
+  const members = [binding.chord.key, ...(binding.chord.keys ?? [])]
+  const keys = new Set<KeyboardCode>()
+  for (const member of members) {
+    keys.add(member)
+    const translated = FN_TRANSLATED_KEYS[member]
+    if (translated)
+      keys.add(translated)
+  }
 
   return [{
-    keys: new Set(translated
-      ? [key, translated]
-      : [key]),
+    keys,
     /**
      * modifiers 必须一起比
      *
@@ -167,7 +172,7 @@ function handleInput(input: KeyboardInput): void {
 }
 
 type SuppressionEntry = {
-  /** 绑定主键，外加 macOS 在 Fn 按住时会把它翻译成的键；见 {@link FN_TRANSLATED_KEYS} */
+  /** 绑定主键与一起按住的成员，外加 macOS 在 Fn 按住时会把它们翻译成的键；见 {@link FN_TRANSLATED_KEYS} */
   keys: ReadonlySet<KeyboardCode>
   /** 绑定要求的逻辑修饰键，已归一掉 `Primary` */
   modifiers: ReadonlySet<FnModifier>

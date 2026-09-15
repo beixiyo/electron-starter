@@ -1,5 +1,5 @@
 import { pauseShortcutRecord, resumeShortcutRecord } from '@/shortcuts/shortcutConfigAdapter'
-import type { KeyboardCode, ShortcutChord, ShortcutGestureType, ShortcutRecordActive, ShortcutValidationCode } from '@shared/shortcuts'
+import type { ShortcutChord, ShortcutGestureType, ShortcutRecordActive, ShortcutValidationCode } from '@shared/shortcuts'
 import { toShortcutActionBinding, validateShortcutRecording } from '@shared/shortcuts'
 import { useLatestCallback } from 'hooks'
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -180,13 +180,12 @@ export const ShortcutSettingsProvider = memo<React.PropsWithChildren>((props) =>
     const action = actions.find((item) => item.id === recordingId)
     if (!action) return
 
-    const { binding, extraKeys } = detected
+    const { binding } = detected
     const code = validateShortcutRecording({
       binding,
       actionId: action.id,
       bindings: toBindingMap(actions),
       systemShortcuts: systemShortcutsRef.current,
-      extraKeys,
     })
 
     if (!code) {
@@ -194,7 +193,7 @@ export const ShortcutSettingsProvider = memo<React.PropsWithChildren>((props) =>
       return
     }
 
-    setFailure({ actionId: action.id, binding, extraKeys, code })
+    setFailure({ actionId: action.id, binding, code })
     retry()
   }, [actions, commit, detected, recordingId, retry])
 
@@ -282,7 +281,6 @@ type RecordAttempt = {
 export type ShortcutRecordFailure = {
   actionId: string
   binding: ShortcutGestureBinding
-  extraKeys: readonly KeyboardCode[]
   code: ShortcutValidationCode
 }
 

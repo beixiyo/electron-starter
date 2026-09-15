@@ -34,7 +34,6 @@ export const ShortcutRecorder = memo<ShortcutRecorderProps>((props) => {
     : failure?.binding ?? (isRecording
       ? null
       : action.binding)
-  const extraKeys = active?.extraKeys ?? failure?.extraKeys
   const placeholder = !ready
     ? '加载中'
     : isRecording
@@ -89,7 +88,6 @@ export const ShortcutRecorder = memo<ShortcutRecorderProps>((props) => {
 
           <ShortcutValue
             binding={ displayedBinding }
-            extraKeys={ extraKeys }
             placeholder={ placeholder }
             hovered={ boxHovered }
             className={ cn(
@@ -171,7 +169,6 @@ const VALIDATION_MESSAGES: Record<ShortcutValidationCode, string> = {
   alphanumericOnly: '不能只使用字母或数字',
   alreadyInUse: '快捷键已被占用',
   systemReserved: '系统保留快捷键',
-  multipleKeys: '暂不支持多个主键',
 }
 
 export type ShortcutRecorderProps = {

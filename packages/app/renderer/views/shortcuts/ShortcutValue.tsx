@@ -1,5 +1,4 @@
 import { formatBinding, SHORTCUT_KEY_SEPARATOR } from '@/utils/shortcutFormat'
-import type { KeyboardCode } from '@shared/shortcuts'
 import { SeamlessScroll } from 'comps'
 import { useLatestCallback, useResizeObserver } from 'hooks'
 import { memo, useLayoutEffect, useRef, useState } from 'react'
@@ -11,12 +10,12 @@ const MARQUEE_GAP_PX = 24
 
 /** 展示快捷键文本，溢出时只在悬停状态无缝滚动完整内容。 */
 export const ShortcutValue = memo<ShortcutValueProps>((props) => {
-  const { binding, extraKeys, placeholder, hovered, className } = props
+  const { binding, placeholder, hovered, className } = props
   const viewportRef = useRef<HTMLSpanElement>(null)
   const textRef = useRef<HTMLSpanElement>(null)
   const [measured, setMeasured] = useState<Measurement | null>(null)
   const text = binding
-    ? formatBinding(binding, { separator: SHORTCUT_KEY_SEPARATOR, extraKeys })
+    ? formatBinding(binding, { separator: SHORTCUT_KEY_SEPARATOR })
     : placeholder ?? ''
 
   const measure = useLatestCallback(() => {
@@ -54,8 +53,6 @@ ShortcutValue.displayName = 'ShortcutValue'
 
 export type ShortcutValueProps = {
   binding: ShortcutGestureBinding | null
-  /** 与主键一起按下的其他普通键。 */
-  extraKeys?: readonly KeyboardCode[]
   /** 没有绑定时显示的占位文本。 */
   placeholder?: string
   /** 是否悬停在控件上。 */

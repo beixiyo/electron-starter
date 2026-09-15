@@ -45,30 +45,23 @@ describe('快捷键校验', () => {
     expect(validate(press({ source: 'keyboard', key: '2', modifiers: [] }))).toBe('alphanumericOnly')
   })
 
-  /** 只看主键 chord 的话，`A + 2` 与单独 `A` 无法区分 */
+  /** 模式的 `key` 要求主键与每个成员都命中，否则 `A + 2` 会与单独 `A` 无法区分 */
   it('多个字母数字一起按（A + 2）同样按「只有字母数字」拒绝', () => {
-    expect(validateShortcutRecording({
-      binding: press({ source: 'keyboard', key: 'A', modifiers: [] }),
-      extraKeys: ['2'],
-      actionId: 'self',
-      bindings: OTHER_BINDINGS,
-    })).toBe('alphanumericOnly')
+    expect(validate(press({ source: 'keyboard', key: 'A', modifiers: [], keys: ['2'] }))).toBe('alphanumericOnly')
   })
 
-  it('多主键组合前面规则没拦住的一律按「只能一个普通键」拒绝，键数超限仍优先', () => {
-    const validateMulti = (chord: ShortcutChord, extraKeys: Array<'A' | '2'>) => validateShortcutRecording({
-      binding: press(chord),
-      extraKeys,
-      actionId: 'self',
-      bindings: { ...OTHER_BINDINGS, self: press({ source: 'keyboard', key: 'A', modifiers: ['Meta'] }) },
-      systemShortcuts: [{ source: 'keyboard', key: 'Escape', modifiers: [] }],
-    })
+  /** 曾有一条兜底规则把这类组合全拒了，现在表里没写的组合一律放行 */
+  it('多个普通键一起按住是一个 chord，只要不撞前四条就放行', () => {
+    const systemShortcuts: ShortcutChord[] = [{ source: 'keyboard', key: 'Escape', modifiers: [] }]
 
-    /** 与本项当前值 ⌘A 主键相同也不能放行：chord 装不下 `2`，保存等于丢键 */
-    expect(validateMulti({ source: 'keyboard', key: 'A', modifiers: ['Meta'] }, ['2'])).toBe('multipleKeys')
-    /** 主键 Esc 是保留键，但额外的 A 不是，整个组合不算系统保留 */
-    expect(validateMulti({ source: 'keyboard', key: 'Escape', modifiers: [] }, ['A'])).toBe('multipleKeys')
-    expect(validateMulti({ source: 'keyboard', key: 'A', modifiers: ['Control', 'Alt'] }, ['2'])).toBe('tooManyKeys')
+    expect(validate(press({ source: 'keyboard', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] }))).toBeNull()
+    expect(validate(press({ source: 'keyboard', key: 'A', modifiers: ['Meta'], keys: ['2'] }))).toBeNull()
+    expect(validate(press({ source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] }))).toBeNull()
+    /** 主键 Esc 是保留键，但 `Esc + A` 不是单独按下的 Esc */
+    expect(validate(press({ source: 'keyboard', key: 'Escape', modifiers: [], keys: ['A'] }), OTHER_BINDINGS, systemShortcuts)).toBeNull()
+    /** 成员与修饰键、fn 一样计入键数 */
+    expect(validate(press({ source: 'keyboard', key: 'A', modifiers: ['Control', 'Alt'], keys: ['2'] }))).toBe('tooManyKeys')
+    expect(validate(press({ source: 'fn', key: 'A', modifiers: ['Control'], keys: ['2'] }))).toBe('tooManyKeys')
   })
 
   it('⇧ 算修饰键，⇧ + 字母通过', () => {
@@ -79,15 +72,15 @@ describe('快捷键校验', () => {
     expect(validate(press({ source: 'keyboard', key: 'Comma', modifiers: [] }))).toBeNull()
   })
 
-  it('单独的方向键按系统保留拒绝，方向键组合与带修饰键的方向键放行', () => {
-    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [] }))).toBe('systemReserved')
-    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['ArrowLeft'] }))).toBeNull()
-    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: ['Meta'] }))).toBeNull()
+  it('单独的方向键、单独的 F 键与方向键组合都放行', () => {
+    expect(validate(press({ source: 'keyboard', key: 'ArrowUp', modifiers: [] }))).toBeNull()
+    expect(validate(press({ source: 'keyboard', key: 'F5', modifiers: [] }))).toBeNull()
+    expect(validate(press({ source: 'keyboard', key: 'ArrowLeft', modifiers: [], keys: ['ArrowUp'] }))).toBeNull()
     expect(validate(press({
       source: 'keyboard',
-      key: 'ArrowUp',
+      key: 'ArrowLeft',
       modifiers: [],
-      keys: ['ArrowDown', 'ArrowLeft', 'ArrowRight'],
+      keys: ['ArrowUp', 'ArrowRight', 'ArrowDown'],
     }))).toBe('tooManyKeys')
   })
 
@@ -104,7 +97,7 @@ describe('快捷键校验', () => {
   })
 
   it('单独按下即归系统所有的键不通过', () => {
-    for (const key of ['Escape', 'Space', 'Tab', 'Backspace', 'Enter', 'CapsLock', 'F5', 'F19'] as const)
+    for (const key of ['Escape', 'Space', 'Tab', 'Backspace', 'Enter'] as const)
       expect(validate(press({ source: 'keyboard', key, modifiers: [] }))).toBe('systemReserved')
   })
 

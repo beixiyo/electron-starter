@@ -1,12 +1,11 @@
 import type {
-  KeyboardCode,
   ShortcutChord,
   ShortcutGestureBinding,
   ShortcutGestureType,
   ShortcutRecordEvent,
 } from './types'
 import { DOUBLE_PRESS_INTERVAL_MS } from '../constants/hold'
-import { isKeyboardModifierCode, isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
+import { isShortcutChordPrefixOf, shortcutChordsEqual } from './utils'
 
 const DEFAULT_HOLD_MIN_DURATION_MS = 400
 
@@ -31,8 +30,6 @@ export function createShortcutRecordEngine(
   let pendingChord: ShortcutChord | null = null
   let holdDetected = false
   let completesDoublePress = false
-  /** 主键按住期间又按下的其他普通键，chord 结构无法容纳时单独保留用于回显与校验 */
-  let extraKeys: KeyboardCode[] = []
   /** 上一次对外通报的中间态，用于去重 */
   let lastActive: ShortcutRecordActive | null = null
 
@@ -75,11 +72,15 @@ export function createShortcutRecordEngine(
     if (!canAcceptInput())
       return
 
-    /** 前缀扩展直接换成新 chord，中间不经过空态，实时回显不会闪回占位文案 */
-    if (activeChord && !isShortcutChordPrefixOf(activeChord, chord)) {
-      collectExtraKey(chord)
+    /**
+     * 前缀扩展（⌘ → ⌘⌥、fn → fn + ⌘、`[` → `[ + ]`）直接换成新 chord，中间不经过空态，
+     * 实时回显不会闪回占位文案
+     *
+     * 其余在按住期间冒出来的 chord 一律忽略：主键之后才按下的修饰键本来就不参与组合，
+     * 普通键之间的组合已由 tracker 合成为前缀扩展，走不到这里
+     */
+    if (activeChord && !isShortcutChordPrefixOf(activeChord, chord))
       return
-    }
 
     const isSecondPress = canFinishDoublePress(chord)
 
@@ -117,12 +118,6 @@ export function createShortcutRecordEngine(
     const wasCompletingDoublePress = completesDoublePress
     clearTimer()
     clearActiveChord()
-
-    /** 多主键组合不分手势：它只会被校验拒掉，吐出去是为了回显完整组合 */
-    if (extraKeys.length) {
-      detect({ gesture: 'press', chord })
-      return
-    }
 
     if (wasHoldDetected)
       return
@@ -191,29 +186,21 @@ export function createShortcutRecordEngine(
     detect({ gesture: 'press', chord })
   }
 
-  /** 主键按住期间按下的其他普通键攒进 extraKeys，长按计时同时作废 */
-  const collectExtraKey = (chord: ShortcutChord): void => {
-    if (chord.key === 'Fn' || isKeyboardModifierCode(chord.key))
-      return
-
-    clearTimer()
-    if (extraKeys.includes(chord.key))
-      return
-
-    extraKeys.push(chord.key)
-    notifyActive()
-  }
-
+  /**
+   * 只对外吐出本轮允许的手势
+   *
+   * 长按类动作收到短按这类不接受的手势时静默回到等待：设置页不看阶段只看结果，
+   * 若把不接受的手势也吐出去，它会被当成有效录制直接保存
+   */
   const detect = (binding: ShortcutGestureBinding): void => {
-    const detectedExtraKeys = extraKeys
     clearRecordState()
 
-    if (!detectedExtraKeys.length && !supportedGestures.includes(binding.gesture)) {
+    if (!supportedGestures.includes(binding.gesture)) {
       setPhase('waiting')
       return
     }
 
-    onDetectedChange({ binding, extraKeys: detectedExtraKeys })
+    onDetectedChange({ binding })
     setPhase('detected')
   }
 
@@ -241,7 +228,6 @@ export function createShortcutRecordEngine(
     clearTimer()
     clearActiveChord()
     pendingChord = null
-    extraKeys = []
     notifyActive()
   }
 
@@ -272,16 +258,12 @@ export function createShortcutRecordEngine(
   const notifyActive = (): void => {
     const chord = activeChord ?? pendingChord
     const next: ShortcutRecordActive | null = chord
-      ? { chord, extraKeys: [...extraKeys] }
+      ? { chord }
       : null
 
     if (!next && !lastActive)
       return
-    if (
-      next && lastActive
-      && next.chord === lastActive.chord
-      && next.extraKeys.length === lastActive.extraKeys.length
-    )
+    if (next && lastActive && next.chord === lastActive.chord)
       return
 
     lastActive = next
@@ -322,15 +304,11 @@ export type ShortcutRecordDetectionPhase = 'idle' | 'waiting' | 'deciding' | 'wa
 /** 判定完成前的中间态：正按住的 chord，或松开后仍在等第二次按下的 chord */
 export type ShortcutRecordActive = {
   chord: ShortcutChord
-  /** 主键按住期间又按下的其他普通键 */
-  extraKeys: readonly KeyboardCode[]
 }
 
 /** 一轮录制的结果：用户按了什么，合法与否由校验决定 */
 export type ShortcutRecordDetection = {
   binding: ShortcutGestureBinding
-  /** 主键按住期间又按下的其他普通键，按按下顺序排列 */
-  extraKeys: readonly KeyboardCode[]
 }
 
 export type CreateShortcutRecordEngineOptions = {

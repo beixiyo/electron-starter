@@ -64,6 +64,7 @@ describe('全局快捷键录制', () => {
     send('down', 'AltRight', ['Alt'])
     send('down', 'A', ['Alt'])
     send('up', 'AltRight')
+    send('up', 'A')
     send('down', 'B')
 
     expect(events.map(event => `${event.phase}:${event.chord.key}:${(event.chord.modifiers ?? []).join('+')}`)).toEqual([
@@ -71,6 +72,7 @@ describe('全局快捷键录制', () => {
       'down:A:AltRight',
       'up:A:AltRight',
       'up:AltRight:',
+      'up:A:',
       'down:B:',
     ])
   })

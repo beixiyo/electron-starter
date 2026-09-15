@@ -1,4 +1,4 @@
-import type { KeyboardInputEvent, ShortcutRecordEvent } from './types'
+import type { KeyboardInputEvent, ShortcutChord, ShortcutRecordEvent } from './types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createKeyboardInputTracker } from './input-tracker'
 import { createShortcutRecordEngine } from './record-engine'
@@ -48,7 +48,6 @@ describe('快捷键录制手势优先级', () => {
         chord: { source: 'keyboard', key: 'MetaLeft', modifiers: [] },
         minDurationMs: 400,
       },
-      extraKeys: [],
     })
   })
 
@@ -88,7 +87,6 @@ describe('快捷键录制手势优先级', () => {
         gesture: 'press',
         chord: { source: 'keyboard', key: 'MetaLeft', modifiers: ['AltRight'] },
       },
-      extraKeys: [],
     })
   })
 
@@ -117,11 +115,11 @@ describe('快捷键录制手势优先级', () => {
         gesture: 'press',
         chord: { source: 'keyboard', key: 'A', modifiers: ['MetaLeft'] },
       },
-      extraKeys: [],
     })
   })
 
-  it('主键按住期间按下的其他普通键随结果一起吐出，修饰键不算', () => {
+  /** 主键之后才按下的修饰键不参与 chord；不是前缀扩展的 chord 一律忽略，不能把候选换掉 */
+  it('主键按住期间按下的修饰键与无关 chord 不影响结果', () => {
     const onDetectedChange = vi.fn()
     const engine = createShortcutRecordEngine({
       onPhaseChange: vi.fn(),
@@ -130,7 +128,6 @@ describe('快捷键录制手势优先级', () => {
     engine.start(['press'])
 
     engine.handle(keyEvent('down', 'A', 0))
-    engine.handle(keyEvent('down', '2', 20))
     engine.handle(modifierEvent('down', 'MetaLeft', [], 30))
     engine.handle(keyEvent('down', '2', 35))
     engine.handle(keyEvent('up', '2', 40))
@@ -141,11 +138,11 @@ describe('快捷键录制手势优先级', () => {
         gesture: 'press',
         chord: { source: 'keyboard', key: 'A', modifiers: [] },
       },
-      extraKeys: ['2'],
     })
   })
 
-  it('多主键组合不受本轮手势限制，长按类动作也能收到用于回显', async () => {
+  /** 主键按住期间再按普通键由 tracker 合成前缀扩展，长按计时要跟着换到完整组合上 */
+  it('普通键组合的前缀扩展保留长按判定', async () => {
     vi.useFakeTimers()
     const onDetectedChange = vi.fn()
     const engine = createShortcutRecordEngine({
@@ -155,21 +152,19 @@ describe('快捷键录制手势优先级', () => {
     engine.start(['hold'])
 
     engine.handle(keyEvent('down', 'A', 0))
-    engine.handle(keyEvent('down', 'B', 20))
+    engine.handle({ phase: 'down', timestamp: 20, chord: { source: 'keyboard', key: 'A', modifiers: [], keys: ['B'] } })
     await vi.advanceTimersByTimeAsync(500)
-    engine.handle(keyEvent('up', 'A', 520))
 
-    expect(onDetectedChange).toHaveBeenCalledTimes(2)
     expect(onDetectedChange).toHaveBeenLastCalledWith({
       binding: {
-        gesture: 'press',
-        chord: { source: 'keyboard', key: 'A', modifiers: [] },
+        gesture: 'hold',
+        chord: { source: 'keyboard', key: 'A', modifiers: [], keys: ['B'] },
+        minDurationMs: 400,
       },
-      extraKeys: ['B'],
     })
   })
 
-  it('实时回显跟着按住的键与额外键走，松手判定后清空', () => {
+  it('实时回显跟着按住的组合走，松手判定后清空', () => {
     const onActiveChange = vi.fn()
     const engine = createShortcutRecordEngine({
       onPhaseChange: vi.fn(),
@@ -178,13 +173,14 @@ describe('快捷键录制手势优先级', () => {
     })
     engine.start(['press'])
 
+    const combo: ShortcutChord = { source: 'keyboard', key: 'A', modifiers: [], keys: ['2'] }
     engine.handle(keyEvent('down', 'A', 0))
-    engine.handle(keyEvent('down', '2', 20))
-    engine.handle(keyEvent('up', 'A', 40))
+    engine.handle({ phase: 'down', timestamp: 20, chord: combo })
+    engine.handle({ phase: 'up', timestamp: 40, chord: combo })
 
     expect(onActiveChange.mock.calls.map(([active]) => active)).toEqual([
-      { chord: { source: 'keyboard', key: 'A', modifiers: [] }, extraKeys: [] },
-      { chord: { source: 'keyboard', key: 'A', modifiers: [] }, extraKeys: ['2'] },
+      { chord: { source: 'keyboard', key: 'A', modifiers: [] } },
+      { chord: combo },
       null,
     ])
   })
@@ -203,7 +199,7 @@ describe('快捷键录制手势优先级', () => {
     const fn = { source: 'fn', key: 'Fn' } as const
     engine.handle({ phase: 'down', chord: fn, timestamp: 0 })
     engine.handle({ phase: 'up', chord: fn, timestamp: 50 })
-    expect(onActiveChange).toHaveBeenLastCalledWith({ chord: fn, extraKeys: [] })
+    expect(onActiveChange).toHaveBeenLastCalledWith({ chord: fn })
 
     await vi.advanceTimersByTimeAsync(300)
     expect(onActiveChange).toHaveBeenLastCalledWith(null)
@@ -217,7 +213,6 @@ describe('Fn 与修饰键组合录制', () => {
     vi.useFakeTimers()
     const fnMetaPress = {
       binding: { gesture: 'press', chord: { source: 'fn', key: 'Fn', modifiers: ['Meta'] } },
-      extraKeys: [],
     }
 
     expect(recordRawInputs([
@@ -256,17 +251,20 @@ describe('Fn 与修饰键组合录制', () => {
   })
 })
 
-describe('方向键组合录制', () => {
-  it('两个方向键录成一个 chord，方向键加普通键仍是多主键组合', () => {
+/**
+ * 以前只有方向键之间能合成 chord，`[ + ]`、`↑ + A` 只能以 extraKeys 形态回显后被拒；
+ * 现在任意普通键一起按住都是一个可保存的 chord，Fn 组合键之间同样如此
+ */
+describe('普通键组合录制', () => {
+  it('两个普通键录成一个 chord，主键按规范键名顺序归一，与按下顺序无关', () => {
+    const bracketPair = { source: 'keyboard', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] }
+
     expect(recordRawInputs([
-      raw('down', 'ArrowLeft', 0),
-      raw('down', 'ArrowUp', 20),
-      raw('up', 'ArrowLeft', 40),
-      raw('up', 'ArrowUp', 60),
-    ])).toEqual({
-      binding: { gesture: 'press', chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['ArrowLeft'] } },
-      extraKeys: [],
-    })
+      raw('down', 'BracketRight', 0),
+      raw('down', 'BracketLeft', 20),
+      raw('up', 'BracketRight', 40),
+      raw('up', 'BracketLeft', 60),
+    ])).toEqual({ binding: { gesture: 'press', chord: bracketPair } })
 
     expect(recordRawInputs([
       raw('down', 'ArrowUp', 0),
@@ -274,8 +272,20 @@ describe('方向键组合录制', () => {
       raw('up', 'A', 40),
       raw('up', 'ArrowUp', 60),
     ])).toEqual({
-      binding: { gesture: 'press', chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [] } },
-      extraKeys: ['A'],
+      binding: { gesture: 'press', chord: { source: 'keyboard', key: 'ArrowUp', modifiers: [], keys: ['A'] } },
+    })
+  })
+
+  it('Fn 按住时多个组合键录成一个 Fn chord', () => {
+    expect(recordRawInputs([
+      raw('down', 'Fn', 0),
+      raw('down', 'BracketLeft', 20, { fn: true }),
+      raw('down', 'BracketRight', 40, { fn: true }),
+      raw('up', 'BracketRight', 60, { fn: true }),
+      raw('up', 'BracketLeft', 80, { fn: true }),
+      raw('up', 'Fn', 100),
+    ])).toEqual({
+      binding: { gesture: 'press', chord: { source: 'fn', key: 'BracketLeft', modifiers: [], keys: ['BracketRight'] } },
     })
   })
 })

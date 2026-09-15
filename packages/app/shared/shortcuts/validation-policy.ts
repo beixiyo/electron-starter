@@ -19,22 +19,19 @@ export const SHORTCUT_KEY_GROUPS = {
   numpadDigits: KEYBOARD_CODES.filter(code => /^Numpad[0-9]$/.test(code)),
   /** F1–F19；F20–F24 不在其中，常规键盘上没有它们 */
   functionKeys: KEYBOARD_CODES.filter(code => /^F([1-9]|1[0-9])$/.test(code)),
-  arrowKeys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'],
 } as const satisfies Record<string, readonly KeyboardCode[]>
 
 /**
- * 录制校验规则，数组顺序即判定顺序
+ * 录制校验规则，数组顺序即判定顺序；表里没写的组合一律放行
  *
- * 四种规则：
- * - `maxKeys`：键数超过 `max` 不通过，修饰键与 fn 各算一个
+ * 三种规则：
+ * - `maxKeys`：键数超过 `max` 不通过，修饰键、fn 与一起按住的普通键各算一个
  * - `inUse`：与其他动作的当前快捷键相同不通过
  * - `deny`：命中 `patterns` 任一模式不通过；`systemShortcuts: true` 时把主进程实时读到的
  *   系统快捷键也算进模式里；`except` 命中的组合跳过本条
- * - `singleKey`：`A + 2` 这类带多个普通键的组合不通过
  *
- * 多主键组合（`extraKeys` 非空）的判定：`maxKeys` 把额外的键一并计数；`deny` 要求主键与
- * 每个额外键都命中同一模式（`A + 2` 才算「只有字母数字」，`Esc + A` 不算系统保留）；
- * `inUse` 与系统快捷键比对直接跳过，chord 装不下的组合不可能与任何已有绑定相同
+ * 多个普通键一起按住（`[ + ]`、`A + 2`）是一个 chord：模式的 `key` 要求主键与每个成员都命中
+ * （`A + 2` 才算「只有字母数字」，`Esc + A` 不算单独的 Esc），`keys: 'none'` 只匹配单个主键
  */
 export const SHORTCUT_RECORD_RULES = [
   { code: 'tooManyKeys', kind: 'maxKeys', max: 3 },
@@ -57,20 +54,16 @@ export const SHORTCUT_RECORD_RULES = [
   {
     code: 'systemReserved',
     kind: 'deny',
-    /** 单独按下即归系统所有的键 */
+    /**
+     * 单独按下即归系统所有的键，只保留最基础的五个
+     *
+     * 单独的方向键、标点、F 键都放行；`Esc + A` 这类带成员的组合不算单独按下，
+     * `keys: 'none'` 让它们不命中本条
+     */
     patterns: [
       {
         source: 'keyboard',
-        key: [
-          'Escape',
-          'Space',
-          'Tab',
-          'Backspace',
-          'Enter',
-          'CapsLock',
-          ...SHORTCUT_KEY_GROUPS.arrowKeys,
-          ...SHORTCUT_KEY_GROUPS.functionKeys,
-        ],
+        key: ['Escape', 'Space', 'Tab', 'Backspace', 'Enter'],
         modifiers: 'none',
         keys: 'none',
       },
@@ -86,8 +79,6 @@ export const SHORTCUT_RECORD_RULES = [
       { source: 'fn', key: SHORTCUT_KEY_GROUPS.functionKeys },
     ],
   },
-  /** 兜底：前面没拦住的多主键组合（如 ⌘ + A + 2、Esc + A）在这里拒绝 */
-  { code: 'multipleKeys', kind: 'singleKey' },
 ] as const satisfies readonly ShortcutRecordRule[]
 
 /**
@@ -111,7 +102,7 @@ export type ShortcutValidationCode = typeof SHORTCUT_RECORD_RULES[number]['code'
 export type ShortcutChordPattern = {
   /** 输入源；省略表示 keyboard 与 fn 都匹配 */
   source?: ShortcutInputSource
-  /** 主键，单个或任一；省略表示任意主键 */
+  /** 主键与每个一起按住的普通键成员都要在其中，单个或任一；省略表示不限 */
   key?: ShortcutPatternKey | readonly ShortcutPatternKey[]
   /**
    * 修饰键约束：`none` 不能带修饰键，`any` 不限，数组表示恰好是这一组
@@ -119,7 +110,7 @@ export type ShortcutChordPattern = {
    */
   modifiers?: 'none' | 'any' | readonly ShortcutModifier[]
   /**
-   * 同组普通键约束：`none` 只能是单个主键，`any` 不限
+   * 一起按住的普通键成员约束（`[ + ]` 里的 `]`）：`none` 只能是单个主键，`any` 不限
    * @default 'any'
    */
   keys?: 'none' | 'any'
@@ -132,24 +123,17 @@ export type ShortcutRecordRule =
   | ShortcutMaxKeysRule
   | ShortcutInUseRule
   | ShortcutDenyRule
-  | ShortcutSingleKeyRule
 
 export type ShortcutMaxKeysRule = {
   code: string
   kind: 'maxKeys'
-  /** 允许的最大键数，修饰键与 fn 各算一个 */
+  /** 允许的最大键数，修饰键、fn 与一起按住的普通键各算一个 */
   max: number
 }
 
 export type ShortcutInUseRule = {
   code: string
   kind: 'inUse'
-}
-
-/** 主键按住期间又按了其他普通键（`extraKeys` 非空）即不通过 */
-export type ShortcutSingleKeyRule = {
-  code: string
-  kind: 'singleKey'
 }
 
 export type ShortcutDenyRule = {
