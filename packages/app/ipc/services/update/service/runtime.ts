@@ -1,11 +1,14 @@
-import type { UpdateContract, UpdateInfoLite, UpdateStatus, UpdateStatusEvent } from './contract'
-import { classifyUpdateError } from './error'
+import type { UpdateContract, UpdateStatus, UpdateStatusEvent } from '../contract'
+import { classifyUpdateError } from '../error'
 import { readdir, stat } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { createIpcService } from '@ipc/core'
 import { loadEnv } from '@jl-org/tool/node'
 import { getUpdaterCacheStorageAreaPath } from '@main/storage'
+import { createMainDiagnosticLogger } from '@main/logging'
+import type { InitAutoUpdaterOptions, PendingDownloadTarget, ProgressSnapshot, UpdateInfoWithFiles } from './types'
+import { getPendingDownloadTarget, isSupportedUpdateFile, toLite } from './updateInfo'
 import { app } from 'electron'
 import electronUpdater from 'electron-updater'
 
@@ -15,6 +18,7 @@ import electronUpdater from 'electron-updater'
  * 按官方建议从 default 导出解构（electron-builder#7976）
  */
 const { autoUpdater } = electronUpdater
+const log = createMainDiagnosticLogger('update.service')
 
 /**
  * 应用更新 IPC 服务（主进程实现）
@@ -36,6 +40,8 @@ export const updateService = createIpcService<UpdateContract>('update', {
         ? getPendingDownloadTarget(result.updateInfo)
         : null
 
+      if (!result.isUpdateAvailable) latestAvailableUpdate = null
+
       return {
         available: result.isUpdateAvailable,
         info: result.isUpdateAvailable
@@ -45,16 +51,7 @@ export const updateService = createIpcService<UpdateContract>('update', {
     },
 
     async download() {
-      mainProgressSnapshot = null
-      pendingProgressSnapshot = null
-      receivedNativeProgress = false
-      startPendingDownloadPolling()
-      try {
-        await autoUpdater.downloadUpdate()
-      }
-      finally {
-        stopPendingDownloadPolling()
-      }
+      await downloadLatestAvailableUpdate('manual')
     },
 
     async install() {
@@ -63,6 +60,13 @@ export const updateService = createIpcService<UpdateContract>('update', {
         return
       }
 
+      if (!installableVersion || latestAvailableUpdate?.version !== installableVersion) {
+        const latestInfo = latestAvailableUpdate
+          ? { info: toLite(latestAvailableUpdate) }
+          : undefined
+        emitStatus('available', latestInfo)
+        return
+      }
       autoUpdater.quitAndInstall()
     },
 
@@ -79,6 +83,11 @@ let pendingDownloadTarget: PendingDownloadTarget | null = null
 let pendingProgressSnapshot: ProgressSnapshot | null = null
 let pendingProgressTimer: ReturnType<typeof setInterval> | null = null
 let receivedNativeProgress = false
+let autoDownloadEnabled = true
+let installOnAppQuitWhenReady = true
+let latestAvailableUpdate: UpdateInfoWithFiles & { version: string, releaseDate?: string, releaseNotes?: unknown } | null = null
+let activeDownloadVersion: string | null = null
+let installableVersion: string | null = null
 
 /**
  * 初始化自动更新：配置 `autoUpdater` 并把其事件桥接到 `status` / `progress` IPC 事件
@@ -96,7 +105,7 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
   initialized = true
 
   const {
-    autoDownload = false,
+    autoDownload = true,
     autoInstallOnAppQuit = true,
     checkOnStart = false,
     disableDifferentialDownload = false,
@@ -104,10 +113,11 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
     pollIntervalMs = 4 * 60 * 60 * 1000,
   } = options
 
-  /** 默认关闭自动下载，交由 UI 让用户确认后再 `download()`，避免静默占用带宽 */
-  autoUpdater.autoDownload = autoDownload
-  /** 已下载的更新在退出时自动装上 */
-  autoUpdater.autoInstallOnAppQuit = autoInstallOnAppQuit
+  /** 服务自行串行下载，确保常驻期间只把最新完整包标记为可安装。 */
+  autoDownloadEnabled = autoDownload
+  installOnAppQuitWhenReady = autoInstallOnAppQuit
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = false
   /** 增量下载默认开启；个别服务器/代理不支持 HTTP Range 时可置 true 强制全量 */
   autoUpdater.disableDifferentialDownload = disableDifferentialDownload
 
@@ -129,11 +139,21 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
   }
 
   autoUpdater.on('checking-for-update', () => emitStatus('checking'))
+
   autoUpdater.on('update-available', (info) => {
     pendingDownloadTarget = getPendingDownloadTarget(info)
+    latestAvailableUpdate = info
+    if (installableVersion && installableVersion !== info.version) autoUpdater.autoInstallOnAppQuit = false
+    installableVersion = installableVersion === info.version
+      ? installableVersion
+      : null
+    log.info('event.update-available', 'auto updater update available', { version: info.version })
     emitStatus('available', { info: toLite(info) })
+    if (autoDownloadEnabled) void downloadLatestAvailableUpdate('automatic')
   })
+
   autoUpdater.on('update-not-available', () => emitStatus('not-available'))
+
   autoUpdater.on('download-progress', (progress) => {
     receivedNativeProgress = true
     const timestamp = Date.now()
@@ -158,10 +178,18 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
       bytesPerSecond,
     })
   })
+
   autoUpdater.on('update-downloaded', (info) => {
     stopPendingDownloadPolling()
-    emitStatus('downloaded', { info: toLite(info) })
+    const isLatestKnownUpdate = latestAvailableUpdate?.version === info.version
+    installableVersion = isLatestKnownUpdate
+      ? info.version
+      : null
+    autoUpdater.autoInstallOnAppQuit = Boolean(installableVersion && installOnAppQuitWhenReady)
+    if (isLatestKnownUpdate) emitStatus('downloaded', { info: toLite(info) })
+    else if (latestAvailableUpdate) emitStatus('available', { info: toLite(latestAvailableUpdate) })
   })
+
   autoUpdater.on('error', (error) => {
     stopPendingDownloadPolling()
     const errorCode = classifyUpdateError(error)
@@ -184,6 +212,33 @@ export function initAutoUpdater(options: InitAutoUpdaterOptions = {}): void {
   /** 周期轮询：长驻应用期间定时探测新版本（设 0 关闭） */
   if (pollIntervalMs > 0)
     setInterval(silentCheck, pollIntervalMs)
+}
+
+/** 串行下载当前已知最新版本；旧下载结束后再覆盖为轮询期间发现的新版本。 */
+async function downloadLatestAvailableUpdate(source: 'automatic' | 'manual'): Promise<void> {
+  const target = latestAvailableUpdate
+  if (!target || activeDownloadVersion) {
+    if (activeDownloadVersion) autoUpdater.autoInstallOnAppQuit = false
+    return
+  }
+
+  activeDownloadVersion = target.version
+  installableVersion = null
+  autoUpdater.autoInstallOnAppQuit = false
+  mainProgressSnapshot = null
+  pendingProgressSnapshot = null
+  receivedNativeProgress = false
+  startPendingDownloadPolling()
+  log.info('download.start', 'update download started', { source, version: target.version })
+
+  try {
+    await autoUpdater.downloadUpdate()
+  }
+  finally {
+    stopPendingDownloadPolling()
+    activeDownloadVersion = null
+    if (latestAvailableUpdate && latestAvailableUpdate.version !== target.version) void downloadLatestAvailableUpdate('automatic')
+  }
 }
 
 /**
@@ -303,127 +358,7 @@ async function findPendingDownloadFile(): Promise<string | null> {
     : null
 }
 
-function getPendingDownloadTarget(info: UpdateInfoWithFiles): PendingDownloadTarget | null {
-  const files = Array.isArray(info.files)
-    ? info.files
-    : []
-  const updateFile = files.find(file => typeof file.url === 'string' && isSupportedUpdateFile(file.url))
-
-  if (updateFile?.url) {
-    return {
-      fileName: getFileName(updateFile.url),
-      total: typeof updateFile.size === 'number'
-        ? updateFile.size
-        : 0,
-    }
-  }
-
-  if (typeof info.path === 'string' && isSupportedUpdateFile(info.path)) {
-    return {
-      fileName: getFileName(info.path),
-      total: typeof info.size === 'number'
-        ? info.size
-        : 0,
-    }
-  }
-
-  return null
-}
-
-function isSupportedUpdateFile(urlOrPath: string): boolean {
-  const name = getFileName(urlOrPath)
-  return getPlatformUpdateExtensions().some(extension => name.endsWith(extension))
-}
-
-function getPlatformUpdateExtensions(): string[] {
-  if (process.platform === 'darwin')
-    return ['.zip']
-
-  if (process.platform === 'win32')
-    return ['.exe']
-
-  return ['.AppImage']
-}
-
-function getFileName(urlOrPath: string): string {
-  try {
-    return basename(decodeURIComponent(new URL(urlOrPath).pathname))
-  }
-  catch {
-    return basename(decodeURIComponent(urlOrPath))
-  }
-}
-
 /** 广播一条 `status` 事件（不带 target = 推送到所有窗口） */
 function emitStatus(status: UpdateStatus, extra?: Omit<UpdateStatusEvent, 'status'>): void {
   updateService.emit('status', { status, ...extra })
-}
-
-/** 把 electron-updater 的 UpdateInfo 归一化为可序列化的精简结构 */
-function toLite(info: UpdateInfoWithFiles & { version: string, releaseDate?: string, releaseNotes?: unknown }): UpdateInfoLite {
-  const size = getPendingDownloadTarget(info)?.total
-  return {
-    version: info.version,
-    releaseDate: info.releaseDate,
-    releaseNotes: typeof info.releaseNotes === 'string'
-      ? info.releaseNotes
-      : undefined,
-    size: size && size > 0
-      ? size
-      : undefined,
-  }
-}
-
-/** {@link initAutoUpdater} 配置项 */
-export interface InitAutoUpdaterOptions {
-  /**
-   * 发现新版本后是否自动开始下载
-   * @default false
-   */
-  autoDownload?: boolean
-  /**
-   * 已下载的更新是否在应用退出时自动安装
-   * @default true
-   */
-  autoInstallOnAppQuit?: boolean
-  /**
-   * 是否在初始化后立即检查一次更新
-   * @default false
-   */
-  checkOnStart?: boolean
-  /**
-   * 是否禁用增量（blockmap）下载，强制每次全量
-   * 仅当更新服务器不支持 HTTP Range 时才需要
-   * @default false
-   */
-  disableDifferentialDownload?: boolean
-  /**
-   * 启动后延迟多少毫秒做首次检查（避开启动高峰）；设 0 关闭
-   * @default 10000
-   */
-  initialCheckDelayMs?: number
-  /**
-   * 周期轮询检查的间隔毫秒数；设 0 关闭周期轮询
-   * @default 14400000 （4 小时）
-   */
-  pollIntervalMs?: number
-}
-
-type ProgressSnapshot = {
-  transferred: number
-  timestamp: number
-}
-
-type PendingDownloadTarget = {
-  fileName: string
-  total: number
-}
-
-type UpdateInfoWithFiles = {
-  files?: Array<{
-    size?: number
-    url?: string
-  }>
-  path?: string
-  size?: number
 }

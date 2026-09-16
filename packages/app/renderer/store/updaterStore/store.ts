@@ -1,5 +1,6 @@
 import { isElectron } from '@/utils/env'
 import type { UpdateCheckOutcome, UpdateErrorCode, UpdateInfoLite, UpdateProgress, UpdateStatus, UpdateStatusEvent } from '@ipc/services/update/contract'
+import type { UpdaterPromptSource, UpdaterState, UpdaterStoreOptions, UpdaterStatus } from './types'
 import { UPDATE_ERROR_CODES } from '@ipc/services/update/contract'
 import { useSyncExternalStore } from 'react'
 
@@ -9,85 +10,6 @@ import { useSyncExternalStore } from 'react'
  * 主进程通过 `status` / `progress` 事件推送自动更新状态，设置入口与全局弹窗共享同一份
  * 快照。弹窗节奏和策略都只保存在当前会话，不写入本地存储，避免旧记忆遮住新的强制更新判定
  */
-
-/** 内部状态机：IPC 契约状态额外加一个初始 `idle`。 */
-export type UpdaterStatus = UpdateStatus | 'idle'
-
-/** 自动弹窗的来源，用于区分会话节流与手动打开。 */
-export type UpdaterPromptSource = 'auto-available' | 'auto-force' | 'manual'
-
-/** 检查到新版本后由宿主注入的策略结果。 */
-export interface UpdaterPolicy {
-  /** 是否必须更新；未提供策略时默认为 false。 */
-  forceUpdate?: boolean
-  /** 可选的更新标题。 */
-  title?: string
-  /** 可选的更新说明。 */
-  notes?: string
-}
-
-/** `checkPolicy` 收到的上下文。 */
-export interface UpdaterPolicyContext {
-  /** 当前安装版本；IPC 尚未返回时为空字符串。 */
-  currentVersion: string
-  /** 自动更新引擎确认可用的目标版本。 */
-  info: UpdateInfoLite
-}
-
-/** `canPrompt` 收到的上下文。 */
-export interface UpdaterPromptContext {
-  /** 触发这次打开请求的来源。 */
-  source: UpdaterPromptSource
-  /** 当前可用版本；手动打开时可能为空。 */
-  info: UpdateInfoLite | null
-  /** 请求发生时是否已经命中强制更新。 */
-  forceUpdate: boolean
-}
-
-/**
- * 更新状态仓的注入点
- *
- * 底层只负责状态机，不依赖登录、业务后端或其他产品服务。宿主可以注入弹窗资格和
- * 更新策略；两者都可以异步返回。没有注入策略时，强制更新默认为 false
- */
-export interface UpdaterStoreOptions {
-  /**
-   * 判断当前会话是否允许展示更新弹窗
-   * @default () => true
-   */
-  canPrompt?: (context: UpdaterPromptContext) => boolean | Promise<boolean>
-  /**
-   * 为一个可用版本提供通用更新策略
-   * @default () => ({ forceUpdate: false })
-   */
-  checkPolicy?: (context: UpdaterPolicyContext) => UpdaterPolicy | null | undefined | Promise<UpdaterPolicy | null | undefined>
-  /**
-   * 普通自动弹窗两次实际展示之间的最小间隔（毫秒）
-   * @default 86400000
-   */
-  autoPromptIntervalMs?: number
-}
-
-export interface UpdaterState {
-  /** 当前应用版本号。 */
-  currentVersion: string
-  /** 更新状态机。 */
-  status: UpdaterStatus
-  /** 可用 / 已下载更新的版本信息。 */
-  info: UpdateInfoLite | null
-  /** 下载进度（仅下载阶段非空）。 */
-  progress: UpdateProgress | null
-  /** 错误分类码（status 为 error 时）。 */
-  error: string | null
-  /** 更新弹窗是否打开。 */
-  modalOpen: boolean
-  /** 当前策略是否锁定为强制更新。 */
-  forceUpdate: boolean
-  /** 注入策略提供的标题。 */
-  policyTitle: string
-  /** 注入策略提供的说明。 */
-  policyNotes: string
-}
 
 /** 当前环境是否支持更新（仅 Electron 桌面端）。 */
 export const updaterAvailable = isElectron()
@@ -118,10 +40,11 @@ let autoPromptPending = false
 let autoPromptRequestId: number | null = null
 let downloadRequestId = 0
 let installRequestId = 0
-let storeOptions: Required<Pick<UpdaterStoreOptions, 'canPrompt' | 'checkPolicy'>> & { autoPromptIntervalMs: number } = {
+let storeOptions: Required<Pick<UpdaterStoreOptions, 'canPrompt' | 'checkPolicy' | 'autoOpenOnAvailable'>> & { autoPromptIntervalMs: number } = {
   canPrompt: () => true,
   checkPolicy: () => ({ forceUpdate: false }),
   autoPromptIntervalMs: DEFAULT_AUTO_PROMPT_INTERVAL_MS,
+  autoOpenOnAvailable: false,
 }
 
 /** 整体替换引用并通知订阅者，保证 React 能看到新的快照。 */
@@ -176,6 +99,7 @@ export function initUpdaterStore(options: UpdaterStoreOptions = {}): void {
     canPrompt: options.canPrompt ?? (() => true),
     checkPolicy: options.checkPolicy ?? (() => ({ forceUpdate: false })),
     autoPromptIntervalMs: Math.max(0, options.autoPromptIntervalMs ?? DEFAULT_AUTO_PROMPT_INTERVAL_MS),
+    autoOpenOnAvailable: options.autoOpenOnAvailable ?? false,
   }
 
   currentVersionPromise = Promise.resolve()
@@ -195,6 +119,8 @@ export function initUpdaterStore(options: UpdaterStoreOptions = {}): void {
   $ipc.update.on('status', handleStatus)
   $ipc.update.on('progress', handleProgress)
   exposeUpdaterDebugHandle()
+  /** 监听就绪后首检，避免主进程事件先到而丢失。 */
+  void checkUpdate()
 }
 
 function handleStatus(payload: UpdateStatusEvent): void {
@@ -234,7 +160,7 @@ function handleStatus(payload: UpdateStatusEvent): void {
   void checkPolicy(info)
 
   if (forceAlreadyLocked) requestUpdaterModalOpen('auto-force', info)
-  else if (canAutoPrompt()) requestUpdaterModalOpen('auto-available', info)
+  else if (storeOptions.autoOpenOnAvailable && canAutoPrompt()) requestUpdaterModalOpen('auto-available', info)
 }
 
 function handleProgress(payload: UpdateProgress): void {
@@ -291,8 +217,8 @@ export function installUpdate(): void {
 
 /** 打开弹窗（手动触发时也补一次检查，让用户看到最新结果）。 */
 export function openUpdaterModal(): void {
-  const shouldCheck = state.status === 'idle' || state.status === 'not-available' || state.status === 'error'
-  if (shouldCheck) void checkUpdate()
+  /** 即使已下载也重新检查，避免把常驻期间过期的包安装掉。 */
+  void checkUpdate()
   requestUpdaterModalOpen('manual', state.info)
 }
 

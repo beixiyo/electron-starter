@@ -3,7 +3,7 @@
 import type { UpdateProgress, UpdateStatusEvent } from '@ipc/services/update/contract'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { UpdaterStoreOptions } from './updaterStore'
+import type { UpdaterStoreOptions } from './types'
 
 const CURRENT_VERSION = '1.2.3'
 const NEXT_VERSION = '1.3.0'
@@ -33,7 +33,7 @@ async function freshStore(options: UpdaterStoreOptions = {}) {
 
   vi.stubGlobal('$ipc', ipc)
 
-  const store = await import('./updaterStore')
+  const store = await import('./store')
   store.initUpdaterStore(options)
   await flush()
 
@@ -103,13 +103,13 @@ describe('updaterStore 强制更新锁', () => {
     expect(view.result.current.modalOpen).toBe(true)
   })
 
-  it('没有注入策略时不自行判定强制更新', async () => {
+  it('没有注入策略时不自行判定强制更新，也静默处理普通更新', async () => {
     const { view, emitStatus } = await freshStore()
 
     await emitStatus(availableEvent())
 
     expect(view.result.current.forceUpdate).toBe(false)
-    expect(view.result.current.modalOpen).toBe(true)
+    expect(view.result.current.modalOpen).toBe(false)
   })
 
   it('强更目标在轮询中消失时转为可重试错误而保持锁', async () => {
@@ -151,11 +151,14 @@ describe('updaterStore 强制更新锁', () => {
   })
 })
 
-describe('updaterStore 会话级普通弹窗节奏', () => {
+describe('updaterStore 普通更新展示策略', () => {
   it('自动弹窗在间隔内只出现一次，手动打开不消耗自动额度', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(0)
-    const { store, view, emitStatus } = await freshStore({ autoPromptIntervalMs: 1000 })
+    const { store, view, emitStatus } = await freshStore({
+      autoOpenOnAvailable: true,
+      autoPromptIntervalMs: 1000,
+    })
 
     await emitStatus(availableEvent())
     expect(view.result.current.modalOpen).toBe(true)

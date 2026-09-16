@@ -121,10 +121,16 @@ initDeeplink(
     initSelectionHook()
 
     /**
-     * 初始化自动更新：桥接 autoUpdater 事件 → IPC，并默认启动后 ~10s 首检、每 4h 轮询
-     * 发现新版本会通过 status 事件让渲染端自动弹出更新窗。可传 { pollIntervalMs: 0 } 关闭轮询
+     * 渲染端订阅完事件后立即首检；主进程每小时轮询一次并在后台下载最新版
+     * 普通更新不自动弹窗，用户在更新页查看进度或安装就绪状态
      */
-    initAutoUpdater()
+    initAutoUpdater({
+      autoDownload: true,
+      autoInstallOnAppQuit: true,
+      checkOnStart: false,
+      initialCheckDelayMs: 0,
+      pollIntervalMs: 60 * 60 * 1000,
+    })
 
     if (process.platform === 'darwin') {
       startFocusCheckPolling()
