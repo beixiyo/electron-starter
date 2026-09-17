@@ -57,6 +57,9 @@ class Recorder: NSObject, SCStreamOutput {
       // 不需要视频，设最小尺寸
       config.width = 2
       config.height = 2
+      // 视频帧从未被消费（未注册 .screen output），但仍会按默认 60fps 驱动内部合成管线空转；
+      // 节流到 1fps 削掉这份 GPU 开销，音频 buffer 按音频时钟投递不受影响
+      config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
 
       if #available(macOS 15.0, *) {
         config.captureMicrophone = true
